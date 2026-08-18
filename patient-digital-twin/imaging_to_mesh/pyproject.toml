@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imaging-to-mesh"
+version = "0.1.0"
+description = "Convert medical segmentation volumes and masks to meshes and OpenUSD."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "i4h" }]
+dependencies = [
+  "nibabel>=5.0",
+  "numpy>=1.24",
+  "scikit-image>=0.22",
+  "trimesh>=4.0",
+  "usd-core>=24.3",
+]
+
+[project.optional-dependencies]
+nrrd = ["SimpleITK>=2.3"]
+dev = [
+  "build>=1.0",
+  "pytest>=8.0",
+  "twine>=5.0",
+]
+
+[project.scripts]
+imaging-to-mesh = "imaging_to_mesh.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

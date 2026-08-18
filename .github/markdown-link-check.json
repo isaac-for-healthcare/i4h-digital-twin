@@ -1,0 +1,33 @@
+{
+    "ignorePatterns": [
+        {
+            "pattern": "https://github.com/isaac-for-healthcare/i4h-digital-twin"
+        },
+        {
+            "pattern": "http://0.0.0.0:8000"
+        },
+        {
+            "pattern": "https://doi.org"
+        },
+        {
+            "pattern": "^https?://(www\\.)?(youtube\\.com|youtu\\.be)/"
+        },
+        {
+            "pattern": "^https?://(www\\.)?linkedin\\.com/"
+        }
+    ],
+    "httpHeaders": [
+        {
+            "urls": ["https://", "http://"],
+            "headers": {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+        }
+    ],
+    "timeout": "30s",
+    "retryOn429": true,
+    "retryCount": 5,
+    "fallbackRetryDelay": "30s",
+    "aliveStatusCodes": [0, 200, 201, 202, 203, 204, 206, 301, 302, 303, 307, 308, 401, 403, 405, 406, 429, 999]
+}
