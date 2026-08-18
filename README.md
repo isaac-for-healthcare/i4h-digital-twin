@@ -1,154 +1,120 @@
-# __NVIDIA_OSS__ Standard Repo Template
+# Isaac for Healthcare — Digital Twin
 
-This README file is from the NVIDIA_OSS standard repo template of [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file). It provides a list of files in the PLC-OSS-Template and guidelines on how to use (clone and customize) them.
+Pipelines and packages for building patient, hospital, and robot digital twins for NVIDIA Isaac Sim and healthcare robotics.
 
-**Upon completing the customization for the project repo, the repo admin should replace this README template with the project specific README file.**
+This repository turns medical imaging, robot descriptions, and hospital scenes into simulation-ready OpenUSD assets and preprocessing artifacts that feed Isaac Lab / IsaacLab-Arena workflows.
 
-- Files (org-wide templates in the NVIDIA .github org repo; per-repo overrides allowed) in [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file)
+## Repository Layout
 
-   - Root 
-     - README.md skeleton (CTA + Quickstart + Support/Security/Governance links) 
-     - LICENSE (Apache 2.0 by default)
-        - For other licenses, see the [Confluence page](https://confluence.nvidia.com/pages/viewpage.action?pageId=788418816) for other licenses
-        - CLA.md file (delete if not using MIT or BSD licenses)
-     - CODE_OF_CONDUCT.md 
-     - SECURITY.md (vuln reporting path) 
-     - CONTRIBUTING.md (base; repo can add specifics)
-     - SUPPORT.md (Support levels/channels)
-     - GOVERNANCE.md (baseline; repo may extend)
-     - CITATION.md (for projects that need citation)
-
-   - .github/ 
-     - ISSUE_TEMPLATE/ (<https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository>)
-       - bug.yml, feature.yml, task.yml, config.yml 
-     - PULL_REQUEST_TEMPLATE.md (<https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/creating-a-pull-request-template-for-your-repository>)
-     - workflows/
-     - Note: workflow-templates/ for starter workflows should live in the org-level .github repo, not per-repo
-
-   - Repo-specific (not org-template, maintained by the team)
-     - CODEOWNERS (place at .github/CODEOWNERS or repo root)
-     - CHANGELOG.md (or RELEASE.md) 
-     - ROADMAP.md 
-     - MAINTAINERS.md 
-     - NOTICE or THIRD_PARTY_NOTICES / THIRD_PARTY_LICENSES (dependency specific)
-     - Build/package files (CMake, pyproject, Dockerfile, etc.)
-
-   - Recommended structure and hygiene
-     - docs/
-     - examples/
-     - tests/
-     - scripts/
-     - Container/dev env: Dockerfile, docker/, .devcontainer/ (optional)
-     - Build/package (language-specific):
-       - Python: pyproject.toml, setup.cfg/setup.py, requirements.txt, environment.yml
-       - C++: CMakeLists.txt, cmake/, vcpkg.json
-     - Repo hygiene: .gitignore, .gitattributes, .editorconfig, .pre-commit-config.yaml, .clang-format
-
-
-## Usage of [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file) for NEW NVIDIA OSS repos
-
-1. Clone the [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file)
-2. Find/replace all in the clone of `___PROJECT___` and `__PROJECT_NAME__` with the name of the specific project.
-3. Inspect all files to make sure all replacements work and update text as needed
-
-
-**What you can reuse immediately**
-- CODE_OF_CONDUCT.md
-- SECURITY.md
-- CONTRIBUTING.md (base)
-- .github/ISSUE_TEMPLATE/.yml (bug/feature/task + config.yml)
-- .github/PULL_REQUEST_TEMPLATE.md
-- Reusable workflows 
-
-**What you must customize per repo**
-- README.md: copy the skeleton and fill in product-specific details (Quickstart, Requirements, Usage, Support level, links)
-- LICENSE: check file is correct, update year, consult Confluence for alternatives https://confluence.nvidia.com/pages/viewpage.action?pageId=788418816, add CLA.md only if your license/process requires it
-- CODEOWNERS: replace <TEAM> with your GitHub team handle(s). Place at .github/CODEOWNERS (or repo root)
-- MAINTAINERS.md: list maintainers names/roles, escalation path
-- CHANGELOG.md (or RELEASE.md): track releases/changes
-- SUPPORT.md: Update for your project
-- ROADMAP.md (optional): upcoming milestones
-- NOTICE / THIRD_PARTY_NOTICES (if you ship third‑party content)
-- Build/package files (CMake/pyproject/Dockerfile/etc.), tests/, docs/, examples/, scripts/ as appropriate
-- Workflows: Edit if you need custom behavior 
-
-
-4. Change git origin to point to new repo and push
-5. Remove the line break below and everything above it
-
-## Usage for existing NVIDIA OSS repos
-
-1. Follow the steps above, but add the files to your existing repo and merge
-
-<!-- REMOVE THE LINE BELOW AND EVERYTHING ABOVE -->
------------------------------------------
-# [Project Title]
-One-sentence value proposition for users. Who is it for, and why it matters. 
-
-# Overview
-What the project does? Why the project is useful?
-Provide a brief overview, highlighting key features or problem-solving capabilities.
-
-# Getting Started
-Guide users on how they can get started with the project. This should include basic installation step, quick-start examples 
-```bash
-# Option A: Package manager (pip/conda/npm/etc.)
-<copy-paste install>
-
-# Option B: Container
-docker run <image> <args>
-
-# Verify (hello world)
-<one-liner or ~10-line example>
+```text
+i4h-digital-twin/
+├── patient-digital-twin/     # Imaging → anatomy twin (CT, vessels, USD)
+├── hospital-digital-twin/    # Hospital scene authoring, teleop, sim2real
+├── robot-digital-twin/       # Bring-your-own robot (CAD / URDF → USD)
+└── sim-ready-assets/         # Asset catalog helper for i4h sim assets
 ```
-# Requirements
-Include a list of pre-requisites. 
-- OS/Arch: <summary or link to full matrix>
-- Runtime/Compiler: <versions>
-- GPU/Drivers (if applicable): CUDA <ver>, driver <ver>, etc.
 
-# Usage
+## Patient Digital Twin
+
+Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD meshes.
+
+| Component | Status | Purpose |
+| --- | --- | --- |
+| [`vasculature_digital_twin`](./patient-digital-twin/vasculature_digital_twin/README.md) | Installable package | CT ingest, HU→μ preprocessing, vessel masks, centerlines |
+| [`imaging_to_mesh`](./patient-digital-twin/imaging_to_mesh/README.md) | Installable package | Labelmaps / NumPy masks → OBJ + OpenUSD |
+| [`generate_imaging`](./patient-digital-twin/generate_imaging/README.md) | Guide | Synthetic CT/MR generation with MAISI |
+
+### Quick start — installable packages
+
 ```bash
-# Minimal runnable snippet (≤20 lines)
-<code>
+# CT preprocessing + vessel extraction
+cd patient-digital-twin/vasculature_digital_twin
+uv venv && uv pip install -e ".[dev]"
+vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache
+vdt-segment-vessels --ct-dir /tmp/ct_cache --no-totalsegmentator
+
+# Mask / labelmap → USD
+cd ../imaging_to_mesh
+uv venv && uv pip install -e ".[dev]"
+imaging-to-mesh /path/to/patient_label.nii.gz --output-dir /tmp/usd_out
 ```
-- More examples/tutorials: <link>
-- API reference: <link>
 
-# Performance (Optional)
-Summary of benchmarks; link to detailed results and hardware used.
+Python API example (mask from vasculature twin → USD):
 
-## Releases & Roadmap 
-- Releases/Changelog: <link>
-- (Optional) Next milestones or link to `ROADMAP.md`.
-  
-# Contribution Guidelines
-- Start here: `CONTRIBUTING.md`
-- Code of Conduct: `CODE_OF_CONDUCT.md`
-- Development quickstart (build/test):
+```python
+from imaging_to_mesh import convert_mask_to_usd
+from vasculature_digital_twin import VolumePreprocessor, get_vessel_mask
+
+pre = VolumePreprocessor.from_nifti("ct.nii.gz")
+volume = pre.preprocess(output_dir="ct_cache")
+mask = get_vessel_mask(
+    hu_zyx=pre.hu_volume_zyx,
+    spacing_zyx_mm=volume.spacing_zyx_mm,
+    use_totalsegmentator=False,
+).combined_mask
+
+result = convert_mask_to_usd(
+    mask,
+    "output/vasculature.usd",
+    name="Vasculature",
+    spacing_zyx_mm=volume.spacing_zyx_mm,
+)
+print(result.usd_path)
+```
+
+## Hospital Digital Twin
+
+Tools for authoring hospital simulation environments and collecting / augmenting robot demonstration data.
+
+| Component | Purpose |
+| --- | --- |
+| [`setup_from_assets`](./hospital-digital-twin/setup_from_assets/README.md) | Assemble operating-room scenes from catalog assets |
+| [`reconstruct_from_video`](./hospital-digital-twin/reconstruct_from_video/README.md) | NuRec / neural reconstruction of hospital spaces |
+
+## Robot Digital Twin
+
+Bring-your-own-robot guides for converting CAD / URDF into articulated USD assets and integrating them into Isaac Sim scenes.
+
+See [`robot-digital-twin/README.md`](./robot-digital-twin/README.md).
+
+## Sim-Ready Assets
+
+Catalog of robots, anatomy, equipment, and hospital environments used across i4h simulations, plus the `i4h_asset_helper` download helper.
+
+See [`sim-ready-assets/README.md`](./sim-ready-assets/README.md).
+
+## Requirements
+
+Shared / typical prerequisites (exact versions depend on the component):
+
+| Requirement | Notes |
+| --- | --- |
+| OS | Linux (x86_64) recommended |
+| Python | 3.10+ for installable packages (`vasculature_digital_twin`, `imaging_to_mesh`) |
+| GPU | Optional for TotalSegmentator / MAISI / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
+| Tooling | `uv` or `pip`; Isaac Sim when loading USD in simulation |
+
+Installable packages do **not** require Conda. Hospital / robot twin guides may assume Isaac Sim, Isaac Lab, or XR runtimes — see each component README.
+
+## Development / CI
+
+Installable packages under `patient-digital-twin/` include unit tests and can be exercised with:
+
 ```bash
-<clone> && <deps> && <build/test>
+cd patient-digital-twin/vasculature_digital_twin && uv pip install -e ".[dev]" && pytest
+cd ../imaging_to_mesh && uv sync --extra dev && uv run pytest
 ```
-## Governance & Maintainers
-- Governance: `GOVERNANCE.md`
-- Maintainers: <team/handles>
-- Labeling/triage policy: <link>
+
+Repository GitHub Actions cover copyright headers, markdown link checks, pre-commit linting, and package build/test for the installable modules.
 
 ## Security
-- Vulnerability disclosure: `SECURITY.md`
-- Do not file public issues for security reports.
+
+See [SECURITY.md](./SECURITY.md). Do not report security vulnerabilities through public GitHub issues.
 
 ## Support
-- Level: <Experimental | Maintained | Stable>
-- How to get help: Issues/Discussions/<channel link>
-- Response expectations (if any).
 
-# Community
-Provide the channel for community communications.
+This repository is under active development (experimental). For questions and support, open an issue in the GitHub repository.
 
-# References
-Provide a list of related references
+## License
 
-# License
-This project is licensed under the [NAME HERE] License - see the LICENSE.md file for details
-- License: <link>
+Licensing varies by component and asset source. Check each package or asset directory for SPDX / LICENSE files. Lightwheel SimReady assets under `sim-ready-assets/` are for non-commercial R&D use only unless otherwise stated.
