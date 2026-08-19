@@ -117,4 +117,6 @@ This repository is under active development (experimental). For questions and su
 
 ## License
 
-Licensing varies by component and asset source. Check each package or asset directory for SPDX / LICENSE files. Lightwheel SimReady assets under `sim-ready-assets/` are for non-commercial R&D use only unless otherwise stated.
+This repository's NVIDIA-authored code and documentation are licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE).
+
+Lightwheel SimReady assets referenced by the catalog under [`sim-ready-assets/`](./sim-ready-assets/) are provided for **non-commercial, research and development use only** and are subject to the `LICENSE.txt` terms shipped with each downloaded Lightwheel asset — not Apache-2.0. See [`sim-ready-assets/README.md`](./sim-ready-assets/README.md).
