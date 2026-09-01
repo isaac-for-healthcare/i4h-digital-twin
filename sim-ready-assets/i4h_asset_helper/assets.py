@@ -18,9 +18,12 @@ import hashlib
 import importlib
 import json
 import os
+import string
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import as_completed
 from pathlib import Path
 from typing import List, Tuple
 from urllib.parse import urlparse
@@ -32,6 +35,7 @@ __all__ = [
     "get_i4h_asset_hash",
     "get_i4h_asset_path",
     "get_i4h_local_asset_path",
+    "is_content_digest",
     "retrieve_asset",
     "sha256_of_folder",
     "verify_asset",
@@ -268,52 +272,151 @@ def sha256_of_folder(folder_path: str, verbose: bool = False) -> str:
     return sha256.hexdigest()
 
 
+_CONTENT_DIGEST_LENGTH = 64
+_VERIFY_REPORT_LIMIT = 20
+
+
+def is_content_digest(manifest_value: str) -> bool:
+    """
+    Whether a value from assets_sha256.json is a content digest rather than a path identifier.
+
+    Catalog 0.1.0 through 0.3.0 recorded a real SHA-256 of the published tree. From 0.5.0 onwards the
+    entry holds the catalog's short commit id instead, which names the S3 prefix the assets are served
+    from (``Healthcare/0.7.0/724f82e``) and the local directory they land in. Such a value says where
+    the assets live, not what they contain, so it can never equal a digest of the download.
+
+    Args:
+        manifest_value: A value from assets_sha256.json, or an override passed as ``hash``.
+
+    Returns:
+        True if the value is a full hex SHA-256 digest, in either case.
+    """
+    return len(manifest_value) == _CONTENT_DIGEST_LENGTH and all(c in string.hexdigits for c in manifest_value)
+
+
+def _verify_content_digest(local_dir: str, expected_digest: str, verbose: bool = False) -> bool:
+    """Verify a download whose catalog version publishes a SHA-256 of the whole tree."""
+    print(f"Computing SHA-256 of {local_dir} ...")
+    computed_digest = sha256_of_folder(local_dir, verbose=verbose)
+
+    print(f"  Expected: {expected_digest}")
+    print(f"  Computed: {computed_digest}")
+
+    # Hex is case-insensitive, and is_content_digest() accepts either case, so compare in one case.
+    if computed_digest.lower() == expected_digest.lower():
+        print("Verification PASSED")
+        return True
+
+    print("Verification FAILED — hash mismatch!")
+    return False
+
+
+def _verify_against_catalog(
+    version: str,
+    hash: str | None,
+    local_dir: str,
+    sub_path: str | None = None,
+    verbose: bool = False,
+) -> bool:
+    """
+    Verify a download against the remote catalog listing.
+
+    Path-addressed catalogs publish no per-file checksums, so the strongest available check is that every
+    object the catalog lists is present locally at its full size. That is also the check that matters in
+    practice, because an interrupted or timed-out download leaves files missing or half-written.
+    """
+    remote_path = get_i4h_asset_path(version, hash)
+    if sub_path is not None:
+        remote_path = remote_path + "/" + sub_path
+
+    print(f"Verifying {local_dir} against catalog listing {remote_path} ...")
+    entries = _list_asset_entries(remote_path)
+
+    missing: List[str] = []
+    wrong_size: List[Tuple[str, int, int]] = []
+
+    for url, remote_size in entries:
+        relative_path = _get_asset_relpath(url, version, hash)
+        local_path = os.path.join(local_dir, relative_path)
+        if not os.path.isfile(local_path):
+            missing.append(relative_path)
+            continue
+        local_size = os.path.getsize(local_path)
+        if remote_size is not None and local_size != remote_size:
+            wrong_size.append((relative_path, remote_size, local_size))
+        elif verbose:
+            print(f"  ok: {relative_path}")
+
+    print(f"  Catalog files: {len(entries)}")
+    print(f"  Missing:       {len(missing)}")
+    print(f"  Wrong size:    {len(wrong_size)}")
+
+    if not missing and not wrong_size:
+        print("Verification PASSED")
+        return True
+
+    for relative_path in missing[:_VERIFY_REPORT_LIMIT]:
+        print(f"  missing: {relative_path}")
+    if len(missing) > _VERIFY_REPORT_LIMIT:
+        print(f"  ... and {len(missing) - _VERIFY_REPORT_LIMIT} more missing files")
+
+    for relative_path, remote_size, local_size in wrong_size[:_VERIFY_REPORT_LIMIT]:
+        print(f"  wrong size: {relative_path} (catalog {remote_size} B, local {local_size} B)")
+    if len(wrong_size) > _VERIFY_REPORT_LIMIT:
+        print(f"  ... and {len(wrong_size) - _VERIFY_REPORT_LIMIT} more size mismatches")
+
+    print("Verification FAILED — the local copy does not match the catalog!")
+    return False
+
+
 def verify_asset(
     version: str | None = None,
     download_dir: str | None = None,
     hash: str | None = None,
+    sub_path: str | None = None,
     verbose: bool = False,
 ) -> bool:
     """
-    Verify the SHA-256 hash of a downloaded asset folder.
+    Verify a downloaded asset folder against what the catalog publishes for its version.
+
+    Versions that publish a SHA-256 of the whole tree are verified by hashing the download. Versions that
+    publish a short path identifier instead carry no checksum to compare against, so those are verified
+    against the catalog listing: every object the catalog holds must exist locally at its full size.
 
     Args:
         version: The version of the asset.
         download_dir: The directory where the asset was downloaded.
-        hash: The expected sha256 hash. If None, looked up from assets_sha256.json.
-        verbose: If True, print detailed hashing progress.
+        hash: The expected content digest, or the catalog path identifier. If None, looked up from
+            assets_sha256.json.
+        sub_path: Restrict listing verification to the sub path that was downloaded, matching the
+            ``--sub-path`` used to retrieve it. Ignored when the version publishes a content digest,
+            which always covers the whole tree.
+        verbose: If True, print per-file progress.
 
     Returns:
-        True if the computed hash matches the expected hash.
+        True if the download matches the catalog.
 
     Raises:
-        ValueError: If no expected hash is available or the folder doesn't exist.
+        ValueError: If no catalog entry is available or the folder doesn't exist.
     """
     version = version if version is not None else get_i4h_asset_version()
-    expected_hash = hash if hash is not None else get_i4h_asset_hash(version=version)
+    expected_value = hash if hash is not None else get_i4h_asset_hash(version=version)
 
-    if expected_hash is None:
-        raise ValueError(f"No expected SHA-256 hash found for version {version}")
+    if expected_value is None:
+        raise ValueError(f"No catalog entry found for version {version}")
 
     local_dir = get_i4h_local_asset_path(version, download_dir, hash)
     if not os.path.isdir(local_dir):
         raise ValueError(f"Asset folder does not exist: {local_dir}")
 
-    print(f"Computing SHA-256 of {local_dir} ...")
-    computed_hash = sha256_of_folder(local_dir, verbose=verbose)
+    if is_content_digest(expected_value):
+        return _verify_content_digest(local_dir, expected_value, verbose=verbose)
 
-    prefix_len = len(expected_hash)
-    computed_prefix = computed_hash[:prefix_len]
-    print(f"  Expected: {expected_hash}")
-    print(f"  Computed: {computed_prefix}")
-
-    if computed_prefix == expected_hash:
-        print("Verification PASSED")
-        return True
-    else:
-        print("Verification FAILED — hash mismatch!")
-        print(f"  Full computed hash: {computed_hash}")
-        return False
+    print(
+        f"Catalog {version} publishes the path identifier {expected_value!r} rather than a content digest; "
+        "verifying against the catalog listing instead."
+    )
+    return _verify_against_catalog(version, hash, local_dir, sub_path=sub_path, verbose=verbose)
 
 
 def _get_asset_relpath(url_entry: str, version: str = get_i4h_asset_version(), hash: str | None = None) -> str:
@@ -385,14 +488,17 @@ def _is_url_folder(url_entry: str) -> bool:
     return entries.size == 0
 
 
-def _list_asset_url(url_entry: str) -> List[str]:
+def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
     """
-    List all the items in the url_entry. When it is a folder, it will return all the items in the folder.
-    When it is a file, it will return a list with the file itself.
+    List all the items in the url_entry as (url, size) pairs.
+
+    When it is a folder, it will return all the items in the folder. When it is a file, it will return a list
+    with the file itself. The size is None when the backend does not report one, which is the case for
+    Nucleus / omni.client listings.
     """
     # If not a folder, just return the url as a list with one entry
     if not _is_url_folder(url_entry):
-        return [_unify_path(url_entry)]
+        return [(_unify_path(url_entry), None)]
 
     if not _is_import_ready("isaacsim.storage.native.nucleus"):
         if not _is_s3_environment():
@@ -407,7 +513,7 @@ def _list_asset_url(url_entry: str) -> List[str]:
                 key = key + "/"
 
             # List all objects with this prefix
-            entries = []
+            entries: List[Tuple[str, int | None]] = []
             paginator = s3_client.get_paginator("list_objects_v2")
 
             # Get files with retry logic for rate limiting
@@ -427,7 +533,7 @@ def _list_asset_url(url_entry: str) -> List[str]:
                                 obj_url = (
                                     f"https://{bucket}.s3-{_S3_REGIONS.get(_get_asset_env())}.amazonaws.com/{obj_key}"
                                 )
-                                entries.append(obj_url)
+                                entries.append((obj_url, obj.get("Size")))
                     break  # Success - exit the retry loop
                 except ClientError as e:
                     error_code = e.response.get("Error", {}).get("Code", "")
@@ -448,8 +554,16 @@ def _list_asset_url(url_entry: str) -> List[str]:
     from isaacsim.storage.native.nucleus import _list_files
 
     # _list_files is an async function
-    _, entries = asyncio.run(_list_files(url_entry))
-    return entries
+    _, nucleus_entries = asyncio.run(_list_files(url_entry))
+    return [(entry, None) for entry in nucleus_entries]
+
+
+def _list_asset_url(url_entry: str) -> List[str]:
+    """
+    List all the items in the url_entry. When it is a folder, it will return all the items in the folder.
+    When it is a file, it will return a list with the file itself.
+    """
+    return [url for url, _ in _list_asset_entries(url_entry)]
 
 
 def _filter_downloaded_assets(
@@ -520,13 +634,17 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
     return local_path
 
 
+DEFAULT_DOWNLOAD_CONCURRENCY = 2
+DEFAULT_DOWNLOAD_TIMEOUT = 3600.0
+
+
 def _download_assets(
     url_entries: List[str],
     download_dir: str,
     version: str | None = None,
     hash: str | None = None,
-    concurrency: int = 2,
-    timeout: float = 3600.0,
+    concurrency: int = DEFAULT_DOWNLOAD_CONCURRENCY,
+    timeout: float = DEFAULT_DOWNLOAD_TIMEOUT,
 ):
     """
     Download assets from url entry sources to local directory.
@@ -537,15 +655,20 @@ def _download_assets(
         version: The version of the asset.
         hash: The sha256 hash of the asset.
         concurrency: The number of concurrent downloads.
-        timeout: The timeout for the download.
+        timeout: Budget in seconds for the whole download. Once it runs out the queued downloads are
+            cancelled and TimeoutError is raised; files already fetched are left in place.
 
     Returns:
         The path to the local asset.
     """
     version = version if version is not None else get_i4h_asset_version()
     total = len(url_entries)
+    completed = 0
 
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+    # Deliberately not a `with` block: its __exit__ shuts the pool down with wait=True, which on timeout
+    # would keep draining the queue and block until every remaining file had downloaded anyway.
+    executor = ThreadPoolExecutor(max_workers=concurrency)
+    try:
         futures_to_url = {
             executor.submit(_download_individual_asset, url_entry, download_dir, version, hash): url_entry
             for url_entry in url_entries
@@ -555,7 +678,18 @@ def _download_assets(
         with tqdm(total=total, desc=f"Downloading assets to {download_dir}", unit="files") as pbar:
             for future in as_completed(futures_to_url, timeout=timeout):
                 future.result()
+                completed += 1
                 pbar.update(1)
+    # Only an alias of the builtin from Python 3.11 onwards, so catch it under its own name.
+    except FuturesTimeoutError as e:
+        raise TimeoutError(
+            f"Downloaded {completed} of {total} files before the {timeout:g}s budget ran out. Finished files "
+            "are kept, so re-running continues from here; pass a larger --timeout to fetch the rest in one go."
+        ) from e
+    finally:
+        # cancel_futures drops the downloads still queued so as_completed's timeout ends the transfer
+        # instead of only ending the wait for it.
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def retrieve_asset(
@@ -565,6 +699,8 @@ def retrieve_asset(
     hash: str | None = None,
     force_download: bool = False,
     verbose: bool = False,
+    concurrency: int = DEFAULT_DOWNLOAD_CONCURRENCY,
+    timeout: float = DEFAULT_DOWNLOAD_TIMEOUT,
 ) -> str:
     """
     Download the asset from the remote path to the download directory.
@@ -576,6 +712,9 @@ def retrieve_asset(
         hash: The sha256 hash of the asset.
         force_download: If True, the asset will be downloaded even if it already exists.
         verbose: If True, it will print more information.
+        concurrency: The number of concurrent downloads.
+        timeout: Budget in seconds for the whole download. A full catalog fetch can take well over an
+            hour on a slow link, so raise this rather than letting it abort part-way.
     Returns:
         The path to the local asset.
     """
@@ -594,7 +733,7 @@ def retrieve_asset(
         url_entries = _filter_downloaded_assets(paths, local_dir, version, hash, verbose)
 
     if len(url_entries) > 0:
-        _download_assets(url_entries, local_dir, version, hash)
+        _download_assets(url_entries, local_dir, version, hash, concurrency=concurrency, timeout=timeout)
 
     return local_dir
 

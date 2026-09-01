@@ -17,6 +17,8 @@ import argparse
 import sys
 
 from .assets import (
+    DEFAULT_DOWNLOAD_CONCURRENCY,
+    DEFAULT_DOWNLOAD_TIMEOUT,
     _get_default_version,
     _get_download_dir,
     _is_s3_environment,
@@ -47,13 +49,38 @@ def retrieve_main():
     parser.add_argument("--force_omni_client", action="store_true", help="Force use of omni.client.")
     parser.add_argument("--skip-download", action="store_true", help="Skip downloading and only verify existing assets")
     parser.add_argument(
-        "--verify", action="store_true", help="Verify the SHA-256 hash of downloaded assets after download"
+        "--verify",
+        action="store_true",
+        help=(
+            "Verify the downloaded assets. Versions that publish a content digest are hash-checked; "
+            "the rest are checked against the catalog listing"
+        ),
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_DOWNLOAD_CONCURRENCY,
+        help="Number of concurrent downloads",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_DOWNLOAD_TIMEOUT,
+        help="Seconds allowed for the whole download; raise it for a full catalog fetch on a slow link",
     )
     args = parser.parse_args()
 
     use_omni = args.force_omni_client or not _is_s3_environment()
     if use_omni:
-        from isaacsim import SimulationApp
+        try:
+            from isaacsim import SimulationApp
+        except ImportError as exc:
+            raise ImportError(
+                "Isaac Sim is required for Nucleus / omni.client downloads "
+                "(`I4H_ASSET_ENV=dev` or `--force_omni_client`). Install with "
+                "`uv pip install --extra-index-url https://pypi.nvidia.com "
+                "isaacsim[all,extscache]` on Linux x86_64 Python 3.10."
+            ) from exc
 
         app = SimulationApp({"headless": True})
 
@@ -66,6 +93,8 @@ def retrieve_main():
             hash=args.hash,
             force_download=args.force,
             verbose=True,
+            concurrency=args.concurrency,
+            timeout=args.timeout,
         )
         print(f"Assets downloaded to: {local_path}")
     else:
@@ -76,6 +105,7 @@ def retrieve_main():
             version=args.version,
             download_dir=args.download_dir,
             hash=args.hash,
+            sub_path=args.sub_path,
         )
         if not passed:
             if use_omni:

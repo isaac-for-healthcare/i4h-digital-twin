@@ -46,10 +46,9 @@ Patient anatomy examples were generated using the **MAISI foundational CT volume
 
 ### 1️⃣ Clone the repo and install maisi_ct_generative
 
-Follow the steps in the [official repository](https://github.com/Project-MONAI/model-zoo/tree/dev/models/maisi_ct_generative) to clone and install the model. The following modifications were tested on git hash: `05067dce4db8fcb87dc31e7fa510c494959230ea`
-
 ```bash
-pip install "monai[fire]"
+uv sync
+source .venv/bin/activate
 python -m monai.bundle download "maisi_ct_generative" --bundle_dir "bundles/"
 ```
 
@@ -62,14 +61,16 @@ python -m monai.bundle download "maisi_ct_generative" --bundle_dir "bundles/"
 ### 2️⃣ Adjust the config to have an empty anatomy_list
 
 - Copy the inference script and modify it with the below instructions
-- Edit the configuration file (e.g., `configs/inference_all.json`) and set `anatomy_list` to an empty list (`[]`)
+- If desired, edit the configuration file (e.g., `models/maisi_ct_generative/configs/inference.json`) and set `anatomy_list` to an empty list (`[]`)
 - You may need to adjust additional parameters in the config to fit the model on your GPU. The file in `utils/config/inference_all.json` was used to generate the sample CTs for this course
 - This ensures that all labels will be returned in the output
 
 ### 3️⃣ Run MAISI from the MONAI Model Zoo
 
 ```bash
-python -m monai.bundle run --config_file configs/inference_all.json
+python -m monai.bundle download "maisi_ct_generative" --bundle_dir "models/"
+unzip -d models/maisi_ct_generative/datasets models/maisi_ct_generative/datasets/all_masks_flexible_size_and_spacing_3000.zip
+python -m monai.bundle run  --config_file models/maisi_ct_generative/configs/inference.json --bundle_root models/maisi_ct_generative
 ```
 
 ### 4️⃣ Visualize generated CT data

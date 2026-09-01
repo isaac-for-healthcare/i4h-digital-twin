@@ -15,8 +15,12 @@ This package is independently installable and executable. It contains its own IO
 
 - `vasculature_digital_twin/ct/dicom_ingest.py`
   - CT IO adapters (`load_dicom_series_hu`, `load_nifti_hu`) and `CtVolume` metadata container.
+- `vasculature_digital_twin/ct/orientation.py`
+  - Reorientation of CT volumes into the canonical anatomical frame (`to_canonical_lps`, `orientation_code`, `affine_to_lps`).
 - `vasculature_digital_twin/config.py`
   - Preprocessing configuration dataclasses (`PreprocessingSettings`, `HuToMuMapping`).
+- `vasculature_digital_twin/hu_mapping.py`
+  - Evaluation and sampling of the HU->mu transfer function (`hu_to_mu`, `hu_to_mu_curve`).
 - `vasculature_digital_twin/preprocessor.py`
   - `VolumePreprocessor` factories (`from_dicom`, `from_nifti`, `from_numpy`) and HU->mu conversion pipeline.
 - `vasculature_digital_twin/volume.py`
@@ -60,11 +64,76 @@ Preprocess CT into cache artifacts:
 vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache
 ```
 
+Tune the HU->mu ramp while preprocessing (soft tissue and contrasted vessels):
+
+```bash
+vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache --window-center 100 --window-width 800
+```
+
+Give each HU band its own slope instead of a single ramp. Note the equals sign: without it argparse reads the leading minus of the first HU as another option.
+
+```bash
+vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache \
+  --control-points=-1000:0,0:0.004,300:0.012,1500:0.02
+```
+
+`--control-points` fixes mu at every knot, so it cannot be combined with `--window-center`, `--window-width` or `--mu-max`.
+
 Segment vessels and extract centerline graph:
 
 ```bash
 vdt-segment-vessels --ct-dir /tmp/ct_cache
 ```
+
+## Anatomical frame
+
+CT series are stored in whatever slice order the acquisition produced, so a raw array axis has no fixed anatomical meaning. Both loaders resolve this at ingest using the DICOM direction cosines or the NIfTI affine, reorienting the volume into the canonical **LPS** frame:
+
+- axis 0 (slice) increases toward the patient's **Superior** (head),
+- axis 1 (row) increases toward the patient's **Posterior** (back),
+- axis 2 (column) increases toward the patient's **Left**.
+
+Mapping array axes to world axes as `(x, y, z) = (axis 2, axis 1, axis 0)` therefore gives Left / Posterior / Superior world axes, which is the DICOM patient coordinate system. NIfTI affines are RAS and are converted to LPS, so NIfTI and DICOM inputs of the same patient land in the same frame.
+
+Reorientation is a permutation and flip of the axes, never a resample, so an oblique acquisition keeps a residual rotation and emits a warning at load time. `metadata.json` records what happened, and downstream consumers (C-arm poses, centerline coordinates, collision geometry) should read the frame rather than assume it:
+
+| Key | Meaning |
+| --- | --- |
+| `anatomical_frame` | `"LPS"` when the axes were resolved; `null` means unresolved and the axes carry no anatomical meaning |
+| `source_orientation` | Directions the source axes increased toward before reorientation, e.g. `"IPL"` |
+| `direction_row_major_3x3` | Direction cosines after reorientation, columns in index order `(i, j, k)`; the identity for axis-aligned inputs |
+
+Pass `--no-reorient` (or `reorient=False` to the loaders) to inspect a series exactly as stored. Volumes built with `from_numpy` are unresolved unless the caller declares `anatomical_frame="LPS"`.
+
+## HU to mu transfer function
+
+`HuToMuMapping` is a piecewise-linear curve from Hounsfield Units to linear attenuation coefficients (mm^-1), clamped outside its outermost control points. With the default two points it is a single ramp, parameterized the same way as window/level on a radiology viewer: a narrower window is a steeper ramp and therefore more contrast between soft tissue and vessels.
+
+```python
+from vasculature_digital_twin import HuToMuMapping, VolumePreprocessor, PreprocessingSettings
+
+mapping = HuToMuMapping.from_window_level(window_center=100.0, window_width=800.0)
+preprocessor = VolumePreprocessor.from_nifti("/path/to/ct.nii.gz", settings=PreprocessingSettings(hu_to_mu=mapping))
+volume = preprocessor.preprocess()
+
+# Sweep the window without reloading the CT.
+for width in (400.0, 800.0, 2000.0):
+    rewindowed = preprocessor.with_hu_to_mu(mapping.with_window_level(window_width=width)).preprocess()
+
+# Interactive gestures: slide the ramp (level) or change its gradient (contrast).
+brighter = mapping.shifted(-200.0)
+punchier = mapping.scaled(1.5)
+```
+
+Passing more than two `control_points` gives independent slopes per HU band, at the cost of more knobs to tune:
+
+```python
+mapping = HuToMuMapping(control_points=((-1000.0, 0.0), (0.0, 0.004), (300.0, 0.012), (1500.0, 0.02)))
+```
+
+The same curve from the CLI is `--control-points=-1000:0,0:0.004,300:0.012,1500:0.02`. The window/level flags only ever build the two-point ramp, so multi-knot curves need this flag.
+
+The curve that produced a cached `mu_volume.npy` is recorded under `hu_to_mu` in `metadata.json`, and `HuToMuMapping.from_dict` reads it back.
 
 ## Output artifacts
 

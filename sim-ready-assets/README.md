@@ -37,4 +37,5 @@ This asset catalog contains several categories of assets that are essential for 
 ## Asset Helper Tool
 
 The `i4h_asset_helper` package allows to get the download links for the assets.
-For more details, please refer to [I4H Assets Catalog Helper](./i4h_asset_helper/README.md).
+Install it with `uv sync` from this directory. For more details, please refer to
+[I4H Assets Catalog Helper](./i4h_asset_helper/README.md).

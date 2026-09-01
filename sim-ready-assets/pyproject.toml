@@ -21,11 +21,19 @@ include-package-data = true
 "i4h_asset_helper" = ["*.json"]
 
 [project.optional-dependencies]
-dev = ["isaacsim[all,extscache]"]
 ci = ["pytest", "pytest-cov"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-cov"]
 
 [project.scripts]
 i4h-asset-retrieve = "i4h_asset_helper.cli:retrieve_main"
+
+[tool.uv]
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
 
 
 [tool.isort]
@@ -36,6 +44,9 @@ use_parentheses = true
 line_length = 120
 py_version = 310
 group_by_package = true
+# Also declared in the repo root .isort.cfg, which is what the pre-commit run over the whole tree
+# reads. Both have to agree or the two invocations demand opposite grouping.
+known_first_party = ["i4h_asset_helper"]
 
 [tool.ruff]
 line-length = 120
@@ -43,3 +54,6 @@ target-version = "py310"
 
 [tool.ruff.lint]
 extend-select = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["i4h_asset_helper/tests"]

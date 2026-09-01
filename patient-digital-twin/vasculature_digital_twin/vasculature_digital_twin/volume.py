@@ -1,9 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-
 from __future__ import annotations
 
 import json
@@ -16,7 +13,26 @@ import numpy as np
 
 @dataclass
 class VolumeMetadata:
-    """Metadata for a preprocessed CT volume."""
+    """Metadata for a preprocessed CT volume.
+
+    Attributes:
+        shape_zyx: Volume shape.
+        spacing_zyx_mm: Voxel spacing in mm matching the volume axes.
+        origin_xyz_mm: Patient-space (LPS) position of voxel ``[0, 0, 0]``.
+        hu_range: Min and max HU before clipping.
+        mu_range: Min and max mu after the transfer function.
+        source: Path or description of the input CT.
+        hu_to_mu: Serialised transfer function that produced ``mu_volume``, so a cached
+            volume can be traced back to the curve that generated it.
+        anatomical_frame: Anatomical frame of the axes, ``"LPS"`` for volumes reoriented
+            at ingest (axis 0 toward Superior, axis 1 toward Posterior, axis 2 toward
+            Left). None means the orientation is unresolved and consumers must not assume
+            an anatomical meaning for the axes.
+        source_orientation: Anatomical directions the source array axes increased toward
+            before reorientation, e.g. ``"IPL"``.
+        direction: Row-major 3x3 direction cosines in LPS, columns in index order
+            ``(i, j, k)``. The identity for axis-aligned volumes after reorientation.
+    """
 
     shape_zyx: tuple[int, int, int]
     spacing_zyx_mm: tuple[float, float, float]
@@ -24,6 +40,10 @@ class VolumeMetadata:
     hu_range: tuple[float, float] | None = None
     mu_range: tuple[float, float] | None = None
     source: str | None = None
+    hu_to_mu: dict[str, Any] | None = None
+    anatomical_frame: str | None = None
+    source_orientation: str | None = None
+    direction: tuple[float, ...] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,6 +53,10 @@ class VolumeMetadata:
             "hu_range": list(self.hu_range) if self.hu_range else None,
             "mu_range": list(self.mu_range) if self.mu_range else None,
             "source": self.source,
+            "hu_to_mu": dict(self.hu_to_mu) if self.hu_to_mu else None,
+            "anatomical_frame": self.anatomical_frame,
+            "source_orientation": self.source_orientation,
+            "direction_row_major_3x3": list(self.direction) if self.direction else None,
         }
 
     @classmethod
@@ -44,6 +68,10 @@ class VolumeMetadata:
             hu_range=tuple(data["hu_range"]) if data.get("hu_range") else None,
             mu_range=tuple(data["mu_range"]) if data.get("mu_range") else None,
             source=data.get("source"),
+            hu_to_mu=dict(data["hu_to_mu"]) if data.get("hu_to_mu") else None,
+            anatomical_frame=data.get("anatomical_frame"),
+            source_orientation=data.get("source_orientation"),
+            direction=tuple(data["direction_row_major_3x3"]) if data.get("direction_row_major_3x3") else None,
         )
 
 
@@ -71,6 +99,14 @@ class PreprocessedVolume:
     @property
     def spacing_zyx_mm(self) -> tuple[float, float, float]:
         return self._metadata.spacing_zyx_mm
+
+    def __repr__(self) -> str:
+        frame = self._metadata.anatomical_frame or "unresolved"
+        return (
+            f"PreprocessedVolume(shape_zyx={self.shape}, "
+            f"spacing_zyx_mm={self._metadata.spacing_zyx_mm}, "
+            f"mu_range={self._metadata.mu_range}, anatomical_frame={frame})"
+        )
 
     def save(self, output_dir: str | Path) -> Path:
         output_dir = Path(output_dir)

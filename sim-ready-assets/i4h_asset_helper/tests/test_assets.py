@@ -28,9 +28,13 @@ from i4h_asset_helper.assets import (
     _get_asset_relpath,
     _get_default_version,
 )
-from isaacsim import SimulationApp
 
-SimulationApp({"headless": True})
+try:
+    from isaacsim import SimulationApp
+except ImportError:
+    SimulationApp = None
+else:
+    SimulationApp({"headless": True})
 
 
 def test_get_i4h_asset_path_valid_version():

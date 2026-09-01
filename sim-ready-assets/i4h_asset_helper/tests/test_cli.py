@@ -16,17 +16,36 @@
 
 """Test the cli i4h-asset-retrieve."""
 
+import importlib.util
+import os
 import subprocess
+import sys
 import tempfile
+
+CLI = [sys.executable, "-m", "i4h_asset_helper.cli"]
 
 
 def test_cli_retrieve():
     """Test the cli i4h-asset-retrieve."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        subprocess.run(["i4h-asset-retrieve", "--download-dir", temp_dir, "sub-path", "Test"])
+        result = subprocess.run(
+            [*CLI, "--download-dir", temp_dir, "--sub-path", "Test"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert "Assets downloaded to:" in result.stdout
+        assert os.path.isdir(temp_dir)
 
 
 def test_force_omni_client():
     """Test the cli i4h-asset-retrieve with force_omni_client."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        subprocess.run(["i4h-asset-retrieve", "--download-dir", temp_dir, "sub-path", "Test", "--force_omni_client"])
+        cmd = [*CLI, "--download-dir", temp_dir, "--sub-path", "Test", "--force_omni_client"]
+        if importlib.util.find_spec("isaacsim") is None:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            assert result.returncode != 0
+            assert "Isaac Sim is required" in result.stderr
+            return
+
+        subprocess.run(cmd, check=True)

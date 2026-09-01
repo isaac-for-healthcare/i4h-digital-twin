@@ -41,6 +41,9 @@ dev = [
   "build>=1.0.0",
   "twine>=5.0.0",
   "scikit-image>=0.22",
+  "nibabel>=5.0",
+  "pydicom>=2.4",
+  "SimpleITK>=2.3",
 ]
 
 [project.scripts]
