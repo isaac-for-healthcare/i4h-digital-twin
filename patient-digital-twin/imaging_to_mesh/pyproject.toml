@@ -14,7 +14,9 @@ dependencies = [
   "numpy>=1.24",
   "scikit-image>=0.22",
   "trimesh>=4.0",
-  "usd-core>=24.3",
+  "usd-core>=24.3; sys_platform != 'linux' or platform_machine != 'aarch64'",
+  "usd-exchange>=2.2; sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "vasculature-digital-twin",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +32,15 @@ imaging-to-mesh = "imaging_to_mesh.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.sources]
+vasculature-digital-twin = { path = "../vasculature_digital_twin", editable = true }
+
+[tool.uv]
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

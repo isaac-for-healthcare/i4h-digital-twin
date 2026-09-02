@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version == '3.11.*'",
     "python_full_version < '3.11'",
 ]
+required-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+]
 
 [[package]]
 name = "backports-tarfile"
@@ -304,7 +308,9 @@ dependencies = [
     { name = "scikit-image", version = "0.25.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-image", version = "0.26.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "trimesh" },
-    { name = "usd-core" },
+    { name = "usd-core", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "vasculature-digital-twin" },
 ]
 
 [package.optional-dependencies]
@@ -327,7 +333,9 @@ requires-dist = [
     { name = "simpleitk", marker = "extra == 'nrrd'", specifier = ">=2.3" },
     { name = "trimesh", specifier = ">=4.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0" },
-    { name = "usd-core", specifier = ">=24.3" },
+    { name = "usd-core", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'", specifier = ">=24.3" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = ">=2.2" },
+    { name = "vasculature-digital-twin", editable = "../vasculature_digital_twin" },
 ]
 provides-extras = ["nrrd", "dev"]
 
@@ -1503,6 +1511,56 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/ce/76e0476d04c387cbf435f11aafb36ff4f79345215d7b9dbb677a7a1efa11/usd_core-26.8-cp314-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:114f39723ccfc9a269cfdf6a7b80fec53aa96530806e510a6cccfd577401a07c", size = 29575839, upload-time = "2026-07-20T14:32:43.582Z" },
     { url = "https://files.pythonhosted.org/packages/fc/87/d5cd29f5326bb945cf90198d28c7f3fca45a950e7512851360ced2e0a7e9/usd_core-26.8-cp314-none-win_amd64.whl", hash = "sha256:c780f28b624f4efb3d8f78af805f17082b3976f61ba18da8171bb898ce31f2be", size = 14451875, upload-time = "2026-07-20T14:32:46.461Z" },
 ]
+
+[[package]]
+name = "usd-exchange"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/55/a701619354b8e28fe23e4ee4c252c4b36250240f3a1e9554fdc4444dd5dc/usd_exchange-2.3.0-cp310-cp310-manylinux_2_35_aarch64.whl", hash = "sha256:d9e0cf5c124e2bb00b3edf6beba6893163a9720169da5176bee40356fab8fba7", size = 20426919, upload-time = "2026-05-20T20:35:57.164Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/ba/0f1a4c76c46c0a3ec3f0fb06a7920a429acafbbbb75a80db897a350dca13/usd_exchange-2.3.0-cp311-cp311-manylinux_2_35_aarch64.whl", hash = "sha256:1c8f470bf52c9d96d95c65ccd275377679ae349b8dac8044995ce5ff43ffd2e1", size = 20424378, upload-time = "2026-05-20T20:36:00.629Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/66/9a630f44a6fc980e3fbc728c13efc79736ac8cf02b50b3215149a4e07310/usd_exchange-2.3.0-cp312-cp312-manylinux_2_35_aarch64.whl", hash = "sha256:3beddb68abb89b1f3be207a35275604a6eb89b179ba052ca3eada5cd7202e534", size = 20462820, upload-time = "2026-05-20T20:36:03.947Z" },
+]
+
+[[package]]
+name = "vasculature-digital-twin"
+version = "0.1.0"
+source = { editable = "../vasculature_digital_twin" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "nibabel", marker = "extra == 'all'", specifier = ">=5.0" },
+    { name = "nibabel", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "nibabel", marker = "extra == 'io'", specifier = ">=5.0" },
+    { name = "nibabel", marker = "extra == 'segmentation'", specifier = ">=5.0" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pydicom", marker = "extra == 'dev'", specifier = ">=2.4" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "scikit-image", marker = "extra == 'all'", specifier = ">=0.22" },
+    { name = "scikit-image", marker = "extra == 'dev'", specifier = ">=0.22" },
+    { name = "scikit-image", marker = "extra == 'segmentation'", specifier = ">=0.22" },
+    { name = "scipy", specifier = ">=1.10" },
+    { name = "simpleitk", marker = "extra == 'all'", specifier = ">=2.3" },
+    { name = "simpleitk", marker = "extra == 'dev'", specifier = ">=2.3" },
+    { name = "simpleitk", marker = "extra == 'io'", specifier = ">=2.3" },
+    { name = "totalsegmentator", marker = "extra == 'all'", specifier = ">=2.7" },
+    { name = "totalsegmentator", marker = "extra == 'segmentation'", specifier = ">=2.7" },
+    { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "vtk", marker = "extra == 'all'", specifier = ">=9.2" },
+    { name = "vtk", marker = "extra == 'mesh'", specifier = ">=9.2" },
+    { name = "warp-lang", marker = "extra == 'all'", specifier = ">=1.3" },
+    { name = "warp-lang", marker = "extra == 'mesh'", specifier = ">=1.3" },
+]
+provides-extras = ["io", "segmentation", "mesh", "all", "dev"]
 
 [[package]]
 name = "zipp"

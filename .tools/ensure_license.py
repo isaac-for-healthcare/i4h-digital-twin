@@ -31,7 +31,13 @@ LICENSE_MARKER = "SPDX-License-Identifier:"
 
 
 def _should_skip_dir(name: str) -> bool:
-    return name in SKIP_DIR_NAMES or name.startswith("build") or name.endswith(".egg-info")
+    return (
+        name in SKIP_DIR_NAMES
+        or name.startswith("build")
+        or name.startswith(".venv")
+        or name.endswith(".egg-info")
+        or name == "site-packages"
+    )
 
 
 def has_license_metadata(path: Path) -> bool:

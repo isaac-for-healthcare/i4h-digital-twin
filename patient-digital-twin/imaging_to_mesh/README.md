@@ -25,6 +25,9 @@ python -m pip install "imaging-to-mesh[nrrd]"
 ```
 
 The base package supports Python 3.10+, NIfTI, NumPy arrays, OBJ, and OpenUSD.
+On Linux aarch64 (for example DGX Spark), OpenUSD comes from NVIDIA
+[`usd-exchange`](https://pypi.org/project/usd-exchange/) because `usd-core` has
+no ARM64 wheels. Other platforms use `usd-core`.
 It does not require Conda, MONAI, VTK, or Isaac Sim.
 
 ## Python API
@@ -68,6 +71,15 @@ Lower-level reusable components are also public:
 - `convert_segmentation_array`
 - `convert_nrrd_to_nifti`
 
+## Example
+
+The synthetic CT-to-USD example uses the sibling `vasculature_digital_twin`
+package (installed into this environment from `../vasculature_digital_twin`):
+
+```bash
+uv run python examples/vasculature_ct_to_usd.py --output-dir output/vasculature_ct
+```
+
 ## Command Line
 
 ```bash
@@ -98,8 +110,7 @@ USD stages use millimeters and set `metersPerUnit` to `0.001`.
 ## Development
 
 ```bash
-uv venv
-uv pip install -e ".[dev]"
+uv sync --extra dev
 uv run pytest
 uv build
 ```
