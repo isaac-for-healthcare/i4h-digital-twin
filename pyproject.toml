@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digital-twin"
+version = "0.1.0"
+description = "Patient, hospital, robot, and simulation-ready digital twin modules."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "i4h" }]
+dependencies = [
+  "numpy>=1.24",
+  "nibabel>=5.0",
+  "PyYAML>=6.0",
+  "scikit-image>=0.22",
+  "boto3",
+  "requests",
+  "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.
+# 0.3.0's default model loader imports a missing soma.body.assets module.
+patient-soma = [
+    "py-soma-x==0.2.1",
+    "scipy>=1.10",
+    "trimesh>=4.0",
+    "rtree>=1.0",
+    "embreex>=4.4.0",
+]
+patient-viewer = ["viser>=1.1.1"]
+patient-usd = ["usd-core"]
+
+[project.scripts]
+i4h-asset-retrieve = "i4h_asset_helper.cli:retrieve_main"
+
+[tool.setuptools]
+packages = [
+  "hospital_digital_twin",
+  "i4h_asset_helper",
+  "patient_digital_twin",
+  "patient_digital_twin.imaging_to_mesh",
+  "patient_digital_twin.importers",
+  "patient_digital_twin.soma_body",
+  "robot_digital_twin",
+  "sim_ready_assets",
+]
+package-dir = { hospital_digital_twin = "hospital-digital-twin/hospital_digital_twin", i4h_asset_helper = "sim-ready-assets/i4h_asset_helper", patient_digital_twin = "patient-digital-twin/patient_digital_twin", robot_digital_twin = "robot-digital-twin/robot_digital_twin", sim_ready_assets = "sim-ready-assets/sim_ready_assets" }
+include-package-data = true
+
+[tool.setuptools.package-data]
+i4h_asset_helper = ["*.json"]
+"patient_digital_twin.importers" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["patient-digital-twin/tests"]
+addopts = "-v --tb=short"

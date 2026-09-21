@@ -21,7 +21,7 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 | Component | Status | Purpose |
 | --- | --- | --- |
 | [`vasculature_digital_twin`](./patient-digital-twin/vasculature_digital_twin/README.md) | Installable package | CT ingest, HU→μ preprocessing, vessel masks, centerlines |
-| [`imaging_to_mesh`](./patient-digital-twin/imaging_to_mesh/README.md) | Installable package | Labelmaps / NumPy masks → OBJ + OpenUSD |
+| [`patient_digital_twin.imaging_to_mesh`](./patient-digital-twin/patient_digital_twin/imaging_to_mesh/README.md) | Bundled patient subpackage | Binary masks → NumPy vertices and faces |
 | [`generate_imaging`](./patient-digital-twin/generate_imaging/README.md) | Guide | Synthetic CT/MR generation with MAISI |
 
 ### Quick start — installable packages
@@ -33,33 +33,21 @@ uv venv && uv pip install -e ".[dev]"
 vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache
 vdt-segment-vessels --ct-dir /tmp/ct_cache --no-totalsegmentator
 
-# Mask / labelmap → USD
-cd ../imaging_to_mesh
-uv venv && uv pip install -e ".[dev]"
-imaging-to-mesh /path/to/patient_label.nii.gz --output-dir /tmp/usd_out
+# Patient anatomy and bundled meshing
+cd ..
+uv sync --extra dev --extra soma --extra viewer
+uv run python examples/viewer.py --segmentation /path/to/patient_label.nii.gz \
+  --labels /path/to/matching/label_dict.json
 ```
 
-Python API example (mask from vasculature twin → USD):
+Python API example (segmentation → patient anatomy meshes):
 
 ```python
-from imaging_to_mesh import convert_mask_to_usd
-from vasculature_digital_twin import VolumePreprocessor, get_vessel_mask
+from patient_digital_twin import SegmentationImporter
 
-pre = VolumePreprocessor.from_nifti("ct.nii.gz")
-volume = pre.preprocess(output_dir="ct_cache")
-mask = get_vessel_mask(
-    hu_zyx=pre.hu_volume_zyx,
-    spacing_zyx_mm=volume.spacing_zyx_mm,
-    use_totalsegmentator=False,
-).combined_mask
-
-result = convert_mask_to_usd(
-    mask,
-    "output/vasculature.usd",
-    name="Vasculature",
-    spacing_zyx_mm=volume.spacing_zyx_mm,
-)
-print(result.usd_path)
+body = SegmentationImporter("patient_label.nii.gz", "label_dict.json").to_human_body()
+for structure in body.select(include_empty=False):
+    print(structure.name, structure.world_vertices.shape, structure.faces.shape)
 ```
 
 ## Hospital Digital Twin
@@ -90,11 +78,44 @@ Shared / typical prerequisites (exact versions depend on the component):
 | Requirement | Notes |
 | --- | --- |
 | OS | Linux (x86_64) recommended |
-| Python | 3.10+ for installable packages (`vasculature_digital_twin`, `imaging_to_mesh`) |
+| Python | 3.10+ for installable packages (`vasculature_digital_twin`, `patient_digital_twin`) |
 | GPU | Optional for TotalSegmentator / MAISI / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
 | Tooling | `uv` or `pip`; Isaac Sim when loading USD in simulation |
 
 Installable packages do **not** require Conda. Hospital / robot twin guides may assume Isaac Sim, Isaac Lab, or XR runtimes — see each component README.
+
+## Python Packages
+
+Install every top-level digital twin module from the repository root:
+
+```bash
+uv pip install .
+# or: pip install .
+```
+
+Install one top-level module by supplying its directory instead:
+
+```bash
+uv pip install ./patient-digital-twin
+uv pip install ./hospital-digital-twin
+uv pip install ./sim-ready-assets
+uv pip install ./robot-digital-twin
+```
+
+The corresponding Python imports are `patient_digital_twin`, `hospital_digital_twin`, `sim_ready_assets`, and `robot_digital_twin`.
+
+To use the patient viewer from the repository's own `.venv`, run from this root:
+
+```bash
+uv sync --extra dev --extra patient-soma --extra patient-viewer
+.venv/bin/python patient-digital-twin/examples/viewer.py --help
+```
+
+SOMA-X is installed from PyPI as `py-soma-x==0.2.1`; no sibling SOMA-X checkout or
+external virtual environment is required. Model assets must be cached or
+downloaded by SOMA-X separately from its Python runtime.
+The runtime is pinned because 0.3.0 fails default model loading with a missing
+`soma.body.assets` import.
 
 ## Development / CI
 
@@ -102,7 +123,7 @@ Installable packages under `patient-digital-twin/` include unit tests and can be
 
 ```bash
 cd patient-digital-twin/vasculature_digital_twin && uv pip install -e ".[dev]" && pytest
-cd ../imaging_to_mesh && uv sync --extra dev && uv run pytest
+cd .. && uv sync --extra dev && uv run pytest
 ```
 
 Repository GitHub Actions cover copyright headers, markdown link checks, pre-commit linting, and package build/test for the installable modules.

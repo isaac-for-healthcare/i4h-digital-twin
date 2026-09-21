@@ -89,8 +89,8 @@ Before submitting your contribution, ensure relevant package tests pass:
 cd patient-digital-twin/vasculature_digital_twin
 uv venv && uv pip install -e ".[dev]" && pytest
 
-# Patient digital twin — imaging to mesh
-cd patient-digital-twin/imaging_to_mesh
+# Patient digital twin — anatomy and bundled imaging-to-mesh
+cd patient-digital-twin
 uv sync --extra dev && uv run pytest
 ```
 

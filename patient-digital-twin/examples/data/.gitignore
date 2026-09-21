@@ -1,0 +1,8 @@
+# Large generated scans, volumes and USD exports stay local.
+# Regenerate with the scripts in examples/.
+**/ct.nii.gz
+**/hu_volume.npy
+**/mu_volume.npy
+**/vessel_mask.npy
+*.usdc
+**/*.usdc
