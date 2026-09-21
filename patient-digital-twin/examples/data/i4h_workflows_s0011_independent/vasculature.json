@@ -1,0 +1,13 @@
+{
+  "backend": "TotalSegmentator",
+  "labels": [
+    "aorta",
+    "iliac_artery_left",
+    "iliac_artery_right"
+  ],
+  "inference_ran": true,
+  "ct": "/home/mallan/dev/data/Totalsegmentator_dataset_small_v201/s0011/ct.nii.gz",
+  "ct_sha256": "9e958d65f02971d517105c3b32de6521b60439ac15df532835722ba8fb9ef47c",
+  "coordinate_frame": "LPS",
+  "graph_units": "mm"
+}

@@ -1,0 +1,47 @@
+schema_version: 1
+patient_id: s0011
+coordinate_frame: DICOM_LPS
+transforms:
+  voxel_to_patient_mm:
+  - - 1.5
+    - 0.0
+    - 0.0
+    - -228.455078125
+  - - 0.0
+    - 1.5
+    - 0.0
+    - -419.455078125
+  - - 0.0
+    - 0.0
+    - 1.5
+    - -61.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+  world_from_patient_m:
+  - - 0.0
+    - 0.0
+    - 1.0
+    - -0.2615
+  - - -1.0
+    - 0.0
+    - 0.0
+    - 0.004044921875
+  - - 0.0
+    - -1.0
+    - 0.0
+    - 0.663044921875
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+artifacts:
+  attenuation_volume: mu_volume.npy
+  volume_metadata: metadata.json
+  hu_volume: hu_volume.npy
+  vessel_mask: vessel_mask.npy
+  centerline_points: centerline_points_mm.npy
+  centerline_edges: centerline_edges.npy
+  centerline_radii: centerline_radii_mm.npy
+  anatomy_usd: patient_anatomy.usdc

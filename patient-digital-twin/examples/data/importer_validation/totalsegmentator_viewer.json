@@ -1,0 +1,1212 @@
+{
+  "import": {
+    "backend": "TotalSegmentator",
+    "present": [
+      "adrenal_gland_left",
+      "adrenal_gland_right",
+      "aorta",
+      "atrial_appendage_left",
+      "autochthon_left",
+      "autochthon_right",
+      "brachiocephalic_trunk",
+      "brachiocephalic_vein_left",
+      "brachiocephalic_vein_right",
+      "clavicula_left",
+      "clavicula_right",
+      "colon",
+      "common_carotid_artery_left",
+      "common_carotid_artery_right",
+      "costal_cartilages",
+      "duodenum",
+      "esophagus",
+      "femur_left",
+      "femur_right",
+      "gallbladder",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "gluteus_minimus_right",
+      "heart",
+      "hip_left",
+      "hip_right",
+      "humerus_left",
+      "humerus_right",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "inferior_vena_cava",
+      "kidney_left",
+      "kidney_right",
+      "liver",
+      "lung_lower_lobe_left",
+      "lung_lower_lobe_right",
+      "lung_middle_lobe_right",
+      "lung_upper_lobe_left",
+      "lung_upper_lobe_right",
+      "pancreas",
+      "portal_vein_and_splenic_vein",
+      "prostate",
+      "pulmonary_vein",
+      "rib_left_1",
+      "rib_left_10",
+      "rib_left_11",
+      "rib_left_12",
+      "rib_left_2",
+      "rib_left_3",
+      "rib_left_4",
+      "rib_left_5",
+      "rib_left_6",
+      "rib_left_7",
+      "rib_left_8",
+      "rib_left_9",
+      "rib_right_1",
+      "rib_right_10",
+      "rib_right_11",
+      "rib_right_12",
+      "rib_right_2",
+      "rib_right_3",
+      "rib_right_4",
+      "rib_right_5",
+      "rib_right_6",
+      "rib_right_7",
+      "rib_right_8",
+      "rib_right_9",
+      "sacrum",
+      "scapula_left",
+      "scapula_right",
+      "skull",
+      "small_bowel",
+      "spinal_cord",
+      "spleen",
+      "sternum",
+      "stomach",
+      "subclavian_artery_left",
+      "subclavian_artery_right",
+      "superior_vena_cava",
+      "thyroid_gland",
+      "trachea",
+      "urinary_bladder",
+      "vertebrae_C6",
+      "vertebrae_C7",
+      "vertebrae_L1",
+      "vertebrae_L2",
+      "vertebrae_L3",
+      "vertebrae_L4",
+      "vertebrae_L5",
+      "vertebrae_S1",
+      "vertebrae_T1",
+      "vertebrae_T10",
+      "vertebrae_T11",
+      "vertebrae_T12",
+      "vertebrae_T2",
+      "vertebrae_T3",
+      "vertebrae_T4",
+      "vertebrae_T5",
+      "vertebrae_T6",
+      "vertebrae_T7",
+      "vertebrae_T8",
+      "vertebrae_T9"
+    ],
+    "unsupported": [
+      "intervertebral_discs",
+      "lung_left",
+      "lung_right",
+      "vertebrae",
+      "vertebrae_L6"
+    ],
+    "absent": [
+      "brain",
+      "kidney_cyst_left",
+      "kidney_cyst_right",
+      "vertebrae_C1",
+      "vertebrae_C2",
+      "vertebrae_C3",
+      "vertebrae_C4",
+      "vertebrae_C5"
+    ],
+    "task": "total"
+  },
+  "alignment_method": "Bone-landmark matching",
+  "shape_fit": {
+    "history": [
+      {
+        "iteration": 0,
+        "max_constraint_m": 0.060346333975507246,
+        "active_points": 21273
+      },
+      {
+        "iteration": 1,
+        "max_constraint_m": 0.05661908769669707,
+        "active_points": 11336
+      },
+      {
+        "iteration": 2,
+        "max_constraint_m": 0.05220658297756567,
+        "active_points": 5938
+      },
+      {
+        "iteration": 3,
+        "max_constraint_m": 0.047767238962568605,
+        "active_points": 3882
+      },
+      {
+        "iteration": 4,
+        "max_constraint_m": 0.04174456924839336,
+        "active_points": 3091
+      },
+      {
+        "iteration": 5,
+        "max_constraint_m": 0.024084815039058304,
+        "active_points": 4024
+      },
+      {
+        "iteration": 6,
+        "max_constraint_m": 0.017018139849069674,
+        "active_points": 3091
+      },
+      {
+        "iteration": 7,
+        "max_constraint_m": 0.011059364971861309,
+        "active_points": 2107
+      },
+      {
+        "iteration": 8,
+        "max_constraint_m": 0.0070354409758698975,
+        "active_points": 1428
+      },
+      {
+        "iteration": 9,
+        "max_constraint_m": 0.00558147298137979,
+        "active_points": 1189
+      },
+      {
+        "iteration": 10,
+        "max_constraint_m": 0.00496219608509148,
+        "active_points": 1055
+      },
+      {
+        "iteration": 11,
+        "max_constraint_m": 0.004946381326117733,
+        "active_points": 1052
+      }
+    ],
+    "identity_coeffs": [
+      -1.1971838474273682,
+      -3.0,
+      -3.0,
+      -3.0,
+      3.0,
+      -3.0,
+      3.0,
+      3.0,
+      3.0,
+      1.5598158836364746,
+      -3.0,
+      -1.5999999046325684,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "alignment_errors_m": {},
+  "viewer": {
+    "expected": [
+      "adrenal_gland_left",
+      "adrenal_gland_right",
+      "aorta",
+      "atrial_appendage_left",
+      "autochthon_left",
+      "autochthon_right",
+      "brachiocephalic_trunk",
+      "brachiocephalic_vein_left",
+      "brachiocephalic_vein_right",
+      "clavicula_left",
+      "clavicula_right",
+      "colon",
+      "common_carotid_artery_left",
+      "common_carotid_artery_right",
+      "costal_cartilages",
+      "duodenum",
+      "esophagus",
+      "femur_left",
+      "femur_right",
+      "gallbladder",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "gluteus_minimus_right",
+      "heart",
+      "hip_left",
+      "hip_right",
+      "humerus_left",
+      "humerus_right",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "inferior_vena_cava",
+      "kidney_left",
+      "kidney_right",
+      "liver",
+      "lung_lower_lobe_left",
+      "lung_lower_lobe_right",
+      "lung_middle_lobe_right",
+      "lung_upper_lobe_left",
+      "lung_upper_lobe_right",
+      "pancreas",
+      "portal_vein_and_splenic_vein",
+      "prostate",
+      "pulmonary_vein",
+      "rib_left_1",
+      "rib_left_10",
+      "rib_left_11",
+      "rib_left_12",
+      "rib_left_2",
+      "rib_left_3",
+      "rib_left_4",
+      "rib_left_5",
+      "rib_left_6",
+      "rib_left_7",
+      "rib_left_8",
+      "rib_left_9",
+      "rib_right_1",
+      "rib_right_10",
+      "rib_right_11",
+      "rib_right_12",
+      "rib_right_2",
+      "rib_right_3",
+      "rib_right_4",
+      "rib_right_5",
+      "rib_right_6",
+      "rib_right_7",
+      "rib_right_8",
+      "rib_right_9",
+      "sacrum",
+      "scapula_left",
+      "scapula_right",
+      "skull",
+      "small_bowel",
+      "spinal_cord",
+      "spleen",
+      "sternum",
+      "stomach",
+      "subclavian_artery_left",
+      "subclavian_artery_right",
+      "superior_vena_cava",
+      "thyroid_gland",
+      "trachea",
+      "urinary_bladder",
+      "vertebrae_C6",
+      "vertebrae_C7",
+      "vertebrae_L1",
+      "vertebrae_L2",
+      "vertebrae_L3",
+      "vertebrae_L4",
+      "vertebrae_L5",
+      "vertebrae_S1",
+      "vertebrae_T1",
+      "vertebrae_T10",
+      "vertebrae_T11",
+      "vertebrae_T12",
+      "vertebrae_T2",
+      "vertebrae_T3",
+      "vertebrae_T4",
+      "vertebrae_T5",
+      "vertebrae_T6",
+      "vertebrae_T7",
+      "vertebrae_T8",
+      "vertebrae_T9"
+    ],
+    "visible": [
+      "adrenal_gland_left",
+      "adrenal_gland_right",
+      "aorta",
+      "atrial_appendage_left",
+      "autochthon_left",
+      "autochthon_right",
+      "brachiocephalic_trunk",
+      "brachiocephalic_vein_left",
+      "brachiocephalic_vein_right",
+      "clavicula_left",
+      "clavicula_right",
+      "colon",
+      "common_carotid_artery_left",
+      "common_carotid_artery_right",
+      "costal_cartilages",
+      "duodenum",
+      "esophagus",
+      "femur_left",
+      "femur_right",
+      "gallbladder",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "gluteus_minimus_right",
+      "heart",
+      "hip_left",
+      "hip_right",
+      "humerus_left",
+      "humerus_right",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "inferior_vena_cava",
+      "kidney_left",
+      "kidney_right",
+      "liver",
+      "lung_lower_lobe_left",
+      "lung_lower_lobe_right",
+      "lung_middle_lobe_right",
+      "lung_upper_lobe_left",
+      "lung_upper_lobe_right",
+      "pancreas",
+      "portal_vein_and_splenic_vein",
+      "prostate",
+      "pulmonary_vein",
+      "rib_left_1",
+      "rib_left_10",
+      "rib_left_11",
+      "rib_left_12",
+      "rib_left_2",
+      "rib_left_3",
+      "rib_left_4",
+      "rib_left_5",
+      "rib_left_6",
+      "rib_left_7",
+      "rib_left_8",
+      "rib_left_9",
+      "rib_right_1",
+      "rib_right_10",
+      "rib_right_11",
+      "rib_right_12",
+      "rib_right_2",
+      "rib_right_3",
+      "rib_right_4",
+      "rib_right_5",
+      "rib_right_6",
+      "rib_right_7",
+      "rib_right_8",
+      "rib_right_9",
+      "sacrum",
+      "scapula_left",
+      "scapula_right",
+      "skull",
+      "small_bowel",
+      "spinal_cord",
+      "spleen",
+      "sternum",
+      "stomach",
+      "subclavian_artery_left",
+      "subclavian_artery_right",
+      "superior_vena_cava",
+      "thyroid_gland",
+      "trachea",
+      "urinary_bladder",
+      "vertebrae_C6",
+      "vertebrae_C7",
+      "vertebrae_L1",
+      "vertebrae_L2",
+      "vertebrae_L3",
+      "vertebrae_L4",
+      "vertebrae_L5",
+      "vertebrae_S1",
+      "vertebrae_T1",
+      "vertebrae_T10",
+      "vertebrae_T11",
+      "vertebrae_T12",
+      "vertebrae_T2",
+      "vertebrae_T3",
+      "vertebrae_T4",
+      "vertebrae_T5",
+      "vertebrae_T6",
+      "vertebrae_T7",
+      "vertebrae_T8",
+      "vertebrae_T9"
+    ],
+    "all_expected_visible": true
+  },
+  "containment": {
+    "spleen": {
+      "points_tested": 157400,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "kidney_right": {
+      "points_tested": 119222,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "kidney_left": {
+      "points_tested": 153275,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gallbladder": {
+      "points_tested": 25574,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "liver": {
+      "points_tested": 659616,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "stomach": {
+      "points_tested": 156662,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "pancreas": {
+      "points_tested": 90279,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "adrenal_gland_right": {
+      "points_tested": 10682,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "adrenal_gland_left": {
+      "points_tested": 15450,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "lung_upper_lobe_left": {
+      "points_tested": 460558,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "lung_lower_lobe_left": {
+      "points_tested": 399054,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "lung_upper_lobe_right": {
+      "points_tested": 507527,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "lung_middle_lobe_right": {
+      "points_tested": 253741,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "lung_lower_lobe_right": {
+      "points_tested": 526431,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "esophagus": {
+      "points_tested": 91448,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "trachea": {
+      "points_tested": 69080,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "thyroid_gland": {
+      "points_tested": 25114,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "small_bowel": {
+      "points_tested": 1097263,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "duodenum": {
+      "points_tested": 62529,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "colon": {
+      "points_tested": 955242,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "urinary_bladder": {
+      "points_tested": 143900,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "prostate": {
+      "points_tested": 15374,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "sacrum": {
+      "points_tested": 304122,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_S1": {
+      "points_tested": 75072,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_L5": {
+      "points_tested": 129139,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_L4": {
+      "points_tested": 118793,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_L3": {
+      "points_tested": 127256,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_L2": {
+      "points_tested": 120535,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_L1": {
+      "points_tested": 104072,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T12": {
+      "points_tested": 82728,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T11": {
+      "points_tested": 77403,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T10": {
+      "points_tested": 72660,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T9": {
+      "points_tested": 68268,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T8": {
+      "points_tested": 65364,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T7": {
+      "points_tested": 64394,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T6": {
+      "points_tested": 63108,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T5": {
+      "points_tested": 62437,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T4": {
+      "points_tested": 59032,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T3": {
+      "points_tested": 54601,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T2": {
+      "points_tested": 54985,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_T1": {
+      "points_tested": 52674,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_C7": {
+      "points_tested": 35323,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "vertebrae_C6": {
+      "points_tested": 5555,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "heart": {
+      "points_tested": 519432,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "aorta": {
+      "points_tested": 316508,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "pulmonary_vein": {
+      "points_tested": 57408,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "brachiocephalic_trunk": {
+      "points_tested": 14078,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "subclavian_artery_right": {
+      "points_tested": 27524,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "subclavian_artery_left": {
+      "points_tested": 28914,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "common_carotid_artery_right": {
+      "points_tested": 14828,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "common_carotid_artery_left": {
+      "points_tested": 20690,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "brachiocephalic_vein_left": {
+      "points_tested": 23582,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "brachiocephalic_vein_right": {
+      "points_tested": 11732,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "atrial_appendage_left": {
+      "points_tested": 10622,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "superior_vena_cava": {
+      "points_tested": 29492,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "inferior_vena_cava": {
+      "points_tested": 110978,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "portal_vein_and_splenic_vein": {
+      "points_tested": 32994,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliac_artery_left": {
+      "points_tested": 51088,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliac_artery_right": {
+      "points_tested": 51816,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliac_vena_left": {
+      "points_tested": 69008,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliac_vena_right": {
+      "points_tested": 62252,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "humerus_left": {
+      "points_tested": 72956,
+      "outside_points": 708,
+      "max_outside_m": 0.002289429001520338,
+      "passed": false
+    },
+    "humerus_right": {
+      "points_tested": 52334,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "scapula_left": {
+      "points_tested": 255125,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "scapula_right": {
+      "points_tested": 251631,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "clavicula_left": {
+      "points_tested": 62324,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "clavicula_right": {
+      "points_tested": 61418,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "femur_left": {
+      "points_tested": 128870,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "femur_right": {
+      "points_tested": 136730,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "hip_left": {
+      "points_tested": 479496,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "hip_right": {
+      "points_tested": 465311,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "spinal_cord": {
+      "points_tested": 186746,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_maximus_left": {
+      "points_tested": 323156,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_maximus_right": {
+      "points_tested": 361340,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_medius_left": {
+      "points_tested": 222260,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_medius_right": {
+      "points_tested": 223364,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_minimus_left": {
+      "points_tested": 88172,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "gluteus_minimus_right": {
+      "points_tested": 103010,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "autochthon_left": {
+      "points_tested": 429806,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "autochthon_right": {
+      "points_tested": 426752,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliopsoas_left": {
+      "points_tested": 317714,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "iliopsoas_right": {
+      "points_tested": 302954,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "skull": {
+      "points_tested": 16502,
+      "outside_points": 1601,
+      "max_outside_m": 0.0019238040640146546,
+      "passed": false
+    },
+    "rib_left_1": {
+      "points_tested": 33672,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_2": {
+      "points_tested": 49995,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_3": {
+      "points_tested": 58342,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_4": {
+      "points_tested": 68613,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_5": {
+      "points_tested": 69951,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_6": {
+      "points_tested": 73129,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_7": {
+      "points_tested": 73224,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_8": {
+      "points_tested": 63046,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_9": {
+      "points_tested": 59049,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_10": {
+      "points_tested": 45554,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_11": {
+      "points_tested": 29798,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_left_12": {
+      "points_tested": 2002,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_1": {
+      "points_tested": 44995,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_2": {
+      "points_tested": 46785,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_3": {
+      "points_tested": 58171,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_4": {
+      "points_tested": 62499,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_5": {
+      "points_tested": 73356,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_6": {
+      "points_tested": 76815,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_7": {
+      "points_tested": 73605,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_8": {
+      "points_tested": 61478,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_9": {
+      "points_tested": 54340,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_10": {
+      "points_tested": 42367,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_11": {
+      "points_tested": 27986,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "rib_right_12": {
+      "points_tested": 14646,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "sternum": {
+      "points_tested": 108981,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    },
+    "costal_cartilages": {
+      "points_tested": 358480,
+      "outside_points": 0,
+      "max_outside_m": 0.0,
+      "passed": true
+    }
+  },
+  "all_inside": false
+}

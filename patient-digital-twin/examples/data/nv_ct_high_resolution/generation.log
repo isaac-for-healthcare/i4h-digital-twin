@@ -1,0 +1,46 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  USER-PROVIDED MASK FORMAT REQUIREMENTS                                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Your mask MUST follow the MAISI label format for the generated image to be
+meaningful. The CLI will warn (not error) on most violations and try to fix
+them, but the output quality depends on the mask matching these rules:
+
+  1. File format     : NIfTI (.nii or .nii.gz), 1-channel, integer dtype
+  2. Label vocabulary: MAISI 132-class (see configs/label_dict.json).
+                       Common values:  0=background, 1=liver, 3=spleen,
+                       4=pancreas, 5=right kidney, 14=left kidney,
+                       28-32=lung lobes, 33-57=vertebrae, 132=airway,
+                       200=body (special anomalous value)
+  3. Shape (dim)     : dim[0]==dim[1], dim[0] in {256, 384, 512},
+                       dim[2] in {128, 256, 384, 512, 640, 768}
+  4. Spacing (mm)    : spacing[0]==spacing[1] in [0.5, 3.0],
+                       spacing[2] in [0.5, 5.0]
+  5. Orientation     : will be reoriented to RAS internally; any input OK
+
+If your mask comes from NV-Segment-CTMR/TotalSegmentator with different label
+values, you'll need to remap it first. See scripts/sample_mask.py::remap_labels
+and configs/label_dict_124_to_132.json.
+
+If shape/spacing don't match the constraints above, the CLI will auto-resample
+to the nearest valid target — this degrades label boundary quality. Pre-
+resampling your mask yourself to a valid target gives the best results.
+
+[step 1/4] validating user mask...
+/home/mallan/dev/NV-Generate-CTMR/.venv/lib/python3.12/site-packages/monai/utils/deprecate_utils.py:320: FutureWarning: monai.transforms.spatial.dictionary Orientationd.__init__:labels: Current default value of argument `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` was changed in version None from `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` to `labels=None`. Default value changed to None meaning that the transform now uses the 'space' of a meta-tensor, if applicable, to determine appropriate axis labels.
+  warn_deprecated(argname, msg, warning_category)
+[validate] loaded segmentation.nii.gz: shape=(512, 512, 768), spacing=(0.7630000114440918, 0.7630000114440918, 0.7875000238418579)
+[validate] ✓ all 114 unique label values are in the MAISI 132-class vocabulary.
+[validate] ✓ shape + spacing already match a valid target — no resample needed.
+[step 2/4] loading models on cuda...
+2026-09-17 17:07:50,996 - INFO - 'dst' model updated: 180 of 231 variables.
+[step 2/4] image DM uses modality conditioning; passing modality=1.
+[step 3/4] preparing conditioning tensors (latent_shape=(4, 128, 128, 192))...
+[step 4/4] running inference (steps=30, cfg=0.0)...
+  0%|          | 0/30 [00:00<?, ?it/s]  3%|▎         | 1/30 [00:01<00:33,  1.15s/it]  7%|▋         | 2/30 [00:01<00:21,  1.31it/s] 10%|█         | 3/30 [00:02<00:18,  1.44it/s] 13%|█▎        | 4/30 [00:02<00:17,  1.51it/s] 17%|█▋        | 5/30 [00:03<00:16,  1.55it/s] 20%|██        | 6/30 [00:04<00:15,  1.58it/s] 23%|██▎       | 7/30 [00:04<00:14,  1.60it/s] 27%|██▋       | 8/30 [00:05<00:13,  1.61it/s] 30%|███       | 9/30 [00:05<00:13,  1.61it/s] 33%|███▎      | 10/30 [00:06<00:12,  1.62it/s] 37%|███▋      | 11/30 [00:07<00:11,  1.62it/s] 40%|████      | 12/30 [00:07<00:11,  1.62it/s] 43%|████▎     | 13/30 [00:08<00:10,  1.62it/s] 47%|████▋     | 14/30 [00:09<00:09,  1.62it/s] 50%|█████     | 15/30 [00:09<00:09,  1.63it/s] 53%|█████▎    | 16/30 [00:10<00:08,  1.63it/s] 57%|█████▋    | 17/30 [00:10<00:07,  1.63it/s] 60%|██████    | 18/30 [00:11<00:07,  1.63it/s] 63%|██████▎   | 19/30 [00:12<00:06,  1.63it/s] 67%|██████▋   | 20/30 [00:12<00:06,  1.63it/s] 70%|███████   | 21/30 [00:13<00:05,  1.63it/s] 73%|███████▎  | 22/30 [00:13<00:04,  1.63it/s] 77%|███████▋  | 23/30 [00:14<00:04,  1.63it/s] 80%|████████  | 24/30 [00:15<00:03,  1.63it/s] 83%|████████▎ | 25/30 [00:15<00:03,  1.63it/s] 87%|████████▋ | 26/30 [00:16<00:02,  1.63it/s] 90%|█████████ | 27/30 [00:16<00:01,  1.63it/s] 93%|█████████▎| 28/30 [00:17<00:01,  1.62it/s] 97%|█████████▋| 29/30 [00:18<00:00,  1.63it/s]100%|██████████| 30/30 [00:18<00:00,  1.63it/s]100%|██████████| 30/30 [00:18<00:00,  1.59it/s]
+  0%|          | 0/12 [00:00<?, ?it/s]  8%|▊         | 1/12 [00:03<00:42,  3.85s/it] 17%|█▋        | 2/12 [00:06<00:32,  3.28s/it] 25%|██▌       | 3/12 [00:09<00:27,  3.10s/it] 33%|███▎      | 4/12 [00:12<00:24,  3.01s/it] 42%|████▏     | 5/12 [00:15<00:20,  2.97s/it] 50%|█████     | 6/12 [00:18<00:17,  2.93s/it] 58%|█████▊    | 7/12 [00:21<00:14,  2.91s/it] 67%|██████▋   | 8/12 [00:24<00:11,  2.91s/it] 75%|███████▌  | 9/12 [00:26<00:08,  2.92s/it] 83%|████████▎ | 10/12 [00:29<00:05,  2.93s/it] 92%|█████████▏| 11/12 [00:32<00:02,  2.93s/it]100%|██████████| 12/12 [00:35<00:00,  2.93s/it]100%|██████████| 12/12 [00:35<00:00,  2.98s/it]
+2026-09-17 17:08:49,565 INFO image_writer.py:197 - writing: /home/mallan/dev/i4h-digital-twin/patient-digital-twin/examples/data/nv_ct_high_resolution/segmentation_20260917_170848_848515_image.nii.gz
+
+[done] generated image saved to: /home/mallan/dev/i4h-digital-twin/patient-digital-twin/examples/data/nv_ct_high_resolution/segmentation_20260917_170848_848515_image.nii.gz
+[done] source mask was: /home/mallan/dev/i4h-digital-twin/patient-digital-twin/examples/data/nv_ct_high_resolution/segmentation.nii.gz

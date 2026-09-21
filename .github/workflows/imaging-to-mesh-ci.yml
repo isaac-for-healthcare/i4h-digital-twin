@@ -1,18 +1,28 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-name: Imaging to Mesh CI
+name: Patient Digital Twin CI
 
 on:
   push:
     branches: [main]
     paths:
-      - "patient-digital-twin/imaging_to_mesh/**"
+      - "patient-digital-twin/patient_digital_twin/**"
+      - "patient-digital-twin/tests/**"
+      - "patient-digital-twin/examples/**"
+      - "patient-digital-twin/pyproject.toml"
+      - "patient-digital-twin/uv.lock"
+      - "pyproject.toml"
       - ".github/workflows/imaging-to-mesh-ci.yml"
   pull_request:
     branches: [main]
     paths:
-      - "patient-digital-twin/imaging_to_mesh/**"
+      - "patient-digital-twin/patient_digital_twin/**"
+      - "patient-digital-twin/tests/**"
+      - "patient-digital-twin/examples/**"
+      - "patient-digital-twin/pyproject.toml"
+      - "patient-digital-twin/uv.lock"
+      - "pyproject.toml"
       - ".github/workflows/imaging-to-mesh-ci.yml"
 
 concurrency:
@@ -21,7 +31,7 @@ concurrency:
 
 defaults:
   run:
-    working-directory: patient-digital-twin/imaging_to_mesh
+    working-directory: patient-digital-twin
 
 jobs:
   test:
@@ -38,7 +48,6 @@ jobs:
       - name: Install and test
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e "../vasculature_digital_twin"
           python -m pip install -e ".[dev]"
           pytest
 
@@ -55,8 +64,10 @@ jobs:
           python -m pip install --upgrade pip build twine
           python -m build
           twine check dist/*
+          python -m pip install dist/*.whl
+          python -I -c "import numpy as np; from patient_digital_twin.imaging_to_mesh import mask_to_mesh; vertices, faces = mask_to_mesh(np.ones((3, 3, 3))); assert len(vertices) and len(faces)"
       - uses: actions/upload-artifact@v4
         with:
-          name: imaging-to-mesh-dist
-          path: patient-digital-twin/imaging_to_mesh/dist/
+          name: patient-digital-twin-dist
+          path: patient-digital-twin/dist/
           retention-days: 7

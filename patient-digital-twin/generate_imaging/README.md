@@ -81,6 +81,6 @@ Install Slicer SDK or another application to view the CT data and labelmap.
 
 ## Next steps
 
-Generated CT/MR data and segmentation masks can be converted to USD for use in the Patient Digital Twin pipeline:
+Generated segmentation masks can be converted to internal anatomy meshes for the Patient Digital Twin:
 
-- **[Imaging to Mesh](../imaging_to_mesh/README.md)** — pip-installable NRRD/NIfTI/NumPy-mask to OBJ and OpenUSD conversion.
+- **[Imaging to Mesh](../patient_digital_twin/imaging_to_mesh/README.md)** — bundled binary-mask surface extraction, installed with `patient-digital-twin`. Use `SegmentationImporter` for NIfTI labels and full imaging coordinates.
