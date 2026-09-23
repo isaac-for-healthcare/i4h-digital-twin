@@ -33,10 +33,10 @@ def test_viewer_serves_and_updates_rigid_frames(bound_body):
         for pose in viewer.presets:
             viewer.set_pose(pose)
             np.testing.assert_allclose(
-                viewer.skin.vertices, bound_body.soma_body.vertices
+                viewer.skin.vertices, bound_body.soma.soma_body.vertices
             )
             for name, handle in viewer.meshes.items():
-                structure = bound_body.structures[name]
+                structure = bound_body.anatomy.structures[name]
                 np.testing.assert_allclose(
                     handle.position, structure.local_to_world[:3, 3]
                 )
@@ -63,28 +63,28 @@ def test_viewer_serves_and_updates_rigid_frames(bound_body):
 
 def test_viewer_respects_configuration_and_reenables_meshes(bound_body):
     module = load_viewer()
-    bound_body.set_anatomy_enabled(False)
+    bound_body.anatomy.set_enabled(False)
     viewer = module.HumanBodyViewer(bound_body, port=0)
     try:
         assert viewer.skin.visible
         assert all(not handle.visible for handle in viewer.meshes.values())
         for pose in viewer.presets:
             viewer.set_pose(pose)
-            bound_body.set_anatomy_enabled(True)
+            bound_body.anatomy.set_enabled(True)
             viewer.refresh()
             for name, handle in viewer.meshes.items():
                 assert handle.visible
                 np.testing.assert_allclose(
                     handle.vertices,
-                    bound_body.structures[name].vertices,
+                    bound_body.anatomy.structures[name].vertices,
                     atol=1e-7,
                 )
-            bound_body.set_structure_enabled("liver", False)
+            bound_body.anatomy.set_structure_enabled("liver", False)
             viewer.refresh()
             assert not viewer.meshes["liver"].visible
             assert viewer.meshes["kidney_left"].visible
-            bound_body.set_structure_enabled("liver", True)
-            bound_body.set_anatomy_enabled(False)
+            bound_body.anatomy.set_structure_enabled("liver", True)
+            bound_body.anatomy.set_enabled(False)
             viewer.refresh()
             assert all(not handle.visible for handle in viewer.meshes.values())
     finally:
@@ -114,10 +114,10 @@ def test_viewer_multiple_structure_selection(bound_body):
         viewer.interior.value = True
         viewer.refresh()
         assert visible() == {"liver", "kidney_left"}
-        bound_body.set_structure_enabled("liver", False)
+        bound_body.anatomy.set_structure_enabled("liver", False)
         viewer.refresh()
         assert visible() == {"kidney_left"}
-        bound_body.set_structure_enabled("liver", True)
+        bound_body.anatomy.set_structure_enabled("liver", True)
         viewer.refresh()
         assert visible() == {"liver", "kidney_left"}
         with pytest.raises(ValueError, match="Unknown mesh structures"):

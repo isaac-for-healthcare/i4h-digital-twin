@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 class Kind(str, Enum):
-    """Segmentation category; use enum values when filtering with body.select()."""
+    """Segmentation category; use enum values when filtering with body.anatomy.select()."""
 
     ORGAN = "organ"
     BONE = "bone"

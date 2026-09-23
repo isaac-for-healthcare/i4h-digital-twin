@@ -18,7 +18,7 @@ from ._common import (
     image_input,
     run_backend,
     runtime,
-    segmentation_body,
+    segmentation_anatomy,
 )
 
 
@@ -50,7 +50,7 @@ class NVSegmentImporter:
         self.python_executable = python_executable
         self.report = None
 
-    def to_human_body(self, *, configuration=None):
+    def to_anatomy_collection(self, *, configuration=None):
         """Request supported catalog prompts, invert preprocessing, and mesh output."""
         python = runtime(
             self.python_executable,
@@ -109,7 +109,7 @@ class NVSegmentImporter:
                     f"Expected one NV-Segment output, found {len(outputs)}"
                 )
             # VistaPostTransformd restores prompt IDs before saving the NIfTI.
-            body = segmentation_body(
+            body = segmentation_anatomy(
                 nib.load(outputs[0]), supported, configuration=configuration
             )
         body.source_path = (

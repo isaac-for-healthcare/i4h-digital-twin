@@ -20,21 +20,15 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 
 | Component | Status | Purpose |
 | --- | --- | --- |
-| [`vasculature_digital_twin`](./patient-digital-twin/vasculature_digital_twin/README.md) | Installable package | CT ingest, HU→μ preprocessing, vessel masks, centerlines |
+| [`patient_digital_twin.exporters`](./patient-digital-twin/patient_digital_twin/exporters/) | Bundled patient subpackage | USD, workflow bundles, CT attenuation, physics demo exports |
 | [`patient_digital_twin.imaging_to_mesh`](./patient-digital-twin/patient_digital_twin/imaging_to_mesh/README.md) | Bundled patient subpackage | Binary masks → NumPy vertices and faces |
-| [`generate_imaging`](./patient-digital-twin/generate_imaging/README.md) | Guide | Synthetic CT/MR generation with MAISI |
+| [`patient_digital_twin.importers`](./patient-digital-twin/examples/README.md) | Bundled patient subpackage | Synthetic CT/MR masks, segmentation and mesh import |
 
 ### Quick start — installable packages
 
 ```bash
-# CT preprocessing + vessel extraction
-cd patient-digital-twin/vasculature_digital_twin
-uv venv && uv pip install -e ".[dev]"
-vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache
-vdt-segment-vessels --ct-dir /tmp/ct_cache --no-totalsegmentator
-
 # Patient anatomy and bundled meshing
-cd ..
+cd patient-digital-twin
 uv sync --extra dev --extra soma --extra viewer
 uv run python examples/viewer.py --segmentation /path/to/patient_label.nii.gz \
   --labels /path/to/matching/label_dict.json
@@ -43,10 +37,12 @@ uv run python examples/viewer.py --segmentation /path/to/patient_label.nii.gz \
 Python API example (segmentation → patient anatomy meshes):
 
 ```python
-from patient_digital_twin import SegmentationImporter
+from patient_digital_twin import HumanBody, SegmentationImporter
 
-body = SegmentationImporter("patient_label.nii.gz", "label_dict.json").to_human_body()
-for structure in body.select(include_empty=False):
+anatomy = SegmentationImporter("patient_label.nii.gz", "label_dict.json").to_anatomy_collection()
+body = HumanBody(anatomy)
+body.AttachExternalBody()  # Optional SOMA matching and attachment.
+for structure in body.anatomy.select(include_empty=False):
     print(structure.name, structure.world_vertices.shape, structure.faces.shape)
 ```
 
@@ -78,7 +74,7 @@ Shared / typical prerequisites (exact versions depend on the component):
 | Requirement | Notes |
 | --- | --- |
 | OS | Linux (x86_64) recommended |
-| Python | 3.10+ for installable packages (`vasculature_digital_twin`, `patient_digital_twin`) |
+| Python | 3.10+ for installable packages (`patient_digital_twin` and the other twin modules) |
 | GPU | Optional for TotalSegmentator / MAISI / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
 | Tooling | `uv` or `pip`; Isaac Sim when loading USD in simulation |
 
@@ -122,8 +118,8 @@ The runtime is pinned because 0.3.0 fails default model loading with a missing
 Installable packages under `patient-digital-twin/` include unit tests and can be exercised with:
 
 ```bash
-cd patient-digital-twin/vasculature_digital_twin && uv pip install -e ".[dev]" && pytest
-cd .. && uv sync --extra dev && uv run pytest
+cd patient-digital-twin
+uv run --extra dev pytest
 ```
 
 Repository GitHub Actions cover copyright headers, markdown link checks, pre-commit linting, and package build/test for the installable modules.

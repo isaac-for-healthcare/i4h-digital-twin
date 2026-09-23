@@ -42,8 +42,8 @@ def test_body_extracts_tubular_anatomy_including_disabled_and_composite(monkeypa
             for n, k in names.items()
         }
     )
-    body.structures["aorta"].enabled = False
-    body.structures["empty"] = AnatomicalStructure("empty", Kind.VESSEL)
+    body.anatomy.structures["aorta"].enabled = False
+    body.anatomy.structures["empty"] = AnatomicalStructure("empty", Kind.VESSEL)
     calls = []
 
     def extract(v, f):
@@ -59,7 +59,7 @@ def test_body_extracts_tubular_anatomy_including_disabled_and_composite(monkeypa
         "portal_vein_and_splenic_vein",
     }
     assert len(calls) == 4
-    structure = body.structures["aorta"]
+    structure = body.anatomy.structures["aorta"]
     assert structure.centerline is result["aorta"]
     structure.local_to_world[:3, 3] = 1
     np.testing.assert_array_equal(structure.centerline.points, graph().points)
@@ -85,17 +85,17 @@ def test_failure_is_named_and_does_not_commit_partial_results(monkeypatch):
             for n in ["first", "second"]
         }
     )
-    previous = body.structures["first"].centerline
+    previous = body.anatomy.structures["first"].centerline
 
     def extract(v, f):
-        if v is body.structures["second"].mesh.vertices:
+        if v is body.anatomy.structures["second"].mesh.vertices:
             raise ValueError("bad tube")
         return graph()
 
     monkeypatch.setattr(topology, "extract_centerlines", extract)
     with pytest.raises(RuntimeError, match="second: bad tube"):
         body.extract_topology()
-    assert body.structures["first"].centerline is previous
+    assert body.anatomy.structures["first"].centerline is previous
 
 
 def test_missing_optional_runtime(monkeypatch):
@@ -232,9 +232,9 @@ def test_topology_selection_preserves_other_centerlines(monkeypatch):
             for n in ["aorta", "vascular_tree"]
         }
     )
-    original = body.structures["aorta"].centerline
+    original = body.anatomy.structures["aorta"].centerline
     monkeypatch.setattr(topology, "extract_centerlines", lambda v, f: graph())
     assert set(body.extract_topology(names=["vascular_tree"])) == {"vascular_tree"}
-    assert body.structures["aorta"].centerline is original
+    assert body.anatomy.structures["aorta"].centerline is original
     with pytest.raises(KeyError, match="Unknown anatomy"):
         body.extract_topology(names=["missing"])

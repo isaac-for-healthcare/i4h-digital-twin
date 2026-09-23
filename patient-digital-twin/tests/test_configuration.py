@@ -10,13 +10,13 @@ from patient_digital_twin import (
     HumanBody,
     System,
 )
-from patient_digital_twin.importers._labels import body_from_labels
+from patient_digital_twin.importers._labels import anatomy_from_labels
 
 
 @pytest.fixture
 def body():
-    result = body_from_labels(["liver", "pancreas", "femur_left", "heart", "spleen"])
-    for structure in list(result.structures.values())[:-1]:
+    result = HumanBody(anatomy_from_labels(["liver", "pancreas", "femur_left", "heart", "spleen"]))
+    for structure in list(result.anatomy.structures.values())[:-1]:
         structure.vertices = np.array(
             [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
         )
@@ -25,37 +25,37 @@ def body():
 
 
 def test_master_switch_preserves_mesh_and_metadata(body):
-    liver = body.structures["liver"]
+    liver = body.anatomy.structures["liver"]
     vertices, faces = liver.vertices, liver.faces
-    body.set_system_enabled("digestive", False)
-    body.set_structure_enabled("liver", True)
-    body.set_anatomy_enabled(False)
-    for structure in body.structures.values():
+    body.anatomy.set_system_enabled("digestive", False)
+    body.anatomy.set_structure_enabled("liver", True)
+    body.anatomy.set_enabled(False)
+    for structure in body.anatomy.structures.values():
         assert structure.is_empty
         assert structure.vertices is structure.faces is None
         assert structure.body_vertices is structure.world_vertices is None
-    assert body.select(include_empty=False) == []
-    assert len(body.select()) == 5
+    assert body.anatomy.select(include_empty=False) == []
+    assert len(body.anatomy.select()) == 5
     assert liver.mesh.vertices is vertices
-    body.set_anatomy_enabled(True)
+    body.anatomy.set_enabled(True)
     assert liver.vertices is vertices and liver.faces is faces
-    assert body.structures["pancreas"].is_empty  # Earlier system policy survives.
-    assert body.structures["spleen"].is_empty  # Enabling never invents geometry.
+    assert body.anatomy.structures["pancreas"].is_empty  # Earlier system policy survives.
+    assert body.anatomy.structures["spleen"].is_empty  # Enabling never invents geometry.
 
 
 def test_system_view_multisystem_rules_and_structure_override(body):
-    digestive = body.system(System.DIGESTIVE)
+    digestive = body.anatomy.system(System.DIGESTIVE)
     assert [s.name for s in digestive.structures] == ["liver", "pancreas"]
     assert not digestive.is_empty
-    body.set_system_enabled("endocrine", False)
-    assert body.structures["pancreas"].is_empty
-    assert not body.structures["liver"].is_empty
+    body.anatomy.set_system_enabled("endocrine", False)
+    assert body.anatomy.structures["pancreas"].is_empty
+    assert not body.anatomy.structures["liver"].is_empty
     digestive.set_enabled(False)
     assert digestive.is_empty
-    body.set_structure_enabled("pancreas", True)
+    body.anatomy.set_structure_enabled("pancreas", True)
     assert not digestive.is_empty
-    assert not body.structures["pancreas"].is_empty
-    assert not body.system("skeletal").is_empty
+    assert not body.anatomy.structures["pancreas"].is_empty
+    assert not body.anatomy.system("skeletal").is_empty
 
 
 def test_yaml_file_and_mapping_roundtrip(body, tmp_path):
@@ -67,10 +67,10 @@ def test_yaml_file_and_mapping_roundtrip(body, tmp_path):
         "  structures:\n    liver: true\n",
         encoding="utf-8",
     )
-    body.configure_anatomy(path)
-    assert not body.structures["liver"].is_empty
-    assert body.structures["pancreas"].is_empty
-    policy = body.anatomy_configuration
+    body.anatomy.configure(path)
+    assert not body.anatomy.structures["liver"].is_empty
+    assert body.anatomy.structures["pancreas"].is_empty
+    policy = body.anatomy.configuration
     assert AnatomyConfiguration.load(policy) is policy
     restored = AnatomyConfiguration.load(
         yaml.safe_load(yaml.safe_dump(policy.to_dict()))
@@ -78,8 +78,8 @@ def test_yaml_file_and_mapping_roundtrip(body, tmp_path):
     assert restored == policy
     with pytest.raises(TypeError):
         policy.systems[System.SKELETAL] = False
-    body.configure_anatomy({})  # Replacement, not a merge.
-    assert not body.structures["pancreas"].is_empty
+    body.anatomy.configure({})  # Replacement, not a merge.
+    assert not body.anatomy.structures["pancreas"].is_empty
 
 
 @pytest.mark.parametrize(
@@ -99,12 +99,12 @@ def test_yaml_file_and_mapping_roundtrip(body, tmp_path):
     ],
 )
 def test_invalid_configuration_is_atomic(body, config):
-    policy = body.anatomy_configuration
-    vertices = body.structures["liver"].vertices
+    policy = body.anatomy.configuration
+    vertices = body.anatomy.structures["liver"].vertices
     with pytest.raises((TypeError, ValueError)):
-        body.configure_anatomy(config)
-    assert body.anatomy_configuration is policy
-    assert body.structures["liver"].vertices is vertices
+        body.anatomy.configure(config)
+    assert body.anatomy.configuration is policy
+    assert body.anatomy.structures["liver"].vertices is vertices
 
 
 @pytest.mark.parametrize(
@@ -118,27 +118,27 @@ def test_duplicate_yaml_keys_rejected(body, tmp_path, text):
     path = tmp_path / "duplicate.yaml"
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="Duplicate"):
-        body.configure_anatomy(path)
+        body.anatomy.configure(path)
 
 
 def test_configuration_applies_to_later_imports_and_meshes():
     body = HumanBody(configuration={"anatomy": {"enabled": False}})
-    body_from_labels(["liver"], body=body)
-    liver = body.structures["liver"]
+    HumanBody(anatomy_from_labels(["liver"], anatomy=body.anatomy))
+    liver = body.anatomy.structures["liver"]
     liver.vertices = np.ones((3, 3))
     liver.faces = np.array([[0, 1, 2]])
     assert liver.is_empty
-    body.set_anatomy_enabled(True)
+    body.anatomy.set_enabled(True)
     assert not liver.is_empty
 
 
 def test_unknown_setter_targets_and_nonboolean_rejected(body):
     with pytest.raises(ValueError, match="Unknown"):
-        body.set_structure_enabled("not_an_organ", False)
+        body.anatomy.set_structure_enabled("not_an_organ", False)
     with pytest.raises(ValueError):
-        body.set_system_enabled("not_a_system", False)
+        body.anatomy.set_system_enabled("not_a_system", False)
     with pytest.raises(ValueError, match="boolean"):
-        body.set_anatomy_enabled("false")
+        body.anatomy.set_enabled("false")
 
 
 def test_yaml_loader_rejects_object_tags_and_nonstring_keys(body, tmp_path):
@@ -147,17 +147,17 @@ def test_yaml_loader_rejects_object_tags_and_nonstring_keys(body, tmp_path):
     path = tmp_path / "invalid.yaml"
     path.write_text("anatomy: !!python/object:builtins.object {}", encoding="utf-8")
     with pytest.raises(yaml.constructor.ConstructorError):
-        body.configure_anatomy(path)
+        body.anatomy.configure(path)
     path.write_text("anatomy: {structures: {1: false}}", encoding="utf-8")
     with pytest.raises(TypeError, match="keys must be strings"):
-        body.configure_anatomy(path)
-    assert not body.structures["liver"].is_empty
+        body.anatomy.configure(path)
+    assert not body.anatomy.structures["liver"].is_empty
 
 
 def test_empty_yaml_restores_defaults(body, tmp_path):
     path = tmp_path / "empty.yaml"
     path.write_text("", encoding="utf-8")
-    body.set_anatomy_enabled(False)
-    body.configure_anatomy(path)
-    assert body.anatomy_configuration.enabled
-    assert not body.structures["liver"].is_empty
+    body.anatomy.set_enabled(False)
+    body.anatomy.configure(path)
+    assert body.anatomy.configuration.enabled
+    assert not body.anatomy.structures["liver"].is_empty

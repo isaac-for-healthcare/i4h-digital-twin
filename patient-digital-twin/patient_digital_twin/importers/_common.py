@@ -62,7 +62,7 @@ def catalog_labels(labelmap):
     }
 
 
-def segmentation_body(image, labelmap, *, configuration=None):
+def segmentation_anatomy(image, labelmap, *, configuration=None):
     """Mesh catalog labels and keep unsupported/unobserved catalog entries empty."""
     labels = catalog_labels(labelmap)
     data = np.asanyarray(image.dataobj)
@@ -83,7 +83,7 @@ def segmentation_body(image, labelmap, *, configuration=None):
         mapping,
         affine_xyz_to_imaging_m=SegmentationImporter._affine_m(image),
     )
-    return importer.to_human_body(configuration=configuration)
+    return importer.to_anatomy_collection(configuration=configuration)
 
 
 def coverage(body, supported, *, backend, **details):

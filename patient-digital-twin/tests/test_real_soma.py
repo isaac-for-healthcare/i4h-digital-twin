@@ -7,6 +7,7 @@ These are geometry fixtures, not a claim of fitting patient anatomy.
 Run PATIENT_TWIN_TEST_SOMA=1 with local SOMA assets available.
 """
 
+from patient_digital_twin import HumanBody
 import os
 
 import numpy as np
@@ -35,11 +36,11 @@ def test_real_soma_importer_rigidity_and_containment():
         enable_procedural_transforms=False,
     )
     reference = HumanBody()
-    reference.attach_soma(layer, body_to_soma=np.eye(4))
+    reference.AttachExternalBody(layer, body_to_soma=np.eye(4))
     skin = trimesh.Trimesh(
-        reference.soma_body.vertices, reference.soma_body.faces, process=False
+        reference.soma.soma_body.vertices, reference.soma.soma_body.faces, process=False
     )
-    joints = reference.soma_body.joints
+    joints = reference.soma.soma_body.joints
     # Place tiny test masks around actual interior bone-segment midpoints.
     centers = {
         "liver": (joints["Spine1"] + joints["Spine2"]) / 2,
@@ -59,13 +60,13 @@ def test_real_soma_importer_rigidity_and_containment():
         masks[np.linalg.norm(xyz - center, axis=-1) < 0.008] = index
     affine = np.diag([0.004, 0.004, 0.004, 1])
     affine[:3, 3] = origin
-    body = SegmentationImporter.from_array(
+    body = HumanBody(SegmentationImporter.from_array(
         masks,
         {i: name for i, name in enumerate(centers, 1)},
         affine_xyz_to_imaging_m=affine,
-    ).to_human_body()
+    ).to_anatomy_collection())
     source_landmarks = {
-        key: (joints[name] - body.body_to_imaging[:3, 3]).tolist()
+        key: (joints[name] - body.anatomy.body_to_imaging[:3, 3]).tolist()
         for key, name in {
             "left_shoulder": "LeftArm",
             "right_shoulder": "RightArm",
@@ -73,11 +74,11 @@ def test_real_soma_importer_rigidity_and_containment():
             "right_hip": "RightLeg",
         }.items()
     }
-    body.attach_soma(layer, landmarks=source_landmarks)
-    np.testing.assert_allclose(body.body_to_soma, body.body_to_imaging, atol=1e-5)
-    vertices = {name: item.vertices.copy() for name, item in body.structures.items()}
+    body.AttachExternalBody(layer, landmarks=source_landmarks)
+    np.testing.assert_allclose(body.soma.body_to_soma, body.anatomy.body_to_imaging, atol=1e-5)
+    vertices = {name: item.vertices.copy() for name, item in body.anatomy.structures.items()}
     viewer = load_viewer()
     report = viewer.validate_poses(body)
     assert report["passed"], report
-    for name, item in body.structures.items():
+    for name, item in body.anatomy.structures.items():
         np.testing.assert_array_equal(item.vertices, vertices[name])

@@ -62,6 +62,67 @@ class SomaRepresentation:
         """Anatomical structures, including temporarily disabled mesh storage."""
         return self.anatomy.structures
 
+    def extract_landmarks(self) -> dict[str, np.ndarray]:
+        """Estimate joints from retained humerus/femur surfaces in the body frame.
+
+        Bone principal-axis endpoints approximate shoulders/elbows and hips/knees.
+        Spine geometry identifies the proximal end. Source scan bounds, when
+        available, exclude cropped endpoints. Visibility does not affect fitting.
+        Custom meshes must share a correctly oriented and registered body frame.
+        """
+        points_by_name = {
+            name: transform_points(structure.mesh.vertices, structure.local_to_body)
+            for name, structure in self.structures.items()
+            if structure.mesh.vertices is not None and len(structure.mesh.vertices)
+        }
+        if not points_by_name:
+            return {}
+        spine = [
+            points.mean(0)
+            for name, points in points_by_name.items()
+            if name.startswith("vertebrae") or name in ("sacrum", "spinal_cord")
+        ]
+        reference = np.mean(
+            spine or [p.mean(0) for p in points_by_name.values()], axis=0
+        )
+        landmarks = {}
+        for name in ("humerus_left", "humerus_right", "femur_left", "femur_right"):
+            points = points_by_name.get(name)
+            if points is None or len(points) < 3 or not np.isfinite(points).all():
+                continue
+            centered = points - points.mean(0)
+            _, singular, vectors = np.linalg.svd(centered, full_matrices=False)
+            if singular[0] <= 1e-10:
+                continue
+            offsets = centered @ vectors[0]
+            ends = []
+            for selection in (
+                offsets <= np.quantile(offsets, 0.12),
+                offsets >= np.quantile(offsets, 0.88),
+            ):
+                endpoint = points[selection]
+                cropped = False
+                if (
+                    self.anatomy.body_to_voxel is not None
+                    and self.anatomy.source_shape_xyz is not None
+                ):
+                    voxels = transform_points(endpoint, self.anatomy.body_to_voxel)
+                    cropped = bool(
+                        np.any(voxels <= 0)
+                        or np.any(
+                            voxels >= np.asarray(self.anatomy.source_shape_xyz) - 1
+                        )
+                    )
+                ends.append((endpoint.mean(0), cropped))
+            ends.sort(key=lambda end: np.linalg.norm(end[0] - reference))
+            joints = (
+                ("shoulder", "elbow") if name.startswith("humerus") else ("hip", "knee")
+            )
+            for joint, (point, cropped) in zip(joints, ends):
+                if not cropped:
+                    landmarks[f"{name.split('_')[-1]}_{joint}"] = point
+        return landmarks
+
     def attach_soma(
         self,
         layer: SOMALayer | None = None,
@@ -92,10 +153,37 @@ class SomaRepresentation:
         only the selected anchor joints and their rigid offsets. Reattachment
         needs new landmarks or the saved body_to_soma registration.
 
-        Direct ``body.soma_layer(...)`` calls synchronize anatomy via a forward
+        Direct ``body.soma.soma_layer(...)`` calls synchronize anatomy via a forward
         hook. For SOMA's two-phase API, call ``update_from_soma(layer.pose(...))``.
         Reattach after changing identity/lengths if new anchor offsets are needed.
         """
+        # Validate available matches before importing/loading the optional model.
+        measured = landmarks
+        if measured is None:
+            measured = self.landmarks or (
+                self.extract_landmarks() if body_to_soma is None else {}
+            )
+        measured = {
+            name: np.asarray(point, dtype=float) for name, point in measured.items()
+        }
+        if any(
+            point.shape != (3,) or not np.isfinite(point).all()
+            for point in measured.values()
+        ):
+            raise ValueError("Landmarks must be finite XYZ points in meters")
+        common = [name for name in TRUNK_LANDMARKS if name in measured]
+        if body_to_soma is None:
+            if len(common) < 3:
+                raise ValueError(
+                    "Alignment needs at least 3 shoulder/hip matches from humerus/femur anatomy; "
+                    "import the corresponding bones or provide explicit landmarks or body_to_soma registration"
+                )
+            source = np.array([measured[name] for name in common])
+            if np.linalg.matrix_rank(source - source.mean(0), tol=1e-8) < 2:
+                raise ValueError("Alignment needs non-collinear shoulder/hip matches")
+        else:
+            rigid_transform(body_to_soma)
+
         import torch
         from scipy.spatial.transform import Rotation
 
@@ -118,6 +206,13 @@ class SomaRepresentation:
         parameter = next(layer.buffers())
         device = parameter.device
         names = list(layer.public_joint_names)
+        missing = {
+            SOMA_JOINT_NAMES[name] for name in measured if name in SOMA_JOINT_NAMES
+        } - set(names)
+        if missing:
+            raise ValueError(
+                f"SOMA model lacks matching joint anchors: {sorted(missing)}"
+            )
         dtype = torch.float32
 
         def tensor(value):
@@ -150,24 +245,7 @@ class SomaRepresentation:
                 return PosedBody.from_output(layer, layer.forward(**params))
 
         posed = evaluate()
-        measured = {
-            key: np.asarray(value, dtype=float)
-            for key, value in (
-                self.landmarks if landmarks is None else landmarks
-            ).items()
-        }
-        if any(
-            value.shape != (3,) or not np.isfinite(value).all()
-            for value in measured.values()
-        ):
-            raise ValueError("Landmarks must be finite XYZ points in meters")
-        common = [key for key in TRUNK_LANDMARKS if key in measured]
         if body_to_soma is None:
-            if len(common) < 3:
-                raise ValueError(
-                    "Alignment needs at least 3 shoulder/hip landmarks; provide "
-                    "landmarks or an explicit body_to_soma for a partial scan"
-                )
             source = np.array([measured[key] for key in common])
             target = np.array([posed.joints[SOMA_JOINT_NAMES[key]] for key in common])
             if global_scale is None:
@@ -251,7 +329,24 @@ class SomaRepresentation:
         self._soma_hook = layer.register_forward_hook(
             lambda module, inputs, output: self.update_from_soma(output)
         )
-        return posed
+        return self.pose(self.scan_pose)
+
+    @property
+    def scan_pose(self) -> np.ndarray:
+        """Arms-down presentation pose; retain the imaging pose for registration."""
+        if self.soma_layer is None:
+            raise RuntimeError("Call attach_soma first")
+        pose = to_numpy(self._pose_parameters["poses"]).copy()
+        names = list(self.soma_layer.public_joint_names)
+        for joint, angle in {
+            "LeftArm": [0, 0, -np.deg2rad(80)],
+            "RightArm": [0, 0, np.deg2rad(80)],
+            "LeftForeArm": [0, 0, 0],
+            "RightForeArm": [0, 0, 0],
+        }.items():
+            if joint in names:
+                pose[0, names.index(joint) - 1] = angle
+        return pose
 
     def update_from_soma(self, output) -> None:
         """Synchronize a single SOMA output; use world FK, not LBS matrices."""
@@ -294,7 +389,7 @@ class SomaRepresentation:
         return fit_rigid_bone_anchors(self, poses, **options)
 
     def pose(self, poses=None, *, transl=None, **parameters) -> PosedBody:
-        """Evaluate one pose, inheriting fitted identity, lengths and scan pose.
+        """Evaluate a pose, defaulting to arms down with fitted identity and lengths.
 
         Explicit poses replace the whole axis-angle tensor. Additional SOMA
         forward parameters (e.g. identity_coeffs) may be supplied as keywords.
@@ -304,6 +399,7 @@ class SomaRepresentation:
         if self.soma_layer is None:
             raise RuntimeError("Call attach_soma first")
         params = dict(self._pose_parameters)
+        params["poses"] = self.scan_pose
         params.update(parameters)
         for key, value in (("poses", poses), ("transl", transl)):
             if value is not None:

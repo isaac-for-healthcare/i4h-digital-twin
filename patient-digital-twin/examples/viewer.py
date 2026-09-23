@@ -11,6 +11,7 @@ Use --validate-only --report report.json for noninteractive pose regression.
 
 from __future__ import annotations
 
+from patient_digital_twin import HumanBody
 import argparse
 import hashlib
 import json
@@ -19,23 +20,12 @@ from pathlib import Path
 
 import numpy as np
 from patient_digital_twin import Kind, SegmentationImporter
-from patient_digital_twin.geometry import to_numpy
 
 
 def pose_presets(body) -> dict[str, np.ndarray]:
     """Scan pose plus independent arm, hip/knee and spine articulation."""
-    base = to_numpy(body.soma_parameters["poses"]).copy()
-    names = list(body.soma_layer.public_joint_names)
-    # The viewer's scan preset is arms down. The original attachment pose
-    # remains internal to SOMA's rigid bindings, not a selectable display pose.
-    for joint, angle in {
-        "LeftArm": [0, 0, -np.deg2rad(80)],
-        "RightArm": [0, 0, np.deg2rad(80)],
-        "LeftForeArm": [0, 0, 0],
-        "RightForeArm": [0, 0, 0],
-    }.items():
-        if joint in names:
-            base[0, names.index(joint) - 1] = angle
+    base = body.soma.scan_pose
+    names = list(body.soma.soma_layer.public_joint_names)
     presets = {"scan": base}
     for name, changes in {
         "arms_out": {"LeftArm": [0, 0, 0], "RightArm": [0, 0, 0]},
@@ -61,8 +51,8 @@ def validate_poses(body, presets=None) -> dict:
     reports = {}
     try:
         for name, pose in presets.items():
-            body.pose(pose)
-            report = body.check_containment()
+            body.soma.pose(pose)
+            report = body.soma.check_containment()
             failures = [key for key, result in report.items() if not result["passed"]]
             reports[name] = {
                 "passed": not failures,
@@ -74,14 +64,14 @@ def validate_poses(body, presets=None) -> dict:
                 flush=True,
             )
     finally:
-        body.pose(pose_presets(body)["scan"])
+        body.soma.pose(pose_presets(body)["scan"])
     return {
         "passed": all(result["passed"] for result in reports.values()),
-        "alignment_errors_m": body.alignment_errors_m,
-        "shape_fit": body.shape_fit_report,
-        "bone_fit": body.bone_fit_report,
-        "source_path": body.source_path,
-        "soma_configuration": body.soma_configuration,
+        "alignment_errors_m": body.soma.alignment_errors_m,
+        "shape_fit": body.soma.shape_fit_report,
+        "bone_fit": body.soma.bone_fit_report,
+        "source_path": body.anatomy.source_path,
+        "soma_configuration": body.soma.soma_configuration,
         "poses": reports,
     }
 
@@ -99,26 +89,26 @@ class HumanBodyViewer:
         import viser
         from scipy.spatial.transform import Rotation
 
-        if body.soma_body is None:
+        if body.soma.soma_body is None:
             raise ValueError("Attach SOMA before constructing the viewer")
         self.body, self.presets = body, pose_presets(body)
         self.lock = threading.RLock()
         self.current_pose = self.presets["scan"].copy()
-        body.pose(self.current_pose)
+        body.soma.pose(self.current_pose)
         self.server = viser.ViserServer(
             host=host, port=port, label="Patient digital twin"
         )
         self.server.scene.set_up_direction("+y")
         self.skin = self.server.scene.add_mesh_simple(
             "/skin",
-            body.soma_body.vertices,
-            body.soma_body.faces,
+            body.soma.soma_body.vertices,
+            body.soma.soma_body.faces,
             color=(185, 195, 215),
             opacity=0.22,
             side="double",
         )
         self.meshes = {}
-        for name, structure in body.structures.items():
+        for name, structure in body.anatomy.structures.items():
             if structure.mesh.vertices is None:
                 continue
             color = (
@@ -153,7 +143,7 @@ class HumanBodyViewer:
                 name: self.server.gui.add_checkbox(name, initial_value=True)
                 for name in self.meshes
             }
-        joints = tuple(body.soma_layer.public_joint_names[1:])
+        joints = tuple(body.soma.soma_layer.public_joint_names[1:])
         self.joint = self.server.gui.add_dropdown("Joint", joints, initial_value="Hips")
         self.angles = [
             self.server.gui.add_slider(
@@ -209,7 +199,7 @@ class HumanBodyViewer:
                 with self.lock:
                     index = joints.index(self.joint.value)
                     self.current_pose[0, index] = [c.value for c in self.angles]
-                    self.body.pose(self.current_pose)
+                    self.body.soma.pose(self.current_pose)
                     self.refresh()
 
         @self.check.on_click
@@ -217,7 +207,7 @@ class HumanBodyViewer:
             with self.lock:
                 self.status.content = "Checking every mesh vertex and face center…"
                 try:
-                    report = self.body.check_containment()
+                    report = self.body.soma.check_containment()
                     failures = [
                         f"{name}: {item['outside_points']} outside, "
                         f"max {1000 * item['max_outside_m']:.1f} mm"
@@ -234,7 +224,7 @@ class HumanBodyViewer:
 
         @self.server.on_client_connect
         def _camera(client):
-            vertices = self.body.soma_body.vertices
+            vertices = self.body.soma.soma_body.vertices
             center = (vertices.min(0) + vertices.max(0)) / 2
             distance = max(float(np.ptp(vertices, axis=0).max()), 0.5)
             # Viser's position setter also translates look_at: set it first.
@@ -248,7 +238,7 @@ class HumanBodyViewer:
         self._setting_sliders = True
         try:
             index = (
-                list(self.body.soma_layer.public_joint_names).index(self.joint.value)
+                list(self.body.soma.soma_layer.public_joint_names).index(self.joint.value)
                 - 1
             )
             for control, value in zip(self.angles, self.current_pose[0, index]):
@@ -261,7 +251,7 @@ class HumanBodyViewer:
         with self.lock:
             self.status.content = f"Computing pose {name}…"
             self.current_pose = self.presets[name].copy()
-            self.body.pose(self.current_pose)
+            self.body.soma.pose(self.current_pose)
             self.refresh()
             self.status.content = (
                 f"Showing pose {name}; containment has not been checked."
@@ -286,7 +276,7 @@ class HumanBodyViewer:
         """Apply the checklist and master toggle without recalculating geometry."""
         for name, handle in self.meshes.items():
             handle.visible = (
-                not self.body.structures[name].is_empty
+                not self.body.anatomy.structures[name].is_empty
                 and self.interior.value
                 and self.structure_controls[name].value
             )
@@ -296,10 +286,10 @@ class HumanBodyViewer:
         from scipy.spatial.transform import Rotation
 
         with self.server.atomic():
-            self.skin.vertices = self.body.soma_body.vertices
+            self.skin.vertices = self.body.soma.soma_body.vertices
             self._update_visibility()
             for name, handle in self.meshes.items():
-                structure = self.body.structures[name]
+                structure = self.body.anatomy.structures[name]
                 if structure.is_empty:
                     continue
                 handle.vertices = structure.vertices
@@ -317,7 +307,9 @@ class HumanBodyViewer:
 def main():
     """CLI entry: import, attach/optionally fit, then serve or validate all presets."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--segmentation", type=Path, required=True)
+    inputs = parser.add_mutually_exclusive_group()
+    inputs.add_argument("--segmentation", type=Path)
+    inputs.add_argument("--bundle", type=Path, help="Output directory from pipeline.py")
     parser.add_argument("--labels", type=Path)
     parser.add_argument(
         "--anatomy-config", type=Path, help="YAML mesh availability settings"
@@ -359,26 +351,48 @@ def main():
     import torch
 
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    importer = SegmentationImporter(args.segmentation, args.labels)
-    body = importer.to_human_body(configuration=args.anatomy_config)
-    params = json.loads(args.parameters.read_text()) if args.parameters else {}
-    body.attach_soma(
-        device=args.device, lod=args.lod, data_root=args.data_root, **params
-    )
+    if args.bundle:
+        from body_cache import load_body
+
+        body = load_body(
+            args.bundle.expanduser(),
+            device=args.device,
+            lod=args.lod,
+            data_root=args.data_root,
+        )
+        if args.anatomy_config:
+            body.anatomy.configure(args.anatomy_config)
+    else:
+        sample = Path(__file__).parent / "data/nv_ct_high_resolution"
+        use_sample = args.segmentation is None
+        segmentation = args.segmentation or sample / "segmentation.nii.gz"
+        labels = args.labels or (sample / "labels.json" if use_sample else None)
+        configuration = args.anatomy_config or (
+            sample / "anatomy.yaml" if use_sample else None
+        )
+        parameters = args.parameters or (
+            sample / "viewer_parameters.json" if use_sample else None
+        )
+        importer = SegmentationImporter(segmentation, labels)
+        body = HumanBody(importer.to_anatomy_collection(configuration=configuration))
+        params = json.loads(parameters.read_text()) if parameters else {}
+        body.AttachExternalBody(
+            device=args.device, lod=args.lod, data_root=args.data_root, **params
+        )
     print(
-        f"Imported {sum(s.vertices is not None for s in body.structures.values())} meshes."
+        f"Imported {sum(s.vertices is not None for s in body.anatomy.structures.values())} meshes."
     )
     print(
         "Landmark residuals (mm):",
-        {key: round(1000 * v, 1) for key, v in body.alignment_errors_m.items()},
+        {key: round(1000 * v, 1) for key, v in body.soma.alignment_errors_m.items()},
     )
     if args.fit_shape:
-        body.fit_soma_shape(pose_presets(body).values())
-        body.fit_bone_anchors(pose_presets(body).values())
+        body.soma.fit_soma_shape(pose_presets(body).values())
+        body.soma.fit_bone_anchors(pose_presets(body).values())
     if args.save_parameters:
         args.save_parameters.parent.mkdir(parents=True, exist_ok=True)
         args.save_parameters.write_text(
-            json.dumps(body.soma_configuration, indent=2) + "\n"
+            json.dumps(body.soma.soma_configuration, indent=2) + "\n"
         )
     if args.validate_only:
         report = validate_poses(body)

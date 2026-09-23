@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from patient_digital_twin import HumanBody, SomaRepresentation
 import nibabel as nib
 import numpy as np
 import pytest
 from patient_digital_twin import Kind, SegmentationImporter
+from patient_digital_twin.geometry import transform_points
 from patient_digital_twin.importers._segmentation import (
     canonical_name,
     normalize_labelmap,
@@ -38,14 +40,18 @@ def test_full_affine_and_local_mesh_roundtrip(tmp_path):
     nib.save(image, path)
     importer = SegmentationImporter(path, {"right kidney": 5, "heart": 115})
     np.testing.assert_array_equal(importer.masks_zyx, labels.transpose(2, 1, 0))
-    body = importer.to_human_body(strict=True)
-    structure = body.structures["kidney_right"]
+    body = HumanBody(importer.to_anatomy_collection(strict=True))
+    structure = body.anatomy.structures["kidney_right"]
     assert structure.kind == Kind.ORGAN
-    assert body.structures["heart"].vertices is None
+    assert body.anatomy.structures["heart"].vertices is None
     np.testing.assert_allclose(structure.vertices.mean(0), 0, atol=1e-12)
     np.testing.assert_allclose(structure.body_vertices, structure.world_vertices)
     inverse = np.linalg.inv(importer.affine_xyz_to_imaging_m)
-    voxels = body.imaging_vertices("kidney_right") @ inverse[:3, :3].T + inverse[:3, 3]
+    voxels = (
+        transform_points(structure.body_vertices, body.anatomy.body_to_imaging)
+        @ inverse[:3, :3].T
+        + inverse[:3, 3]
+    )
     np.testing.assert_allclose(voxels.min(0), [-0.5, 2.5, 3.5], atol=1e-5)
     np.testing.assert_allclose(voxels.max(0), [3.5, 6.5, 7.5], atol=1e-5)
     triangles = structure.vertices[structure.faces]
@@ -85,13 +91,13 @@ def test_importer_accepts_anatomy_configuration(tmp_path):
     importer = SegmentationImporter.from_array(
         np.ones((3, 3, 3)), {1: "liver", 2: "heart"}
     )
-    body = importer.to_human_body(configuration=path)
-    assert body.structures["liver"].is_empty
-    assert body.structures["liver"].faces is None
-    assert body.structures["heart"].is_empty
-    body.set_anatomy_enabled(True)
-    assert not body.structures["liver"].is_empty
-    assert body.structures["heart"].is_empty
+    body = HumanBody(importer.to_anatomy_collection(configuration=path))
+    assert body.anatomy.structures["liver"].is_empty
+    assert body.anatomy.structures["liver"].faces is None
+    assert body.anatomy.structures["heart"].is_empty
+    body.anatomy.set_enabled(True)
+    assert not body.anatomy.structures["liver"].is_empty
+    assert body.anatomy.structures["heart"].is_empty
 
 
 def test_invalid_input_and_unknown_labels():
@@ -122,7 +128,7 @@ def test_truncated_bone_end_not_a_joint():
     importer = SegmentationImporter.from_array(
         labels, {"left humerus": 87, "vertebrae L5": 33}
     )
-    landmarks = importer.extract_landmarks()
+    landmarks = SomaRepresentation(importer.to_anatomy_collection()).extract_landmarks()
     assert "left_shoulder" in landmarks
     assert "left_elbow" not in landmarks
 
@@ -140,45 +146,64 @@ def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibilit
             [0, 0, 0, 1],
         ]
     )
-    first = SegmentationImporter.from_array(
-        masks, labelmap, affine_xyz_to_imaging_m=affine
-    ).to_human_body()
+    first = HumanBody(
+        SegmentationImporter.from_array(
+            masks, labelmap, affine_xyz_to_imaging_m=affine
+        ).to_anatomy_collection()
+    )
     shift = np.array([1.2, -0.8, 2.5])
     shifted = affine.copy()
     shifted[:3, 3] += shift
-    second = SegmentationImporter.from_array(
-        masks, labelmap, affine_xyz_to_imaging_m=shifted
-    ).to_human_body(configuration={"anatomy": {"enabled": False}})
-    second.set_anatomy_enabled(True)
-    all_points = np.concatenate([s.body_vertices for s in first.structures.values()])
+    second = HumanBody(
+        SegmentationImporter.from_array(
+            masks, labelmap, affine_xyz_to_imaging_m=shifted
+        ).to_anatomy_collection(configuration={"anatomy": {"enabled": False}})
+    )
+    second.anatomy.set_enabled(True)
+    all_points = np.concatenate(
+        [s.body_vertices for s in first.anatomy.structures.values()]
+    )
     np.testing.assert_allclose(all_points.min(0) + all_points.max(0), 0, atol=1e-12)
     np.testing.assert_allclose(
-        second.body_to_imaging[:3, 3] - first.body_to_imaging[:3, 3], shift
+        second.anatomy.body_to_imaging[:3, 3] - first.anatomy.body_to_imaging[:3, 3],
+        shift,
     )
-    for name, structure in first.structures.items():
+    for name, structure in first.anatomy.structures.items():
         np.testing.assert_allclose(
-            structure.body_vertices, second.structures[name].body_vertices, atol=1e-12
+            structure.body_vertices,
+            second.anatomy.structures[name].body_vertices,
+            atol=1e-12,
         )
         np.testing.assert_allclose(
-            first.imaging_vertices(name) + shift, second.imaging_vertices(name)
+            transform_points(structure.body_vertices, first.anatomy.body_to_imaging)
+            + shift,
+            transform_points(
+                second.anatomy.structures[name].body_vertices,
+                second.anatomy.body_to_imaging,
+            ),
         )
         assert not hasattr(structure, "local_to_imaging")
         assert not hasattr(structure, "classification")
         assert not hasattr(structure, "labels")
 
 
-def test_imported_landmarks_use_the_same_body_frame_as_meshes():
+def test_landmarks_are_extracted_lazily_in_the_body_frame():
     labels = np.zeros((40, 30, 30), dtype=np.uint8)
     labels[0:25, 10:14, 3:7] = 1
     labels[27:35, 10:14, 13:17] = 2
     importer = SegmentationImporter.from_array(
         labels, {1: "humerus_left", 2: "vertebrae_L5"}
     )
-    measured = importer.extract_landmarks()
-    body = importer.to_human_body()
-    assert measured and measured.keys() == body.landmarks.keys()
-    for name, point in body.landmarks.items():
-        np.testing.assert_allclose(point + body.body_to_imaging[:3, 3], measured[name])
+    anatomy = importer.to_anatomy_collection()
+    body = HumanBody(anatomy)
+    assert body.soma is None
+    assert not hasattr(importer, "extract_landmarks")
+    assert not hasattr(anatomy, "landmarks")
+    measured = SomaRepresentation(anatomy).extract_landmarks()
+    assert "left_shoulder" in measured
+    anatomy.set_enabled(False)
+    hidden = SomaRepresentation(anatomy).extract_landmarks()
+    np.testing.assert_allclose(measured["left_shoulder"], hidden["left_shoulder"])
 
 
 def test_oblique_bone_cut_on_nonprincipal_scan_face_is_not_an_elbow():
@@ -191,6 +216,6 @@ def test_oblique_bone_cut_on_nonprincipal_scan_face_is_not_an_elbow():
     importer = SegmentationImporter.from_array(
         mask, {1: "humerus_left", 2: "vertebrae_L5"}
     )
-    landmarks = importer.extract_landmarks()
+    landmarks = SomaRepresentation(importer.to_anatomy_collection()).extract_landmarks()
     assert "left_shoulder" in landmarks
     assert "left_elbow" not in landmarks

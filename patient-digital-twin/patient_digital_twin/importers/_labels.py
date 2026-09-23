@@ -12,16 +12,16 @@ from ..catalog import CATALOG
 from ..structures import AnatomicalStructure, Kind
 
 if TYPE_CHECKING:
-    from ..human import HumanBody
+    from ..anatomy import AnatomyCollection
 
 
-def body_from_labels(
+def anatomy_from_labels(
     labels: Mapping[int, str] | Iterable[str],
     *,
-    body: HumanBody | None = None,
+    anatomy: AnatomyCollection | None = None,
     strict: bool = True,
     overrides: Mapping[str, Kind] | None = None,
-) -> HumanBody:
+) -> AnatomyCollection:
     """Import an ID map or names (names get synthetic 1-based IDs).
 
     strict=True rejects unknown labels before changing the body. With False,
@@ -29,7 +29,7 @@ def body_from_labels(
     exact and case-sensitive. Overrides extend or replace curated kinds.
     Repeated names share one structure; source label IDs are not retained.
     """
-    from ..human import HumanBody
+    from ..anatomy import AnatomyCollection
 
     if isinstance(labels, (str, bytes)):
         raise TypeError("Pass an iterable of names, not a single string")
@@ -37,7 +37,7 @@ def body_from_labels(
         labels.items() if isinstance(labels, Mapping) else enumerate(labels, start=1)
     )
     catalog = {**CATALOG, **(overrides or {})}
-    body = HumanBody() if body is None else body
+    body = AnatomyCollection() if anatomy is None else anatomy
     pending = []
     unknown = set()
     for label_id, name in items:
@@ -58,5 +58,5 @@ def body_from_labels(
         raise ValueError("Unmapped labels: " + ", ".join(sorted(unknown)))
     for name, kind in pending:
         body.structures.setdefault(name, AnatomicalStructure(name, kind))
-    body.anatomy.apply_configuration()
+    body.apply_configuration()
     return body

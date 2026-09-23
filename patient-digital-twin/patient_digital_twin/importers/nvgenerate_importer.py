@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""NV-Generate-CTMR mask diffusion only; no image-generation model is loaded."""
+"""NV-Generate-CTMR paired CT and segmentation generation."""
 
 from __future__ import annotations
 
@@ -12,17 +12,26 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import nibabel as nib
+import numpy as np
 
-from ._common import catalog_labels, coverage, run_backend, runtime, segmentation_body
+from ._segmentation import SegmentationImporter
+
+from ._common import (
+    catalog_labels,
+    coverage,
+    run_backend,
+    runtime,
+    segmentation_anatomy,
+)
 
 
 class NVGenerateImporter:
-    """Generate a fresh CT anatomical mask using the native mask-model defaults.
+    """Generate paired CT and anatomy using upstream rflow-ct inference.
 
-    Requires an NV-Generate-CTMR checkout, its two mask checkpoints, and optional
-    pip-installed runtime requirements. The model's native grid is 256 cubed,
-    1.5 mm isotropic, with 1000 DDPM steps. All supported catalog labels survive;
-    anatomy is not restricted to the upstream example's single requested organ.
+    Requires the upstream checkout, mask/image checkpoints and conditioning
+    dataset. All generated labels survive the upstream output filtering step.
+    After import, ct_volume_zyx and ct_voxel_to_imaging provide the matching CT
+    as a NumPy array and an XYZ-voxel-to-RAS-meter affine for AttachImaging().
     """
 
     def __init__(self, *, source_root=None, python_executable=None):
@@ -32,13 +41,16 @@ class NVGenerateImporter:
         self.python_executable = python_executable
         self.report = None
         self.seed = None
+        self.ct_volume_zyx = None
+        self.ct_voxel_to_imaging = None
 
-    def to_human_body(self, *, configuration=None):
-        """Sample with a fresh seed for every call and return a HumanBody."""
+    def to_anatomy_collection(self, *, configuration=None):
+        """Return meshes and retain the matching CT array/affine on this importer."""
+        self.ct_volume_zyx = self.ct_voxel_to_imaging = None
         python = runtime(
             self.python_executable, ["torch", "monai", "einops"], "torch monai einops"
         )
-        if not (self.root / "scripts/sample_mask.py").is_file():
+        if not (self.root / "scripts/inference.py").is_file():
             raise ImportError(
                 "NV-Generate-CTMR source is missing. Clone https://github.com/NVIDIA-Medtech/NV-Generate-CTMR and supply source_root; pip install -r <source_root>/requirements.txt in the selected Python environment."
             )
@@ -51,10 +63,27 @@ class NVGenerateImporter:
         worker = Path(__file__).with_name("_nvgenerate_worker.py").read_text()
         with TemporaryDirectory(prefix="patient-nvgenerate-") as temp:
             output = Path(temp) / "mask.nii.gz"
-            run_backend([python, "-c", worker, str(self.seed), output], cwd=self.root)
-            body = segmentation_body(
-                nib.load(output), labelmap, configuration=configuration
+            ct_output = Path(temp) / "ct.nii.gz"
+            run_backend(
+                [python, "-c", worker, str(self.seed), output, ct_output], cwd=self.root
             )
+            mask_image, ct_image = nib.load(output), nib.load(ct_output)
+            mask_affine = SegmentationImporter._affine_m(mask_image)
+            ct_affine = SegmentationImporter._affine_m(ct_image)
+            if mask_image.shape != ct_image.shape or not np.allclose(
+                mask_affine, ct_affine
+            ):
+                raise ValueError(
+                    "Generated CT and segmentation must share their physical grid"
+                )
+            ct_volume = ct_image.get_fdata(dtype=np.float32).transpose(2, 1, 0).copy()
+            if not np.isfinite(ct_volume).all():
+                raise ValueError("Generated CT contains non-finite intensities")
+            body = segmentation_anatomy(
+                mask_image, labelmap, configuration=configuration
+            )
+        self.ct_volume_zyx = ct_volume
+        self.ct_voxel_to_imaging = ct_affine
         self.report = coverage(
             body, supported.values(), backend="NV-Generate-CTMR", seed=self.seed
         )

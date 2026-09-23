@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+patient-physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]
 patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.
 # 0.3.0's default model loader imports a missing soma.body.assets module.
@@ -41,6 +42,7 @@ packages = [
   "hospital_digital_twin",
   "i4h_asset_helper",
   "patient_digital_twin",
+  "patient_digital_twin.exporters",
   "patient_digital_twin.imaging_to_mesh",
   "patient_digital_twin.importers",
   "patient_digital_twin.soma_body",

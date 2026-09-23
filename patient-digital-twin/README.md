@@ -3,6 +3,57 @@
 For a high-level explanation, class diagram, API guide, and class-by-class
 test map, start with the [Python package architecture README](patient_digital_twin/README.md).
 
+For a minimal generate → USD → Isaac Sim workflow, see
+[`examples/isaac_sim.py`](examples/isaac_sim.py) and the
+[example commands](examples/README.md#isaac-sim-viewer).
+
+All importers return an `AnatomyCollection` through `to_anatomy_collection()`.
+Import performs no SOMA loading, joint matching, or landmark extraction:
+
+```python
+from patient_digital_twin import HumanBody, SegmentationImporter
+
+anatomy = SegmentationImporter("segmentation.nii.gz", "labels.json").to_anatomy_collection()
+body = HumanBody(anatomy)
+assert body.soma is None
+body.AttachExternalBody()  # Optional: estimate joints, register SOMA, bind anatomy.
+body.export_to_usd("human_body.usdc")
+```
+
+`HumanBody` does not accept landmarks in its constructor. The optional attachment
+step estimates landmarks from retained bone meshes, including hidden anatomy.
+For partial scans, pass a saved `body_to_soma` registration or measured landmarks
+to `AttachExternalBody(...)`. Failed first attachment leaves `body.soma` as `None`.
+Acquisition coordinates and scan bounds remain on the imported collection;
+`HumanBody.imaging` remains `None` until imaging is explicitly attached.
+
+## Optional NumPy imaging
+
+```python
+body.AttachImaging(
+    volume_zyx,                         # NumPy array; CT values are already HU.
+    voxel_to_imaging=voxel_to_ras_m,    # 4×4 XYZ voxel-index → RAS-meter affine.
+    body_to_imaging=body_to_ras_m,      # 4×4 rigid body-frame → RAS-meter transform.
+    source_path="original_ct.nii.gz",  # Optional provenance; never opened.
+    modality="CT",
+)
+body.export_to_usd("patient.usdc")     # Includes attached CT automatically.
+```
+
+`source_path` and `body_to_imaging` are attachment arguments, not `HumanBody`
+constructor arguments or properties. Read them through `body.imaging` after
+attachment. Omitting `body_to_imaging` uses the imported collection's source
+registration; provide an explicit registration for a different image frame.
+The voxel affine is required because NumPy does not encode spacing, orientation,
+or origin. Arrays and transforms are copied and made read-only. Failed validation
+preserves any previous attachment. `body.imaging_vertices(name)` maps the original
+anatomy into the attached image's physical frame, independently of SOMA posing.
+
+Other modalities can be attached with their modality name; the existing imaging
+exporters support CT in HU and reject other modalities rather than treating their
+intensities as HU. Exporters no longer take `ct_path`; load an image into NumPy
+and call `AttachImaging()` first. Geometry-only USD export needs no imaging.
+
 ## HumanBody and segmentation import
 
 `patient_digital_twin.human.HumanBody` replaces the former `Anatomy` placeholder.
@@ -51,13 +102,14 @@ The importer consumes existing segmentations; it does not run a generation
 model or infer anatomical labels from intensity images.
 
 ```python
-from patient_digital_twin import SegmentationImporter
+from patient_digital_twin import HumanBody, SegmentationImporter
 
 importer = SegmentationImporter("sample_label.nii.gz", "/path/to/configs/label_dict.json")
 slices = importer.masks_zyx       # one integer 3D NumPy array, indexed Z, Y, X
 labelmap = importer.labelmap     # ID -> original source name
-body = importer.to_human_body()
-liver = body.structures["liver"]
+anatomy = importer.to_anatomy_collection()
+body = HumanBody(anatomy)
+liver = body.anatomy.structures["liver"]
 print(liver.vertices, liver.faces)
 ```
 
@@ -70,9 +122,11 @@ Background, body envelopes and dummy labels are not internal anatomy meshes.
 ### Simple API and module organization
 
 `HumanBody` is a small facade: `body.anatomy` owns anatomical systems and
-mesh availability; `body.soma` owns SOMA attachment, fitting and articulation.
-Existing calls such as `body.attach_soma()`, `body.pose()`,
-`body.soma_layer` and `body.check_containment()` remain available.
+mesh availability; `body.soma` is initially `None`. Call `body.AttachExternalBody()` to create
+the representation, match anatomy joints, and align SOMA. It then owns fitting
+and articulation.
+Access these APIs directly through their owning components; HumanBody retains
+exports, topology extraction, and imaging-frame conversion.
 
 | Module | Responsibility |
 | --- | --- |
@@ -92,7 +146,7 @@ Empty structures retain their name and kind, but
 `vertices`, `faces`, `body_vertices` and `world_vertices` return `None`. Check `structure.is_empty`; use
 `structure.enabled` to distinguish policy from absent segmentation.
 
-Save a policy like [examples/anatomy.yaml](examples/anatomy.yaml):
+Save a policy like [examples/data/nv_ct_high_resolution/anatomy.yaml](examples/data/nv_ct_high_resolution/anatomy.yaml):
 
 ```yaml
 anatomy:
@@ -105,18 +159,19 @@ anatomy:
 ```
 
 ```python
-body = importer.to_human_body(configuration="examples/anatomy.yaml")
+anatomy = importer.to_anatomy_collection(configuration="examples/data/nv_ct_high_resolution/anatomy.yaml")
+body = HumanBody(anatomy)
 # Or configure an existing body:
-body.configure_anatomy("examples/anatomy.yaml")
-body.set_anatomy_enabled(False)
-body.set_anatomy_enabled(True)  # Restore meshes with previous system/structure rules.
-body.set_system_enabled("skeletal", False)
-body.set_structure_enabled("liver", False)
+body.anatomy.configure("examples/data/nv_ct_high_resolution/anatomy.yaml")
+body.anatomy.set_enabled(False)
+body.anatomy.set_enabled(True)  # Restore meshes with previous system/structure rules.
+body.anatomy.set_system_enabled("skeletal", False)
+body.anatomy.set_structure_enabled("liver", False)
 
-digestive = body.system("digestive")  # An AnatomicalSystem live view.
+digestive = body.anatomy.system("digestive")  # An AnatomicalSystem live view.
 print(digestive.is_empty)
 digestive.set_enabled(True)
-meshed_structures = body.select(include_empty=False)
+meshed_structures = body.anatomy.select(include_empty=False)
 ```
 
 The master `enabled: false` always wins. Otherwise an explicit structure setting
@@ -124,7 +179,7 @@ wins over system settings; a structure belonging to multiple systems is disabled
 if **any** of those systems is disabled. Unspecified settings default to enabled.
 An enabled structure without a source mask remains empty.
 
-`configure_anatomy()` replaces the policy; `configure_anatomy({})` restores
+`body.anatomy.configure()` replaces the policy; `body.anatomy.configure({})` restores
 defaults. Individual setters preserve other settings. Mappings with an
 `anatomy` section and `AnatomyConfiguration` objects are also accepted.
 Unknown system/structure names, duplicate YAML keys, and non-boolean values are
@@ -137,7 +192,7 @@ restores the current pose even after direct `soma_layer(...)` calls while empty.
 Containment checks and the viewer exclude disabled meshes. No bone is deformed
 by toggling availability, and the external SOMA skin is independent of this policy.
 After changing configuration on a running viewer, call `viewer.refresh()`.
-The viewer CLI accepts `--anatomy-config examples/anatomy.yaml`.
+The viewer CLI accepts `--anatomy-config examples/data/nv_ct_high_resolution/anatomy.yaml`.
 
 ### Coordinate contract
 
@@ -150,10 +205,10 @@ units are respected; unspecified NIfTI units are interpreted as millimeters.
 The importer places the shared body origin at the center of the extracted
 anatomy's physical bounding box. Each structure stores centered `vertices`,
 triangle `faces`, its imported rigid `local_to_body` placement, and its current
-rigid `local_to_world` placement. `HumanBody.body_to_imaging` optionally maps
+rigid `local_to_world` placement. `body.imaging.body_to_imaging`, after attachment, maps
 that shared body frame back to the original imaging world. No structure stores
 an imaging transform. Use `structure.body_vertices` for its imported body-frame
-surface, `body.imaging_vertices("liver")` for the original scan surface, and
+surface, `body.imaging_vertices("liver")` for the original surface in an attached image, and
 `structure.world_vertices` for its current posed surface. Image voxel
 scaling/shear is baked into vertices, never into a rigid transform.
 
@@ -165,16 +220,17 @@ spacing/origin-only loader so the full affine is not lost.
 ### SOMA alignment and articulation
 
 ```python
-body.attach_soma(device="cpu", lod="low")
-parameters = body.soma_parameters
-parameters["poses"][0, list(body.soma_layer.public_joint_names).index("LeftArm") - 1] = 0
-body.pose(parameters["poses"])
-report = body.check_containment()
+body.AttachExternalBody(device="cpu", lod="low")
+parameters = body.soma.soma_parameters
+parameters["poses"][0, list(body.soma.soma_layer.public_joint_names).index("LeftArm") - 1] = 0
+body.soma.pose(parameters["poses"])
+report = body.soma.check_containment()
 ```
 
-The alignment, bone-end landmark extraction, similarity fit and limb
-refinement are adapted from `SOMA-X/align_segmentation_to_soma.py`. Automatic
-fitting needs at least three non-collinear shoulder/hip landmarks. Truncated
+Landmark extraction, joint matching, alignment, and limb refinement live in
+`SomaRepresentation` and run only when `body.AttachExternalBody()` is called.
+Landmarks are estimated from imported humerus/femur surface meshes using their
+principal axes. Automatic fitting needs at least three non-collinear shoulder/hip matches. Truncated
 bone ends are excluded. A partial scan must supply measured landmarks in
 body-frame meters or an explicit rigid `body_to_soma` matrix. A failed
 landmark fit is not replaced with an arbitrary bounding-box registration.
@@ -199,17 +255,17 @@ joints. Override a structure with `anchors={"liver": "Spine2"}` during
 attachment. SOMA's public transform array includes its virtual Root, whereas
 the pose array excludes it; the implementation maps by joint name.
 
-`body.pose(...)` and direct `body.soma_layer(...)` forward calls synchronize
+`body.soma.pose(...)` and direct `body.soma.soma_layer(...)` forward calls synchronize
 all meshes. With SOMA's two-phase API, explicitly call
-`body.update_from_soma(body.soma_layer.pose(...))`. A HumanBody represents
+`body.soma.update_from_soma(body.soma.soma_layer.pose(...))`. A HumanBody represents
 one patient, so batch sizes other than one are rejected. Reattach when an
 identity change requires recalculating the mesh-to-joint offsets.
 
 For a scan that does not fit the mean SOMA identity, call
-`body.fit_soma_shape(required_pose_arrays)`. All anatomy is constrained rigidly
+`body.soma.fit_soma_shape(required_pose_arrays)`. All anatomy is constrained rigidly
 in each requested pose.
 This fits bounded PCA identity coefficients across the requested poses.
-`body.fit_bone_anchors(required_pose_arrays)` then fits fixed rigid bone
+`body.soma.fit_bone_anchors(required_pose_arrays)` then fits fixed rigid bone
 offsets, bounded by default to 30 mm per translation axis and 25 degrees of
 rotation. It never resizes bones. Both fitting reports expose the adjustments.
 
@@ -220,8 +276,8 @@ Only the resulting `anchor_joint` and `local_to_anchor` binding are needed to
 follow subsequent joint motion. System visibility is looked up by canonical
 name in the catalog; custom names can use per-structure visibility settings.
 
-Serialize `body.soma_configuration` to reuse identity, scale, pose, alignment
-and the fitted joint offsets. Pass it back as `body.attach_soma(**config)`.
+Serialize `body.soma.soma_configuration` to reuse identity, scale, pose, alignment
+and the fitted joint offsets. Pass it back as `body.AttachExternalBody(**config)`.
 
 ### Viewer and validation
 
@@ -298,7 +354,7 @@ flowchart LR
 ## Available Components
 
 1. **CT / MR Generation + segmentation masks**
-    - [Generate imaging data and segmentation masks](./generate_imaging/README.md)
+    - [Generate and import imaging segmentation masks](./examples/README.md)
 
 2. **3D meshes & USD Conversion**
     - [Extract NumPy surfaces from segmentation masks](./patient_digital_twin/imaging_to_mesh/README.md)
@@ -313,12 +369,12 @@ flowchart LR
 
 ```python
 centerlines = body.extract_topology()
-aorta = body.structures["aorta"].centerline
+aorta = body.anatomy.structures["aorta"].centerline
 # aorta.points: (N, 3) local XYZ meters
 # aorta.radii: (N,) meters
 # aorta.edges: (E, 2) point-index pairs
 from patient_digital_twin.geometry import transform_points
-world_points = transform_points(aorta.points, body.structures["aorta"].local_to_world)
+world_points = transform_points(aorta.points, body.anatomy.structures["aorta"].local_to_world)
 ```
 
 Extraction uses optional VTK/VMTK; install a compatible environment following
@@ -347,8 +403,7 @@ spacing_zyx_m=spacing, origin_xyz_m=origin)`. This method requires VTK, SciPy an
 scikit-image, and samples **closed** meshes on the specified grid. Grid origin
 and spacing are in each mesh's local meter frame; the origin is the center of
 voxel zero. The original VMTK method remains the default. See
-[the s0011 comparison example](examples/i4h_workflows_demo.py) and
-[its results](examples/data/i4h_workflows_s0011_independent/comparison.json).
+[the unified pipeline](examples/README.md) for per-structure centerline exports.
 
 ## Export to Isaac Sim / OpenUSD
 
@@ -378,7 +433,7 @@ skeleton, physics, or collisions.
 Export the bundled example with the same arms-down scan pose as the viewer:
 
 ```bash
-python patient-digital-twin/examples/export_usd.py --output /tmp/patient.usdc
+python patient-digital-twin/examples/pipeline.py --output /tmp/patient
 ```
 
 Material authoring uses [USD Preview Surface](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/materials_workflows.html)
@@ -388,9 +443,9 @@ without merging meshes or removing geometry.
 ## Export an i4h-workflows patient twin
 
 ```python
+# Attach the matching CT NumPy volume first, as above.
 manifest = body.export_patient_twin(
     "new_patient_bundle",
-    ct_path="/path/to/ct.nii.gz",
     patient_id="s0011",
     vessel_names=("aorta", "iliac_artery_left", "iliac_artery_right"),
 )
@@ -404,24 +459,25 @@ missing meshes. It uses
 the interventional HU-to-attenuation curve and default supine world placement
 from i4h-workflows. `world_from_patient_m` optionally overrides that rigid placement.
 
-Requires optional `vasculature-digital-twin[io]`, VTK and usd-core, plus the
-package's existing SciPy/scikit-image dependencies. The body must retain
-`body_to_imaging` in NIfTI RAS meters and enabled meshes for the requested vessels.
+Requires optional VTK and usd-core, plus the
+package's existing SciPy/scikit-image dependencies. Attached CT must have
+`body_to_imaging` in RAS meters and enabled meshes for the requested vessels.
 No segmentation is run by the exporter. The included example runs NV-Segment
 first:
 
 ```bash
-python patient-digital-twin/examples/export_patient_twin.py \
-  --ct ~/dev/data/Totalsegmentator_dataset_small_v201/s0011/ct.nii.gz \
+python patient-digital-twin/examples/pipeline.py --source nvsegment \
+  --input ~/dev/data/Totalsegmentator_dataset_small_v201/s0011/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
   --output /tmp/human_body_patient_twin
 ```
 
-All artifacts use the **original CT placement**, independent of the current
-SOMA/display pose. If SOMA is attached, the exporter evaluates its saved scan
-registration pose and maps the full exterior into the CT frame. HumanBody
+CT attenuation and navigation artifacts use the **original CT placement**.
+SOMA exterior and its rigidly anchored anatomy default to the arms-down scan
+presentation, retaining torso registration in the CT frame. Arm posing does not
+resample the source CT. Pass `soma_pose="imaging"` to export original arm placement. HumanBody
 supplies all retained internal meshes, including disabled meshes as invisible
-prims. The example attaches SOMA automatically; `--soma-parameters` accepts a
+prims. The example attaches SOMA automatically; `--parameters` accepts a
 JSON registration configuration for a previously fitted patient.
 
 Use `exterior="soma"` to require SOMA, or `exterior="ct"` to export a CT envelope.
@@ -444,3 +500,8 @@ From the i4h-workflows checkout:
 ./run.sh endoluminal_navigation --mode demo --episodes 1 --attempts 1 \
   --patient-twin /tmp/human_body_patient_twin/patient_twin.yaml --record verify.hdf5
 ```
+
+Exporter functions are available from `patient_digital_twin.exporters`: `export_to_usd`,
+`export_patient_twin`, and `export_physics_examples`. The corresponding `HumanBody`
+methods remain available. CT orientation and attenuation helpers are bundled in
+`exporters/utils.py`.

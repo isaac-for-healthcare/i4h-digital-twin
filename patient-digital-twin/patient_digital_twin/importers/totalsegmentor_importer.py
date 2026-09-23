@@ -7,14 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ._common import catalog_labels, coverage, image_input, segmentation_body
+from ._common import catalog_labels, coverage, image_input, segmentation_anatomy
 
 
 class TotalSegmentatorImporter:
     """Segment a NIfTI/path or XYZ array; install with pip install TotalSegmentator.
 
     CT uses `total`, MR uses `total_mr`. Request every catalog class that the
-    selected model supports; unavailable labels remain empty in HumanBody.
+    selected model supports; unavailable labels remain empty in AnatomyCollection.
     Model weights are downloaded by the upstream API on first use.
     """
 
@@ -29,7 +29,7 @@ class TotalSegmentatorImporter:
         self.device = device
         self.report = None
 
-    def to_human_body(self, *, configuration=None):
+    def to_anatomy_collection(self, *, configuration=None):
         """Run the optional API, then return meshes in the shared body frame."""
         try:
             from totalsegmentator.map_to_binary import class_map
@@ -49,7 +49,7 @@ class TotalSegmentatorImporter:
             ml=True,
             device=self.device,
         )
-        body = segmentation_body(segmentation, labelmap, configuration=configuration)
+        body = segmentation_anatomy(segmentation, labelmap, configuration=configuration)
         body.source_path = (
             str(self.image) if isinstance(self.image, (str, Path)) else None
         )

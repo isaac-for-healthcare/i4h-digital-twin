@@ -1,8 +1,8 @@
-# Large generated scans, volumes and USD exports stay local.
-# Regenerate with the scripts in examples/.
+# Large sample scans and generated artifacts stay local.
 **/ct.nii.gz
-**/hu_volume.npy
-**/mu_volume.npy
-**/vessel_mask.npy
-*.usdc
+**/*.npy
+**/*.npz
 **/*.usdc
+**/*.usda
+**/*.stl
+# Keep pipeline outputs outside examples/data.

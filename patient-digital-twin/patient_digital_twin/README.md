@@ -54,21 +54,21 @@ classDiagram
 
     class HumanBody {
         +AnatomyCollection anatomy
-        +SomaRepresentation soma
-        +body_to_imaging
-        +configure_anatomy(source)
-        +select()
-        +attach_soma(layer, options)
-        +pose(poses)
-        +check_containment()
+        +SomaRepresentation soma_optional
+        +AttachExternalBody()
+        +ImagingVolume imaging_optional
+        +AttachImaging(volume, spatial_metadata)
+        +imaging_vertices(name)
+        +extract_topology()
+        +export_to_usd(path)
+        +export_patient_twin(output)
     }
     class SegmentationImporter {
         +masks_zyx
         +labelmap
         +affine_xyz_to_imaging_m
         +from_array()
-        +extract_landmarks()
-        +to_human_body()
+        +to_anatomy_collection()
     }
     class AnatomyCollection {
         +structures
@@ -115,6 +115,7 @@ classDiagram
         +soma_layer
         +soma_body
         +body_to_soma
+        +extract_landmarks()
         +attach_soma()
         +fit_soma_shape()
         +fit_bone_anchors()
@@ -143,7 +144,7 @@ classDiagram
         +close()
     }
 
-    SegmentationImporter ..> HumanBody : creates
+    SegmentationImporter ..> AnatomyCollection : creates
     HumanBody *-- AnatomyCollection
     HumanBody *-- SomaRepresentation
     SomaRepresentation --> AnatomyCollection : same collection
@@ -161,7 +162,7 @@ classDiagram
 
 `AnatomicalSystem` is a view, not another owner of meshes. A pancreas can
 belong to digestive and endocrine systems while remaining one structure.
-`body.structures` and `body.soma.structures` reference the same dictionary.
+`body.anatomy.structures` and `body.soma.structures` reference the same dictionary.
 
 Not every component is a class: `catalog.py` supplies kinds and name-based membership; `geometry.py` supplies coordinate math; `soma_body/geometry.py`
 decodes model output and assigns joints; `soma_body/fitting.py` implements skin-shape and rigid bone-offset fitting. These helpers keep `HumanBody` small.
@@ -177,23 +178,24 @@ body = HumanBody({
     name: AnatomicalStructure(name, Kind.ORGAN)
     for name in ("liver", "kidney_left")
 })
-assert body.structures["liver"].is_empty
-urinary = body.system(System.URINARY)
+assert body.anatomy.structures["liver"].is_empty
+urinary = body.anatomy.system(System.URINARY)
 print([item.name for item in urinary.structures])
 ```
 
 To import actual geometry:
 
 ```python
-from patient_digital_twin import SegmentationImporter
+from patient_digital_twin import HumanBody, SegmentationImporter
 
 importer = SegmentationImporter(
     "sample_label.nii.gz",
     "/path/to/matching/label_dict.json",
 )
-body = importer.to_human_body()
-liver = body.structures["liver"]
-source_surface = body.imaging_vertices("liver")  # Original imaging-world XYZ meters.
+anatomy = importer.to_anatomy_collection()
+body = HumanBody(anatomy)
+liver = body.anatomy.structures["liver"]
+body_surface = liver.body_vertices  # No imaging or external body is attached.
 ```
 
 Use the label dictionary that produced the image: numeric IDs differ between
@@ -214,38 +216,41 @@ Each structure retains:
 - `local_to_anchor`: a fixed rigid offset into a SOMA joint frame.
 - `local_to_world`: that joint's current world frame multiplied by the offset.
 
-`HumanBody.body_to_imaging` optionally preserves the relationship to the scan.
+`body.anatomy.body_to_imaging` retains the import coordinate relationship.
+Call `body.AttachImaging(volume_zyx, voxel_to_imaging=affine_m)` to attach
+NumPy imaging using that registration, or supply an explicit `body_to_imaging`.
+The attached volume and provenance live on `body.imaging`, initially `None`.
 The importer chooses the center of the extracted anatomy's bounding box as the
 body origin, independent of visibility settings. `body.imaging_vertices(name)`
-recovers the original surface; `structure.body_vertices` uses the body frame.
+requires attachment and recovers the original surface in that image frame; `structure.body_vertices` uses the body frame.
 
 Read `structure.world_vertices` for rendering; do not transform them again.
 Source vertices remain unchanged during posing. Public geometry properties
 return `None` for disabled or unsegmented structures.
 
-Automatic attachment needs at least three non-collinear shoulder/hip
-landmarks in body-frame meters. For a partial scan, supply measured
+Automatic attachment estimates joints from imported humerus/femur meshes and
+needs at least three non-collinear shoulder/hip matches in body-frame meters. For a partial scan, supply measured
 landmarks or an explicitly registered rigid `body_to_soma` matrix.
 
 ```python
-body.attach_soma(device="cpu", lod="low")
+body.AttachExternalBody(device="cpu", lod="low")
 # Optional fitting order:
-# body.fit_soma_shape(required_pose_arrays)
-# body.fit_bone_anchors(required_pose_arrays)
+# body.soma.fit_soma_shape(required_pose_arrays)
+# body.soma.fit_bone_anchors(required_pose_arrays)
 
-parameters = body.soma_parameters  # Copies of fitted scan parameters.
-body.pose(parameters["poses"])
-report = body.check_containment()
+parameters = body.soma.soma_parameters  # Copies of fitted scan parameters.
+body.soma.pose(parameters["poses"])
+report = body.soma.check_containment()
 assert all(result["passed"] for result in report.values())
 ```
 
 `pose()` with no arguments restores the fitted scan pose; it does not retain
-the last pose as its new baseline. Direct `body.soma_layer(...)` forward calls
+the last pose as its new baseline. Direct `body.soma.soma_layer(...)` forward calls
 also update anatomy through a hook. For SOMA's two-phase API, pass its output
-to `body.update_from_soma(output)`.
+to `body.soma.update_from_soma(output)`.
 
-`body.soma_configuration` is JSON-ready and reloads through
-`body.attach_soma(**saved_configuration)`. It includes fitted joint offsets,
+`body.soma.soma_configuration` is JSON-ready and reloads through
+`body.AttachExternalBody(**saved_configuration)`. It includes fitted joint offsets,
 but not segmentation meshes or anatomy YAML settings. Reimport the same masks
 before reloading. Matching hints are temporary, and landmarks are cleared after
 successful attachment. Posing uses each structure's stored joint and rigid offset.
@@ -263,12 +268,12 @@ anatomy:
 ```
 
 ```python
-body.configure_anatomy("examples/anatomy.yaml")
-body.set_anatomy_enabled(False)  # All internal geometry becomes empty.
-body.set_anatomy_enabled(True)  # Restore previous individual rules.
-body.set_system_enabled("skeletal", False)
-body.set_structure_enabled("liver", True)
-active = body.select(include_empty=False)
+body.anatomy.configure("examples/data/nv_ct_high_resolution/anatomy.yaml")
+body.anatomy.set_enabled(False)  # All internal geometry becomes empty.
+body.anatomy.set_enabled(True)  # Restore previous individual rules.
+body.anatomy.set_system_enabled("skeletal", False)
+body.anatomy.set_structure_enabled("liver", True)
+active = body.anatomy.select(include_empty=False)
 ```
 
 The master disable wins over everything. Otherwise a structure override wins;
@@ -276,7 +281,7 @@ without one, any disabled system makes a shared-system structure empty.
 Missing settings default to enabled. Invalid names, ambiguous YAML keys, and
 non-boolean values fail before policy changes are committed.
 
-Configuration replacement is explicit: `configure_anatomy({})` restores
+Configuration replacement is explicit: `body.anatomy.configure({})` restores
 defaults; individual setters preserve other choices. Load structure-specific
 policies after those labels exist.
 
@@ -291,7 +296,7 @@ SOMA skin.
 uv run --extra soma --extra viewer python examples/viewer.py \
   --segmentation sample_label.nii.gz --labels /path/to/matching/label_dict.json \
   --parameters fitted_soma.json \
-  --anatomy-config examples/anatomy.yaml
+  --anatomy-config examples/data/nv_ct_high_resolution/anatomy.yaml
 ```
 
 Open the localhost URL printed by the viewer. Select named poses, adjust skin
@@ -345,7 +350,7 @@ scan with the actual model. The TotalSegmentator label-loader unit test uses
 a controlled mapping fixture and does not run segmentation.
 
 Every package class, top-level function, and class method has an in-source
-docstring. Use `help(HumanBody.attach_soma)` or follow its reference to
+docstring. Use `help(SomaRepresentation.attach_soma)` or follow its reference to
 `SomaRepresentation.attach_soma` for the detailed model options.
 
 The [full-scan validation notes](../validation/README.md) describe the separately
@@ -360,15 +365,15 @@ Prefer package-level imports, for example
 `from patient_digital_twin import HumanBody, PosedBody`.
 Math helpers now live in `patient_digital_twin.geometry`. Old helper imports
 from `human.py` are not all preserved. Likewise, attach models and registration
-through `body.attach_soma(layer, body_to_soma=matrix)`, not constructor
+through `body.AttachExternalBody(layer, body_to_soma=matrix)`, not constructor
 keywords on `HumanBody`.
 
 The rigid-only API replaces `classification` with `kind` and removes per-structure
 label provenance. `local_to_body` replaces `local_to_imaging`; use the optional
-`body.body_to_imaging` to recover scan placement. For an old explicit registration,
-convert it with `body_to_soma = old_imaging_to_soma @ body.body_to_imaging`.
+`body.anatomy.body_to_imaging` to recover scan placement. For an old explicit registration,
+convert it with `body_to_soma = old_imaging_to_soma @ body.anatomy.body_to_imaging`.
 Landmarks passed to `attach_soma` now use body coordinates; transform imaging
-landmarks by the inverse of `body.body_to_imaging` first. Saved parameter files
+landmarks by the inverse of `body.anatomy.body_to_imaging` first. Saved parameter files
 from the previous API should be regenerated. Soft-tissue deformation options
 have been removed; rigid organs may protrude during articulation, and containment
 checks continue to report those failures.

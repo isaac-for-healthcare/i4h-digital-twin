@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Import NV-Generate-CTMR/MAISI NIfTI label volumes into a HumanBody.
+"""Import NV-Generate-CTMR/MAISI NIfTI label volumes into a AnatomyCollection.
 
 The label dictionary must match the generation configuration; numeric IDs
 cannot safely be inferred from the image or TotalSegmentator's current map.
@@ -18,7 +18,7 @@ import nibabel as nib
 import numpy as np
 
 from ..geometry import transform_points
-from ..human import HumanBody
+from ..anatomy import AnatomyCollection
 
 SKIP_STRUCTURES = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
 
@@ -89,7 +89,7 @@ class SegmentationImporter:
         """Read a multi-label NIfTI plus matching map, or a binary-mask directory.
 
         Reading validates masks and coordinates but does not mesh them. Call
-        to_human_body() to extract surfaces. Directory names define their labels.
+        to_anatomy_collection() to extract surfaces. Directory names define their labels.
         """
         path = Path(path)
         self.source_path = path
@@ -157,7 +157,7 @@ class SegmentationImporter:
 
         affine_xyz_to_imaging_m maps XYZ voxel indices to imaging-world meters;
         omitted affines use 1 mm isotropic voxels at the origin. Extraction is
-        deferred until to_human_body(), just as for file-based construction.
+        deferred until to_anatomy_collection(), just as for file-based construction.
         """
         instance = cls.__new__(cls)
         instance.source_path = None
@@ -205,86 +205,26 @@ class SegmentationImporter:
                 raise ValueError(f"Empty canonical name for {raw!r}")
             self._names[label_id] = name
 
-    def _points(self, mask):
-        """Convert selected ZYX voxel centers to XYZ-meter imaging-world points."""
-        return transform_points(
-            np.argwhere(mask)[:, ::-1], self.affine_xyz_to_imaging_m
-        )
-
-    def extract_landmarks(self) -> dict[str, np.ndarray]:
-        """Estimate shoulder/elbow/hip/knee points in imaging-world XYZ meters.
-
-        Uses long-bone PCA and omits ends cut by the scan boundary. Inspect or
-        replace these estimates before automatic SOMA alignment; partial scans
-        may return too few landmarks and require explicit registration instead.
-        """
-        centers, spine = [], []
-        bone_points = {}
-        for label_id, name in self._names.items():
-            mask = self.masks_zyx == label_id
-            if not mask.any():
-                continue
-            # All-label centroids are only a fallback when no spine is present.
-            points = self._points(mask)
-            centers.append(points.mean(0))
-            if name.startswith("vertebrae") or name in ("sacrum", "spinal_cord"):
-                spine.append(points.mean(0))
-            if name in ("humerus_left", "humerus_right", "femur_left", "femur_right"):
-                bone_points[name] = (points, np.argwhere(mask)[:, ::-1])
-        if not centers:
-            return {}
-        reference = np.mean(spine or centers, axis=0)
-        landmarks = {}
-        shape_xyz = np.array(self.masks_zyx.shape[::-1])
-        for name, (points, voxels) in bone_points.items():
-            if len(points) < 3:
-                continue
-            centered = points - points.mean(0)
-            _, _, vectors = np.linalg.svd(centered, full_matrices=False)
-            offsets = centered @ vectors[0]
-            ends = []
-            for selection in (
-                offsets <= np.quantile(offsets, 0.12),
-                offsets >= np.quantile(offsets, 0.88),
-            ):
-                # An oblique bone may exit through any face of the scan, not
-                # just the voxel axis most aligned with its principal axis.
-                indices = voxels[selection]
-                truncated = np.any(indices == 0) or np.any(
-                    indices == shape_xyz - 1
-                )
-                ends.append((points[selection].mean(0), truncated))
-            ends.sort(key=lambda end: np.linalg.norm(end[0] - reference))
-            side = name.split("_")[-1]
-            joint_names = (
-                ("shoulder", "elbow") if name.startswith("humerus") else ("hip", "knee")
-            )
-            for joint, (center, truncated) in zip(joint_names, ends):
-                if not truncated:
-                    landmarks[f"{side}_{joint}"] = center
-        return landmarks
-
-    def to_human_body(
+    def to_anatomy_collection(
         self,
         *,
         strict: bool = False,
         configuration=None,
-    ) -> HumanBody:
+    ) -> AnatomyCollection:
         """Extract present labels with the bundled imaging_to_mesh.mask_to_mesh.
 
         Vertices are centered per structure in physical XYZ meters, with a
         proper rigid local_to_body transform. Orientation and voxel scaling
         are baked into the vertices, so even sheared images have rigid frames.
         The shared body origin is the extracted anatomy's bounding-box center.
-        HumanBody alone retains the body-to-imaging transform; landmarks are
-        translated into that same body frame for subsequent matching.
+        The collection retains source coordinates and scan bounds as import metadata.
         Optional configuration is a YAML path or AnatomyConfiguration policy.
         Disabled meshes are retained for later re-enabling, not skipped at import.
         """
         from ..imaging_to_mesh import mask_to_mesh
-        from ._labels import body_from_labels
+        from ._labels import anatomy_from_labels
 
-        body = body_from_labels(self._names, strict=strict)
+        body = anatomy_from_labels(self._names, strict=strict)
         bounds = []
         for name, structure in body.structures.items():
             ids = [label_id for label_id, value in self._names.items() if value == name]
@@ -321,12 +261,13 @@ class SegmentationImporter:
             if structure.mesh.vertices is not None:
                 structure.local_to_body[:3, 3] -= origin
                 structure.local_to_world = structure.local_to_body.copy()
-        body.landmarks = {
-            name: point - origin for name, point in self.extract_landmarks().items()
-        }
+        body.body_to_voxel = (
+            np.linalg.inv(self.affine_xyz_to_imaging_m) @ body_to_imaging
+        )
+        body.source_shape_xyz = tuple(self.masks_zyx.shape[::-1])
         body.source_path = (
             str(self.source_path) if self.source_path is not None else None
         )
         if configuration is not None:
-            body.configure_anatomy(configuration)
+            body.configure(configuration)
         return body

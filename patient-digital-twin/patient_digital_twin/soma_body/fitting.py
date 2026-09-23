@@ -31,7 +31,7 @@ def fit_soma_identity(body, poses, *, components=48, iterations=12, margin_m=0.0
     """Fit bounded SOMA PCA coefficients to the anatomy envelope in several poses.
 
     body is a SomaRepresentation; application code should call
-    HumanBody.fit_soma_shape().
+    SomaRepresentation.fit_soma_shape().
     Source geometry and bone sizes stay fixed. Each candidate identity rebinds
     the original body-frame geometry at the scan pose. Active surface constraints
     move SOMA skin outward around anatomy; bounded steps limit identity changes.

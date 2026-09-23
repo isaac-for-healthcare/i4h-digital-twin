@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from .configuration import AnatomyConfiguration
+from .geometry import rigid_transform
 from .structures import AnatomicalStructure, Kind, System
 
 
@@ -18,6 +19,20 @@ class AnatomyCollection:
         """Wrap a shared structure dictionary; this does not copy meshes or labels."""
         self.structures = {} if structures is None else structures
         self._configuration = AnatomyConfiguration()
+        self.source_path = None
+        self._body_to_imaging = None
+        # Optional acquisition bounds for identifying cropped surface geometry.
+        self.body_to_voxel = None
+        self.source_shape_xyz = None
+
+    @property
+    def body_to_imaging(self):
+        """Optional body-to-source physical transform, in XYZ meters."""
+        return None if self._body_to_imaging is None else self._body_to_imaging.copy()
+
+    @body_to_imaging.setter
+    def body_to_imaging(self, value):
+        self._body_to_imaging = None if value is None else rigid_transform(value).copy()
 
     @property
     def configuration(self) -> AnatomyConfiguration:

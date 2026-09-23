@@ -24,7 +24,7 @@ Only NumPy and scikit-image are needed for this operation; both are patient
 package dependencies. Padding produces closed surfaces at scan boundaries.
 Vertices are XYZ float32 coordinates and faces are int32 triangle indices.
 
-For NIfTI labels, use `SegmentationImporter.to_human_body()`: it applies the
+For NIfTI labels, use `SegmentationImporter.to_anatomy_collection()`: it applies the
 full imaging affine and converts to meters, rather than using only spacing
 and origin. See the [patient API guide](../README.md).
 

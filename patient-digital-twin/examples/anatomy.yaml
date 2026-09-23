@@ -1,8 +1,0 @@
-# Set enabled: false to empty all imported anatomy, leaving the SOMA skin.
-anatomy:
-  enabled: true
-  systems:
-    skeletal: true
-    digestive: false
-  structures:
-    liver: true  # Override digestive: false, unless the master switch is false.

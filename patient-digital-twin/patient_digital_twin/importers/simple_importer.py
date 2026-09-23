@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from ..geometry import rigid_transform, transform_points
-from ._labels import body_from_labels
+from ._labels import anatomy_from_labels
 from ._segmentation import canonical_name
 
 
@@ -102,7 +102,7 @@ class SimpleImporter:
         )
         self.report = None
 
-    def to_human_body(self, *, configuration=None):
+    def to_anatomy_collection(self, *, configuration=None):
         """Return a body containing only the requested structures and retained meshes."""
         names = {raw: canonical_name(raw) for raw in self.meshes}
         if len(set(names.values())) != len(names):
@@ -114,18 +114,12 @@ class SimpleImporter:
             raise ValueError("Transform supplied for an anatomy not in meshes")
         use_reference = any(name not in transforms for name in names.values())
         reference = json.loads(self.reference.read_text()) if use_reference else {}
-        body = body_from_labels(names.values())
+        body = anatomy_from_labels(names.values())
         body.body_to_imaging = (
             self.body_to_imaging
             if self.body_to_imaging is not None
             else reference.get("body_to_imaging")
         )
-        # Reference landmarks apply only when every placement uses that frame.
-        if not transforms:
-            body.landmarks = {
-                name: np.asarray(point, dtype=float)
-                for name, point in reference.get("landmarks", {}).items()
-            }
         for raw, name in names.items():
             placement = transforms.get(
                 name, reference.get("mesh_to_body", {}).get(name)
@@ -152,7 +146,7 @@ class SimpleImporter:
             structure.local_to_body = rigid_transform(placement)
             structure.local_to_world = structure.local_to_body.copy()
         if configuration is not None:
-            body.configure_anatomy(configuration)
+            body.configure(configuration)
         self.report = {
             "backend": "simple",
             "present": sorted(body.structures),
