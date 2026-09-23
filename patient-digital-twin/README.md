@@ -1,7 +1,12 @@
-# Patient Digital Twin (Bring your own patient)
+# Patient Digital Twin
 
 For a high-level explanation, class diagram, API guide, and class-by-class
 test map, start with the [Python package architecture README](patient_digital_twin/README.md).
+
+For the USD hierarchy, coordinate transforms, embedded CT and centerlines, see
+[Working with patient USD files](docs/usd.md). Agent workflows are in the shared
+[patient-digital-twin skill](../skills/patient-digital-twin/SKILL.md) and
+[patient-usd skill](../skills/patient-usd/SKILL.md).
 
 For a minimal generate → USD → Isaac Sim workflow, see
 [`examples/isaac_sim.py`](examples/isaac_sim.py) and the
@@ -16,7 +21,7 @@ from patient_digital_twin import HumanBody, SegmentationImporter
 anatomy = SegmentationImporter("segmentation.nii.gz", "labels.json").to_anatomy_collection()
 body = HumanBody(anatomy)
 assert body.soma is None
-body.AttachExternalBody()  # Optional: estimate joints, register SOMA, bind anatomy.
+# Optional, with SOMA installed: body.AttachExternalBody()
 body.export_to_usd("human_body.usdc")
 ```
 
@@ -62,7 +67,30 @@ the adapters in `patient_digital_twin.importers`,
 and `SegmentationImporter`. Importing label metadata does not imply a structure
 was observed in an image: an absent structure has `vertices=None`.
 
-From this directory, install the optional integrations:
+Use Python 3.10 or newer. From the repository root, the patient distribution is
+independently installable:
+
+```bash
+uv pip install './patient-digital-twin[usd]'
+# Or: pip install './patient-digital-twin[usd]'
+```
+
+The base package imports segmentations and meshes into NumPy geometry. Choose
+extras for the operation you need:
+
+| Operation | Patient-package dependencies | Repository-root extra |
+| --- | --- | --- |
+| USD read/write | `usd` | `patient-usd` |
+| SOMA attachment and fitting | `soma`, plus model assets | `patient-soma` |
+| Browser pose viewer | `soma,viewer` | `patient-soma,patient-viewer` |
+| Physics-demo export | `physics`, plus the physics demo source checkout | `patient-physics` |
+| Pipeline / skeleton topology | `usd`, plus `scipy` and `vtk` | `patient-usd`, plus `scipy` and `vtk` |
+
+STL/OBJ import additionally uses `trimesh`. Inference adapters require their
+backend runtime and model files; installing this package alone does not install
+those backends. Isaac Sim viewing uses Isaac Sim's own Python runtime.
+
+From this directory, install the optional SOMA/viewer integrations:
 
 ```bash
 uv sync --extra dev --extra soma --extra viewer
@@ -80,7 +108,7 @@ package, or source-path configuration. The old `mesh` extra is an empty
 compatibility alias.
 
 To use the repository-root virtual environment instead, run from
-`/home/mallan/dev/i4h-digital-twin`:
+the repository root:
 
 ```bash
 uv sync --extra dev --extra patient-soma --extra patient-viewer
@@ -137,6 +165,8 @@ exports, topology extraction, and imaging-frame conversion.
 | `configuration.py` | Validated YAML mesh policy |
 | `soma_body/` | SOMA representation, output decoding, joint assignment, and fitting |
 | `geometry.py` | Shared coordinate transforms and landmark registration |
+| `imaging.py` | Validated NumPy volume, modality and spatial metadata |
+| `exporters/` | USD snapshots, patient bundles, CT utilities and physics-demo exports |
 | `importers/` | Generation, segmentation, and mesh-file imports |
 
 ### Empty anatomy and YAML configuration
@@ -338,32 +368,23 @@ The integration suite also checks rigid organs, rigid bone fitting and
 configuration reload.
 
 
-The Patient Digital Twin pipeline turns clinical data (imaging, physiological) into simulation-ready 3D assets in Universal Scene Description (USD) format. This lets you build and run healthcare simulations—surgical planning, training, or AI policy evaluation—using anatomically accurate, synthetic patient representations instead of real patient data. The result is reusable, privacy-safe digital twins that integrate into Isaac Sim and downstream rendering or domain-randomization workflows.
+## Import and export pipeline
 
-## Pipeline Overview
-
-The typical synthetic data generation pipeline flows from medical imaging and segmentation through 3D conversion to photorealistic rendering:
+[examples/pipeline.py](examples/pipeline.py) imports anatomy, attaches matching CT
+when available, extracts topology, optionally attaches SOMA, and writes a patient
+bundle plus a standalone USD. See the [source-specific commands](examples/README.md).
+The pipeline does not anonymize input data or establish anatomical accuracy.
 
 ```mermaid
 flowchart LR
-    A("CT / MR Generation + segmentation masks") --> B("3D meshes & USD Conversion")
-    B --> C("Material properties assignment")
-    C --> D("Style Augmentation + Photorealistics Rendering")
+    A[Segmentation or mesh files] --> B[AnatomyCollection]
+    B --> C[HumanBody]
+    D[Optional matching CT] --> C
+    E[Optional SOMA attachment] --> C
+    C --> F[USD snapshot]
+    C --> G[Patient bundle]
+    G --> H[Optional physics-demo export]
 ```
-
-## Available Components
-
-1. **CT / MR Generation + segmentation masks**
-    - [Generate and import imaging segmentation masks](./examples/README.md)
-
-2. **3D meshes & USD Conversion**
-    - [Extract NumPy surfaces from segmentation masks](./patient_digital_twin/imaging_to_mesh/README.md)
-
-3. **Material properties assignment**
-    - Define textures and material properties on the USD assets (coming soon)
-
-4. **Style Augmentation + Photoreal Rendering**
-    - Style augmentation and photorealistic rendering integration (coming soon)
 
 ## Vessel and airway topology
 
@@ -402,106 +423,70 @@ For compatibility with i4h-workflows' voxel skeletonization, use
 spacing_zyx_m=spacing, origin_xyz_m=origin)`. This method requires VTK, SciPy and
 scikit-image, and samples **closed** meshes on the specified grid. Grid origin
 and spacing are in each mesh's local meter frame; the origin is the center of
-voxel zero. The original VMTK method remains the default. See
+voxel zero. The original VMTK method remains the default when no method or spacing is given.
+For automatic per-mesh grids, use `body.extract_topology(spacing_m=0.0015)`;
+this selects skeleton extraction and is the pipeline's default approach. See
 [the unified pipeline](examples/README.md) for per-structure centerline exports.
 
 ## Export to Isaac Sim / OpenUSD
 
-Install the optional USD runtime (`pip install usd-core`, or install this package
-with its `usd` extra; the aggregate package calls it `patient-usd`). After attaching
-SOMA and setting the desired pose:
+With the `usd` extra installed, export geometry without requiring CT or SOMA:
 
 ```python
-path = body.export_to_usd("patient.usdc", skin_opacity=0.15)
+body.export_to_usd("patient.usdc")                 # Default scan presentation.
+body.export_to_usd("posed.usdc", pose="current")   # Current SOMA pose, if attached.
 ```
 
-This exports the current pose as a standalone, Z-up, meter-scale USD stage:
+Both produce static, meter-scale, Z-up stages. With SOMA attached, the default
+`pose="scan"` exports the arms-down scan presentation, supine; `"current"` retains
+the displayed pose with the upright axis conversion. Without SOMA, both use the
+body's current structure transforms with an identity root. Export does not change
+the live body's pose or visibility.
 
-- `/HumanBody/Exterior/SOMA`: external skin, semi-transparent by default.
-- `/HumanBody/Anatomy/<name>`: one independently selectable mesh per structure.
-- `/HumanBody/Looks`: embedded materials with distinct structure colors.
+Retained meshes remain separately selectable under `/HumanBody/Anatomy`.
+Disabled meshes are invisible; absent meshes are omitted. SOMA adds an optional
+`/HumanBody/Exterior/SOMA`; attached CT and extracted centerlines become custom
+attributes. These attributes do not render a volume or create physics.
+See the [USD guide](docs/usd.md) for inspection code, transforms and Isaac Sim use.
 
-Open the file in Isaac Sim. Expand `HumanBody/Anatomy` in the Stage panel to
-select individual organs. Toggle visibility on `HumanBody/Exterior` to inspect
-internal anatomy without the skin. Disabled structures (including the example's
-skull) are present but invisible; structures without geometry are omitted.
-The export preserves the current rigid placement of all meshes and converts
-SOMA's Y-up frame to Z-up once at the root. No external mesh or texture paths
-are required. This is a static geometry snapshot; it does not author an animated
-skeleton, physics, or collisions.
-
-Export the bundled example with the same arms-down scan pose as the viewer:
-
-```bash
-python patient-digital-twin/examples/pipeline.py --output /tmp/patient
-```
-
-Material authoring uses [USD Preview Surface](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/materials_workflows.html)
-and standard OpenUSD mesh visibility, so individual anatomy can be inspected
-without merging meshes or removing geometry.
-
-## Export an i4h-workflows patient twin
+## Export a patient bundle
 
 ```python
-# Attach the matching CT NumPy volume first, as above.
+manifest = body.export_patient_twin("new_patient_bundle", patient_id="patient_001")
+```
+
+The output directory must be new. `patient_twin.yaml` indexes the anatomy USD,
+missing meshes, optional CT/attenuation arrays and already-extracted per-structure
+centerlines. CT and SOMA are optional. Registered anatomy uses `DICOM_LPS`;
+unregistered mesh-only anatomy uses `body`. Resolve artifact paths relative to
+the manifest, and use its `world_from_patient_m` transform for downstream world
+placement. The anatomy USD itself remains in the manifest's patient frame.
+
+`exterior="auto"` includes SOMA only when attached; it does not fabricate a CT
+exterior. Use `exterior="soma"` to require SOMA, or `exterior="ct"` to explicitly
+request an envelope from attached CT. `skin_opacity` defaults to 0.15.
+SOMA defaults to the arms-down presentation (`soma_pose="scan"`); use
+`soma_pose="imaging"` for its original registration pose. CT is never posed or
+resampled by arm motion. Bundle export rejects oblique CT: resample the matching
+inputs onto patient axes before export.
+
+For a navigation bundle, attach matching CT and explicitly request vessels:
+
+```python
 manifest = body.export_patient_twin(
-    "new_patient_bundle",
-    patient_id="s0011",
+    "new_navigation_bundle",
     vessel_names=("aorta", "iliac_artery_left", "iliac_artery_right"),
 )
 ```
 
-The output directory must be new. This creates `patient_twin.yaml` plus all of
-its relative artifacts: attenuation and HU volumes, volume metadata, vessel mask,
-centerline points/radii/edges, and a USD with individually named anatomy. YAML's
-`anatomy` inventory lists each structure's USD prim, kind, enabled state, and
-missing meshes. It uses
-the interventional HU-to-attenuation curve and default supine world placement
-from i4h-workflows. `world_from_patient_m` optionally overrides that rigid placement.
+Only attached CT plus nonempty `vessel_names` produces the composite vessel mask
+and navigation centerline. Requested vessels must have enabled meshes. Their
+original scan-frame surfaces are voxelized on the CT grid, closed, reduced to the
+largest component, and skeletonized. This requires VTK in addition to SciPy and
+usd-core. Geometry-only bundles do not supply a fluoroscopy/navigation volume;
+check the consuming application's required artifacts before using them.
 
-Requires optional VTK and usd-core, plus the
-package's existing SciPy/scikit-image dependencies. Attached CT must have
-`body_to_imaging` in RAS meters and enabled meshes for the requested vessels.
-No segmentation is run by the exporter. The included example runs NV-Segment
-first:
-
-```bash
-python patient-digital-twin/examples/pipeline.py --source nvsegment \
-  --input ~/dev/data/Totalsegmentator_dataset_small_v201/s0011/ct.nii.gz \
-  --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
-  --output /tmp/human_body_patient_twin
-```
-
-CT attenuation and navigation artifacts use the **original CT placement**.
-SOMA exterior and its rigidly anchored anatomy default to the arms-down scan
-presentation, retaining torso registration in the CT frame. Arm posing does not
-resample the source CT. Pass `soma_pose="imaging"` to export original arm placement. HumanBody
-supplies all retained internal meshes, including disabled meshes as invisible
-prims. The example attaches SOMA automatically; `--parameters` accepts a
-JSON registration configuration for a previously fitted patient.
-
-Use `exterior="soma"` to require SOMA, or `exterior="ct"` to export a CT envelope.
-The default `"auto"` uses SOMA when attached and a CT envelope otherwise.
-`skin_opacity` controls exterior transparency (default 0.15). The full body is
-referenced through `artifacts.anatomy_usd`; geometry is not embedded as YAML arrays.
-The fluoroscopy scene adjusts its table to support the SOMA body without moving
-the CT, organs, catheter, or C-arm. Anatomy outside the acquired CT field remains
-visual geometry; it does not add invented X-ray attenuation.
-
-Use `export_to_usd()` for current posed snapshots and `export_patient_twin()`
-for scan-aligned navigation. Oblique scans must first be
-resampled onto the patient axes. The selected vessel meshes are independently
-voxelized onto the CT grid, closed twice, reduced to the largest component, and
-skeletonized for the catheter path.
-
-From the i4h-workflows checkout:
-
-```bash
-./run.sh endoluminal_navigation --mode demo --episodes 1 --attempts 1 \
-  --patient-twin /tmp/human_body_patient_twin/patient_twin.yaml --record verify.hdf5
-```
-
-Exporter functions are available from `patient_digital_twin.exporters`: `export_to_usd`,
-`export_patient_twin`, and `export_physics_examples`. The corresponding `HumanBody`
-methods remain available. CT orientation and attenuation helpers are bundled in
-`exporters/utils.py`.
+Exporter functions are also available from `patient_digital_twin.exporters`:
+`export_to_usd`, `export_patient_twin`, and `export_physics_examples`.
+The [USD guide](docs/usd.md#physics-demo-exports) covers physics exports, their
+additional dependencies, and recorded scene transforms.

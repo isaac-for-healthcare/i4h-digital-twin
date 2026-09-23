@@ -1,7 +1,8 @@
 # HumanBody pipeline
 
 Run from `patient-digital-twin/`. Install `.[usd]` and the mesh/topology dependencies
-(`trimesh`, `scipy`, `rtree`). Install `.[soma]` only when attaching an external body.
+(`scipy`, `vtk`; add `trimesh` for STL/OBJ import). Install `.[soma]` only when
+attaching an external body.
 Inference backends require their own models and dependencies; NVIDIA backends can
 run in a separate interpreter using `--python`.
 
@@ -59,7 +60,7 @@ The output directory must be new and contains:
 | --- | --- |
 | `human_body.usdc` | All anatomy meshes, embedded centerlines, attached CT attributes, optional SOMA skin |
 | `patient_twin.yaml` | Bundle inventory, coordinates, mesh paths, and centerline asset paths |
-| `patient_anatomy.usdc` | Bundle anatomy, embedded centerlines, optional SOMA exterior |
+| `patient_anatomy.usdc` | Bundle anatomy, embedded centerlines, optional SOMA exterior; CT is stored in external arrays |
 | `centerlines/*.npz` | Local-meter points, edges and radii; transforms recorded in the manifest |
 | `hu_volume.npy`, `mu_volume.npy`, `metadata.json` | Attached CT and attenuation, when CT exists |
 
@@ -90,3 +91,6 @@ python examples/isaac_sim.py export /tmp/human_body.usdc
 `viewer.py` remains an optional browser-based pose diagnostic. Its `--bundle`
 argument reads legacy `body.json`/`body.npz` caches; this pipeline produces USD and
 patient bundles for Isaac Sim instead of those caches.
+
+See [Working with patient USD files](../docs/usd.md) for programmatic inspection,
+coordinate handling, and the differences between the two USD outputs.

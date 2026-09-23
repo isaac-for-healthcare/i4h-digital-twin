@@ -5,9 +5,10 @@ named anatomical structures with meshes, an optional SOMA-X external body,
 and rules for moving and displaying them together. `HumanBody` is the
 application-facing API. Its anatomy and SOMA components do the detailed work.
 
-The package does **not** run segmentation, infer diagnoses, provide a
-biomechanical tissue simulation, or automatically make patient data anonymous.
-It consumes masks from workflows such as NV-Generate-CTMR and uses the bundled
+The core segmentation reader consumes existing masks. Separate importer adapters
+can invoke generation or segmentation backends when their runtimes and models
+are installed. The package does not infer diagnoses, implement a tissue solver,
+or automatically anonymize patient data. It uses the bundled
 `patient_digital_twin.imaging_to_mesh` subpackage to extract surfaces. This path returns NumPy
 geometry; it does not write USD files.
 
@@ -25,9 +26,9 @@ package; no separate meshing package or source-path setup is needed.
 2. **Build anatomy.** The importer normalizes names, uses catalog metadata to
    classify labels, and calls `patient_digital_twin.imaging_to_mesh.mask_to_mesh`.
    Each present structure gets centered local vertices, faces, and a rigid
-   placement relative to one shared body origin. HumanBody optionally retains
-   a body-to-imaging transform. Absent labels remain metadata
-   with no mesh.
+   placement relative to one shared body origin. The collection retains the
+   import registration; optional attached imaging lives on `body.imaging`.
+   Absent labels remain metadata with no mesh.
 3. **Choose what is enabled.** `AnatomyCollection` applies a YAML policy for
    all anatomy, systems, or individual structures. Disabling exposes an empty
    structure without deleting its retained geometry.
@@ -37,7 +38,9 @@ package; no separate meshing package or source-path setup is needed.
 5. **Pose and inspect.** SOMA evaluation moves the skin and joint frames.
    Every anatomical structure follows a rigid joint transform.
    The viewer renders the skin and enabled internal anatomy.
-6. **Validate.** Containment checks test all enabled mesh vertices and, by
+6. **Export.** Write a USD snapshot or a manifest-based patient bundle. CT, SOMA
+   and stored centerlines are optional. See the [USD guide](../docs/usd.md).
+7. **Validate.** Containment checks test all enabled mesh vertices and, by
    default, triangle centers against the current skin. Validate every new
    patient and every required pose.
 
@@ -62,6 +65,13 @@ classDiagram
         +extract_topology()
         +export_to_usd(path)
         +export_patient_twin(output)
+    }
+    class ImagingVolume {
+        +volume
+        +voxel_to_imaging
+        +body_to_imaging
+        +source_path
+        +modality
     }
     class SegmentationImporter {
         +masks_zyx
@@ -146,7 +156,8 @@ classDiagram
 
     SegmentationImporter ..> AnatomyCollection : creates
     HumanBody *-- AnatomyCollection
-    HumanBody *-- SomaRepresentation
+    HumanBody *-- "0..1" ImagingVolume
+    HumanBody *-- "0..1" SomaRepresentation
     SomaRepresentation --> AnatomyCollection : same collection
     AnatomyCollection o-- "0..*" AnatomicalStructure : named entries
     AnatomyCollection *-- AnatomyConfiguration : current policy
@@ -162,7 +173,8 @@ classDiagram
 
 `AnatomicalSystem` is a view, not another owner of meshes. A pancreas can
 belong to digestive and endocrine systems while remaining one structure.
-`body.anatomy.structures` and `body.soma.structures` reference the same dictionary.
+After attachment, `body.anatomy.structures` and `body.soma.structures` reference
+the same dictionary.
 
 Not every component is a class: `catalog.py` supplies kinds and name-based membership; `geometry.py` supplies coordinate math; `soma_body/geometry.py`
 decodes model output and assigns joints; `soma_body/fitting.py` implements skin-shape and rigid bone-offset fitting. These helpers keep `HumanBody` small.
@@ -333,13 +345,18 @@ branch coverage or proof of anatomical correctness.
 | Bundled mask meshing | [imaging_to_mesh/mesh.py](imaging_to_mesh/mesh.py) | [test_imaging_to_mesh.py](../tests/test_imaging_to_mesh.py), [test_installation.py](../tests/test_installation.py) |
 | Catalog/import functions | [catalog.py](catalog.py) | [test_catalog.py](../tests/test_catalog.py) |
 | `HumanBodyViewer` | [viewer.py](../examples/viewer.py) | [test_viewer.py](../tests/test_viewer.py) |
+| `ImagingVolume` | [imaging.py](imaging.py) | [test_human.py](../tests/test_human.py) |
+| USD and bundle exports | [exporters/](exporters/) | [test_usd.py](../tests/test_usd.py), [test_patient_twin_export.py](../tests/test_patient_twin_export.py) |
+| CT orientation / attenuation | [exporters/utils.py](exporters/utils.py) | [test_exporter_utils.py](../tests/test_exporter_utils.py) |
+| Physics-demo exports | [exporters/physics_export.py](exporters/physics_export.py) | [test_physics_export.py](../tests/test_physics_export.py) |
+| Unified pipeline and backends | [pipeline.py](../examples/pipeline.py), [importers/](importers/) | [test_pipeline.py](../tests/test_pipeline.py), [test_importer_backends.py](../tests/test_importer_backends.py) |
 | Actual SOMA integration | External model and package pipeline | [test_real_soma.py](../tests/test_real_soma.py) |
 
 ```bash
 # Minimal install: optional integration tests are skipped.
 uv run --extra dev pytest
 
-# All optional integrations; real SOMA assets must be available.
+# SOMA/viewer integration; real SOMA assets must be available.
 PATIENT_TWIN_TEST_SOMA=1 uv run --extra dev --extra soma --extra viewer pytest
 ```
 
@@ -377,3 +394,11 @@ landmarks by the inverse of `body.anatomy.body_to_imaging` first. Saved paramete
 from the previous API should be regenerated. Soft-tissue deformation options
 have been removed; rigid organs may protrude during articulation, and containment
 checks continue to report those failures.
+
+Importer migration: use `to_anatomy_collection()` and wrap the result with
+`HumanBody(anatomy)`. Configure through `body.anatomy`, and pose or fit through
+`body.soma` after attachment. Export modules now live under `exporters/`; old
+`patient_digital_twin.usd` and `patient_digital_twin.patient_twin` imports are gone.
+Load CT into NumPy and call `AttachImaging()` instead of passing `ct_path` to an
+exporter. `export_to_usd()` defaults to `pose="scan"`; request `"current"` explicitly
+for the displayed pose.

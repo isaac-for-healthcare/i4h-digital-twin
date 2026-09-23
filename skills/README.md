@@ -1,3 +1,13 @@
 # Repository Skills
 
-Place repository-specific agent skills in this directory so they are shared by the Claude and Codex configurations.
+Repository-specific agent skills live here. `.claude/skills` and `.codex/skills`
+both reference this shared directory.
+
+| Skill | Use when |
+| --- | --- |
+| [patient-digital-twin](patient-digital-twin/SKILL.md) | Importing anatomy, attaching CT/SOMA, configuring or posing a body, extracting topology, and generating patient bundles |
+| [patient-usd](patient-usd/SKILL.md) | Inspecting or consuming patient USD, handling transforms/CT/centerlines, viewing in Isaac Sim, or preparing physics-demo exports |
+
+The skills link to the maintained package documentation and checked-in examples.
+They do not require a separate global skill installation. Agents that support
+named skill invocation can use `$patient-digital-twin` or `$patient-usd`.
