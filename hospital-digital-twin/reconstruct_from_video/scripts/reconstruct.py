@@ -147,10 +147,10 @@ def main() -> int:
 
     # 3dgrut should be cloned inside NuRec folder
     grut_repo = repo_root / "3dgrut"
-    grut_dockerfile = grut_repo / "Dockerfile"
+    grut_dockerfile = repo_root / "Dockerfile.3dgrut"
 
-    if not grut_dockerfile.is_file():
-        raise SystemExit(f"3dgrut Dockerfile not found at {grut_dockerfile}\n" f"Please clone 3dgrut repository.")
+    if not (grut_repo / "install_env.sh").is_file():
+        raise SystemExit(f"3dgrut repository not found at {grut_repo}\nPlease follow README step 2.")
 
     # 1) Run COLMAP to generate sparse reconstruction
     colmap_root_rel = "colmap"
@@ -234,8 +234,8 @@ def main() -> int:
 
     # 2) Train Dense 3D Reconstruction with 3DGUT
 
-    # Build 3dgrut env image using the Dockerfile from the cloned 3dgrut repo
-    image_tag = "3dgrut"
+    # Use our pinned CUDA/PyTorch image recipe with the cloned 3dgrut build context
+    image_tag = "i4h-3dgrut:cu128"
     subprocess.run(
         [
             "docker",
