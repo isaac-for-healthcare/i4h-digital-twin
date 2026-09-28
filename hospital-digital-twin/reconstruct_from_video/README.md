@@ -17,7 +17,7 @@ The output is a USDZ file that can be loaded in Isaac Sim, enabling rapid protot
 
 - **OS**: Linux
 - **GPU**: NVIDIA GPU with CUDA support; RTX series with Ray Tracing (RT) cores recommended
-- **CUDA**: 11.8 or later (must match host driver and container setup)
+- **Container CUDA**: 12.8.1 with PyTorch 2.7.1 (includes Blackwell support). The host needs a compatible NVIDIA driver and NVIDIA Container Toolkit; a host CUDA toolkit is not required.
 - **Python**: 3.10+ for host scripts (`reconstruct.py`, `video_to_images.py`)
 - **Python packages** (for `video_to_images.py` only): `opencv-python`
 
@@ -62,10 +62,12 @@ python scripts/video_to_images.py ./videos --output ./images --fps 2
 Clone the 3DGUT repository and checkout to the tested commit:
 
 ```bash
-cd tutorials/assets/NuRec/
+cd hospital-digital-twin/reconstruct_from_video/
 git clone --recursive https://github.com/nv-tlabs/3dgrut.git
 cd 3dgrut
 git checkout 38664dde3b0a4a35d2baf91ebee11f3de3eae8c3
+git submodule update --init --recursive
+cd ..
 ```
 
 ### Step 3: Run the Reconstruction Pipeline
@@ -75,6 +77,8 @@ The `reconstruct.py` script automates the entire pipeline: COLMAP sparse reconst
 ```bash
 python scripts/reconstruct.py --work-dir your-work-dir/
 ```
+
+The pipeline builds `i4h-3dgrut:cu128` using this directory's `Dockerfile.3dgrut` and the cloned `3dgrut/` as its build context. The image pins PyTorch and its companion packages throughout installation and checks their CUDA version during the build. This prevents later pip installs from silently replacing the CUDA-compatible stack.
 
 **Expected work-dir structure:**
 
@@ -92,6 +96,20 @@ You must place all your extracted or captured images in `your-work-dir/images/` 
 1. Runs COLMAP for structure-from-motion (feature extraction, matching, and sparse reconstruction)
 2. Trains the neural reconstruction model using 3DGUT
 3. Exports the result as a USDZ file to `your-work-dir/out/.../export_last.usdz`
+
+#### GPU smoke test
+
+After building the image, run this from `hospital-digital-twin/reconstruct_from_video/`:
+
+```bash
+docker run --rm --gpus all --runtime=nvidia --ipc=host \
+  -v "$PWD/tests:/tests:ro" i4h-3dgrut:cu128 \
+  conda run --no-capture-output -n 3dgrut python /tests/gpu_smoke.py
+```
+
+The test checks CUDA forward/backward computation, runs ten 3DGUT training steps
+on a generated COLMAP fixture, and opens the resulting USDZ. It does not measure
+reconstruction quality on real imagery. The first run compiles CUDA extensions.
 
 #### Visualize COLMAP Results (Optional)
 

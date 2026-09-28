@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Based on nv-tlabs/3dgrut Dockerfile at 38664dde3b0a4a35d2baf91ebee11f3de3eae8c3.
+# Build context: the recursive checkout of that revision.
+FROM ubuntu:24.04
+
+ARG CUDA_VERSION=12.8.1
+ENV CUDA_VERSION=${CUDA_VERSION}
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-unauthenticated ca-certificates \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    wget git \
+    curl \
+    build-essential \
+    gcc-11 g++-11 \
+    libgl1-mesa-dev \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-py311_25.1.1-2-Linux-x86_64.sh && \
+    bash ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh && \
+    /opt/conda/bin/conda install -y python=3.11 && \
+    /opt/conda/bin/conda clean -ya
+ENV PATH=/opt/conda/bin:$PATH
+RUN conda init
+
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+ENV FORCE_CUDA=1
+
+WORKDIR /workspace
+COPY . .
+
+# Keep every pip install (including transitive dependencies) on the tested stack.
+RUN printf '%s\n' 'torch==2.7.1' 'torchvision==0.22.1' 'torchaudio==2.7.1' 'numpy<2' > /tmp/torch-constraints.txt \
+    && PIP_CONSTRAINT=/tmp/torch-constraints.txt CUDA_VERSION=$CUDA_VERSION bash ./install_env.sh 3dgrut WITH_GCC11 \
+    && conda run --no-capture-output -n 3dgrut python -c "import torch; import kaolin; assert torch.__version__.split('+')[0] == '2.7.1'; assert torch.version.cuda == '12.8'; print(torch.__version__, torch.version.cuda)"
+RUN echo "conda activate 3dgrut" >> ~/.bashrc
