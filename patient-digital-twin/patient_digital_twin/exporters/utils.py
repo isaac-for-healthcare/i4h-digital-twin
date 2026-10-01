@@ -72,11 +72,11 @@ def _image_to_ct(image):
 
 
 def hu_to_mu(hu):
-    """Apply the navigation compatibility component's interventional curve."""
-    from ..legacy_ct import INTERVENTIONAL
+    """Apply the navigation compatibility component's default linear curve."""
     from ..legacy_ct import hu_to_mu as convert
+    from ..legacy_ct.artifacts import DEFAULT_PRESET, PRESETS
 
-    return convert(hu, INTERVENTIONAL)
+    return convert(hu, PRESETS[DEFAULT_PRESET])
 
 
 def save_attenuation(ct, output, *, source):

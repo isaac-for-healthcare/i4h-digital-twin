@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from .artifacts import PRESETS, write_artifacts
+from .artifacts import DEFAULT_PRESET, PRESETS, write_artifacts
 from .ct.dicom_ingest import load_nifti_hu
 
 
@@ -20,7 +20,7 @@ def main(argv=None):
     parser.add_argument("--ct", type=Path, required=True)
     parser.add_argument("--vessel-mask", type=Path)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--hu-to-mu", choices=sorted(PRESETS), default="interventional")
+    parser.add_argument("--hu-to-mu", choices=sorted(PRESETS), default=DEFAULT_PRESET)
     args = parser.parse_args(argv)
     output = args.output.expanduser().resolve()
     if output.exists():

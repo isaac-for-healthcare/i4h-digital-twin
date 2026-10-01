@@ -63,7 +63,9 @@ are reused with their physical transforms. Skeleton extraction defaults to
 `--centerline-spacing-mm 1.5`; VMTK is not required for this pipeline.
 Workflow volumes must be axis-aligned after reorientation: resample oblique CT
 before running. `--patient-id` sets the manifest identifier. `--hu-to-mu linear`
-selects the older linear attenuation curve; the default is `interventional`.
+is the default, matching main: HU values from -1000 to 3000 map linearly to
+0–0.02 mm⁻¹, with values outside that range clamped. Use
+`--hu-to-mu interventional` to select the alternative curve explicitly.
 
 ### Model setup
 

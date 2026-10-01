@@ -29,7 +29,11 @@ def test_named_selection_uses_native_ids_and_limits_meshes():
     ],
 )
 def test_invalid_arguments_fail_before_model(options, message, tmp_path):
-    args = {"source": "nvsegment", "classes": ["aorta"], "output": tmp_path / "patient.usdc"}
+    args = {
+        "source": "nvsegment",
+        "classes": ["aorta"],
+        "output": tmp_path / "patient.usdc",
+    }
     args.update(options)
     with pytest.raises(ValueError, match=message):
         main.run_pipeline(**args)
@@ -92,13 +96,24 @@ def test_workflow_has_physical_centerlines_and_reuses_existing(
     monkeypatch.setattr(
         main.NVSegmentImporter, "to_anatomy_collection", lambda self, **kw: anatomy
     )
-    path = main.run_pipeline(
-        source="nvsegment",
-        input=ct,
-        classes=["aorta"],
-        output=tmp_path / "bundle",
-        format="workflow",
+    args = main.parser().parse_args(
+        [
+            "--source",
+            "nvsegment",
+            "--input",
+            str(ct),
+            "--classes",
+            "aorta",
+            "--output",
+            str(tmp_path / "bundle"),
+            "--format",
+            "workflow",
+        ]
     )
+    path = main.run_pipeline(**vars(args))
+    hu = np.load(path.parent / "hu_volume.npy")
+    expected_mu = np.interp(hu, [-1000, 3000], [0, 0.02]).astype(np.float32)
+    np.testing.assert_array_equal(np.load(path.parent / "mu_volume.npy"), expected_mu)
     manifest = yaml.safe_load(path.read_text())
     for relative in manifest["artifacts"].values():
         assert (path.parent / relative).is_file()

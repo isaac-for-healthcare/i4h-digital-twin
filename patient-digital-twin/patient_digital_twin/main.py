@@ -15,7 +15,7 @@ from .human import HumanBody
 from .importers import NVGenerateImporter, NVSegmentImporter
 from .importers._common import image_input
 from .importers._segmentation import SegmentationImporter, canonical_name
-from .legacy_ct.artifacts import PRESETS
+from .legacy_ct.artifacts import DEFAULT_PRESET, PRESETS
 from .structures import Kind
 
 
@@ -51,7 +51,7 @@ def run_pipeline(
     source_root=None,
     python_executable=None,
     patient_id=None,
-    hu_to_mu_preset="interventional",
+    hu_to_mu_preset=DEFAULT_PRESET,
     centerline_spacing_mm=1.5,
 ):
     """Run an optional model backend and export only the requested meshes.
@@ -196,7 +196,7 @@ def parser():
         "--hu-to-mu",
         dest="hu_to_mu_preset",
         choices=tuple(PRESETS),
-        default="interventional",
+        default=DEFAULT_PRESET,
     )
     result.add_argument("--centerline-spacing-mm", type=float, default=1.5)
     return result

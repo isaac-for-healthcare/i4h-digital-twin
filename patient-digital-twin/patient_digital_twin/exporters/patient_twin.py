@@ -15,7 +15,7 @@ import yaml
 from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
-from ..legacy_ct.artifacts import write_artifacts
+from ..legacy_ct.artifacts import DEFAULT_PRESET, write_artifacts
 from ..structures import AnatomicalStructure, MeshGeometry
 from ..topology import voxelize_mesh
 from .usd import _export_to_usd
@@ -43,7 +43,7 @@ def export_patient_twin(
     exterior="auto",
     skin_opacity=0.15,
     physics_root=None,
-    hu_to_mu_preset="interventional",
+    hu_to_mu_preset=DEFAULT_PRESET,
 ):
     """Write a complete patient_twin.yaml bundle using original imaging placement.
 

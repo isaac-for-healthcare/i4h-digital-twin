@@ -62,7 +62,7 @@ def test_ct_preserves_obliquity_and_applies_intensity_scaling_once(tmp_path):
 def test_attenuation_curve_and_metadata_contract(tmp_path):
     hu = np.array([-1500, -1000, -300, 100, 200, 300, 8000, 9000], dtype=np.float32)
     expected = np.array(
-        [0, 0, 0, 0.0008, 0.0018, 0.0028, 0.044, 0.044], dtype=np.float32
+        [0, 0, 0.0035, 0.0055, 0.006, 0.0065, 0.02, 0.02], dtype=np.float32
     )
     np.testing.assert_array_equal(hu_to_mu(hu), expected)
     ct = CtVolume(
@@ -89,4 +89,4 @@ def test_attenuation_curve_and_metadata_contract(tmp_path):
     assert meta["hu_range"] == [-1500, 9000]
     assert meta["anatomical_frame"] == "LPS"
     assert meta["source_orientation"] == "SAR"
-    assert meta["hu_to_mu"]["preset"] == "interventional"
+    assert meta["hu_to_mu"]["preset"] == "linear"

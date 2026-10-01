@@ -26,6 +26,7 @@ INTERVENTIONAL = HuToMuMapping(
 )
 LINEAR = HuToMuMapping()
 PRESETS = {"interventional": INTERVENTIONAL, "linear": LINEAR}
+DEFAULT_PRESET = "linear"
 
 
 def write_artifacts(
@@ -35,7 +36,7 @@ def write_artifacts(
     source="numpy",
     vessel_mask=None,
     centerline=None,
-    hu_to_mu_preset="interventional",
+    hu_to_mu_preset=DEFAULT_PRESET,
 ):
     """Write HU, attenuation, metadata, and optional mask/graph in LPS millimeters.
 

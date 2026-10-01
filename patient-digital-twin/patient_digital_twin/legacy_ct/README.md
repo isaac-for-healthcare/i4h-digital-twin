@@ -24,6 +24,7 @@ use patient LPS millimeters; arrays use ZYX order. Oblique grids are rejected.
 Python callers can use `write_artifacts(ct, output, vessel_mask=mask)` or the
 ported `VolumePreprocessor` and `HuToMuMapping` APIs. `write_artifacts` accepts an
 existing `(points_mm, edges, radii_mm)` graph; otherwise it skeletonizes the mask.
-The `interventional` attenuation preset is the workflow default; `linear` retains
-the original ramp. This component does not write a patient manifest or USD;
+The default `linear` attenuation preset matches main: -1000 to 3000 HU maps
+to 0–0.02 mm⁻¹, clamped outside that range. Select `--hu-to-mu interventional`
+explicitly for the alternative curve. This component does not write a patient manifest or USD;
 those remain owned by the patient exporter.
