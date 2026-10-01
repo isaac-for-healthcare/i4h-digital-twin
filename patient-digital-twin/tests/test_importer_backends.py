@@ -48,7 +48,7 @@ def test_segmentation_filters_non_catalog_ids_and_keeps_missing_empty():
 
 
 @pytest.mark.parametrize("in_process", [True, False])
-def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path, in_process):
+def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_process):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "configs").mkdir()
     (tmp_path / "scripts/inference.py").write_text("")
@@ -56,7 +56,7 @@ def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path, in_proc
     import patient_digital_twin.importers.nvgenerate_importer as module
 
     monkeypatch.setattr(module, "runtime", lambda *args: None if in_process else sys.executable)
-    seeds = iter([12, 12, 13])
+    seeds = iter([12, 13])
     monkeypatch.setattr(module.secrets, "randbits", lambda bits: next(seeds))
 
     def run(command, **kwargs):
@@ -84,8 +84,8 @@ def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path, in_proc
     with pytest.warns(UserWarning):
         importer.to_anatomy_collection()
     assert importer.seed == 13
-    np.testing.assert_array_equal(importer.ct_volume_zyx, np.full((3, 3, 3), 100))
-    assert importer.ct_voxel_to_imaging.shape == (4, 4)
+    np.testing.assert_array_equal(importer.ct_scan.values_kji, np.full((3, 3, 3), 100))
+    assert importer.ct_scan.metadata["source"]["seed"] == 13
 
 
 @pytest.mark.parametrize("in_process", [True, False])

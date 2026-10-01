@@ -24,7 +24,7 @@ def pipeline():
     return module
 
 
-@pytest.mark.parametrize("source", ["nvgenerate", "nvsegment", "simple"])
+@pytest.mark.parametrize("source", ["sample", "segmentation", "simple"])
 def test_input_branches_attach_only_matching_ct(
     pipeline, monkeypatch, tmp_path, source
 ):
@@ -33,43 +33,40 @@ def test_input_branches_attach_only_matching_ct(
     calls = []
 
     class Importer:
-        ct_volume_zyx = np.full((3, 4, 5), 321, np.float32)
-        ct_voxel_to_imaging = np.diag([0.001, 0.002, 0.003, 1])
-
         def __init__(self, *args, **kwargs):
             calls.append((args, kwargs))
 
         def to_anatomy_collection(self):
             return anatomy
 
-    for name in (
-        "NVGenerateImporter",
-        "NVSegmentImporter",
-        "SimpleImporter",
-    ):
-        monkeypatch.setattr(pipeline, name, Importer)
-    input_path = tmp_path / "input.nii.gz"
+    monkeypatch.setattr(pipeline, "SegmentationImporter", Importer)
+    monkeypatch.setattr(pipeline, "SimpleImporter", Importer)
+    ct = tmp_path / "ct.nii.gz"
     nib.save(
         nib.Nifti1Image(np.full((5, 4, 3), 123, np.float32), np.diag([1, 2, 3, 1])),
-        input_path,
+        ct,
     )
-    if source == "simple":
-        input_path = tmp_path / "meshes.json"
-        input_path.write_text(json.dumps({"meshes": {"liver": "liver.stl"}}))
+    monkeypatch.setattr(pipeline, "SAMPLE", tmp_path)
     options = ["--source", source, "--output", str(tmp_path / "out")]
-    if source != "nvgenerate":
-        options += ["--input", str(input_path)]
+    if source == "segmentation":
+        options += ["--input", "labels.nii.gz", "--labels", "labels.json", "--ct", str(ct)]
+    elif source == "simple":
+        config = tmp_path / "meshes.json"
+        config.write_text(json.dumps({"meshes": {"liver": "liver.stl"}}))
+        options += ["--input", str(config)]
     body = pipeline.import_body(pipeline.parser().parse_args(options))
     assert body.anatomy is anatomy
     if source == "simple":
         assert body.imaging is None
-        np.testing.assert_array_equal(calls[0][1]["mesh_to_body"]["liver"], np.eye(4))
+        assert calls[0][1]["mesh_to_body"] is None
     else:
         assert body.imaging.volume.shape == (3, 4, 5)
-        assert np.all(body.imaging.volume == (321 if source == "nvgenerate" else 123))
+        assert np.all(body.imaging.volume == 123)
         np.testing.assert_allclose(
-            body.imaging.voxel_to_imaging, Importer.ct_voxel_to_imaging
+            body.imaging.voxel_to_imaging, np.diag([0.001, 0.002, 0.003, 1])
         )
+    if source == "sample":
+        assert calls[0][1]["names"] == ("aorta",)
 
 
 @pytest.mark.parametrize("with_ct", [False, True])
@@ -103,7 +100,7 @@ def test_pipeline_order_and_complete_exports(pipeline, monkeypatch, tmp_path, wi
 
     body = Body(anatomy)
     if with_ct:
-        body.AttachImaging(
+        body.attach_imaging(
             np.full((8, 8, 8), 100, np.float32),
             voxel_to_imaging=np.diag([0.001] * 3 + [1]),
             body_to_imaging=np.eye(4),
@@ -111,7 +108,7 @@ def test_pipeline_order_and_complete_exports(pipeline, monkeypatch, tmp_path, wi
     monkeypatch.setattr(pipeline, "import_body", lambda args: body)
     options = [
         "--source",
-        "nvgenerate" if with_ct else "simple",
+        "sample" if with_ct else "simple",
         "--output",
         str(tmp_path / "out"),
     ]
@@ -123,11 +120,8 @@ def test_pipeline_order_and_complete_exports(pipeline, monkeypatch, tmp_path, wi
     assert manifest["anatomy"]["exterior"] is None
     assert manifest["coordinate_frame"] == ("RAS" if with_ct else "body")
     assert ("hu_volume" in manifest["artifacts"]) == with_ct
+    assert "centerlines" not in manifest
     graph = body.anatomy.structures["aorta"].centerline
-    with np.load(
-        manifest_path.parent / manifest["centerlines"]["aorta"]["path"]
-    ) as saved:
-        np.testing.assert_array_equal(saved["points"], graph.points)
     for filename in ("human_body.usdc", "patient_anatomy.usdc"):
         stage = Usd.Stage.Open(str(manifest_path.parent / filename))
         prim = stage.GetPrimAtPath("/HumanBody/Anatomy/aorta")
@@ -165,7 +159,7 @@ def test_pipeline_failure_leaves_no_partial_bundle(pipeline, monkeypatch, tmp_pa
     [
         ["--anatomy", "typo"],
         ["--source", "simple", "--input", "meshes.json", "--ct", "ct.nii"],
-        ["--source", "nvsegment"],
+        ["--source", "segmentation", "--input", "labels.nii.gz"],
     ],
 )
 def test_invalid_options_fail_before_inference(

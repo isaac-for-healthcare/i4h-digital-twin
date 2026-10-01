@@ -31,7 +31,6 @@ class Kind(str, Enum):
     AIRWAY = "airway"
     ORGAN_PART = "organ_part"
     GROUP = "structure_group"
-    CARTILAGE = "cartilage"
     FINDING = "finding"
     UNKNOWN = "unknown"
 
@@ -49,7 +48,6 @@ class System(str, Enum):
     ENDOCRINE = "endocrine"
     LYMPHATIC_IMMUNE = "lymphatic_immune"
     REPRODUCTIVE = "reproductive"
-    INTEGUMENTARY = "integumentary"
 
 
 @dataclass
@@ -151,8 +149,3 @@ class AnatomicalStructure:
         if self.is_empty:
             return None
         return transform_points(self.vertices, self.local_to_world)
-
-    @property
-    def is_organ(self) -> bool:
-        """Biological grouping that includes specialized BONE and MUSCLE kinds."""
-        return self.kind in {Kind.ORGAN, Kind.BONE, Kind.MUSCLE, Kind.AIRWAY}

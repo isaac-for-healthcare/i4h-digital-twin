@@ -45,13 +45,13 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
     )
     from patient_digital_twin.scan_volume import from_nifti
 
-    body.AttachScan(from_nifti(ct_path), source_path=ct_path)
+    body.attach_scan(from_nifti(ct_path), source_path=ct_path)
     body.anatomy.structures["aorta"].local_to_world[:3, 3] += (
         10  # display pose must not move source CT anatomy
     )
     original = body.anatomy.structures["aorta"].local_to_world.copy()
     target = body.export_patient_twin(
-        tmp_path / "bundle", vessel_names=["aorta"], exterior="ct"
+        tmp_path / "bundle", vessel_names=["aorta"], ct_exterior=True
     )
     manifest = yaml.safe_load(target.read_text())
     assert manifest["coordinate_frame"] == "RAS"

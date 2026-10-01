@@ -22,12 +22,13 @@ flowchart LR
 
 The pipeline writes `patient_twin.yaml`, `patient_anatomy.usdc`, and a standalone
 `human_body.usdc`. CT remains native HU in `volume.npy` + `volume.yaml` and is also
-embedded in the standalone USD. Stored `centerlines/*.npz` use the scan frame and
-units declared in the manifest. Simulator placement and attenuation mapping happen
+embedded in the standalone USD. Stored centerlines are attributes on each anatomy
+prim, in the stage's units. Simulator placement and attenuation mapping happen
 downstream.
 
 `pipeline.py` also accepts `segmentation` (with `--input`, `--labels`, and matching
-`--ct`), `simple` (a mesh-map JSON), `nvsegment`, and `nvgenerate`.
+`--ct`) and `simple` (a mesh-map JSON). For NV-Segment or NV-Generate inference,
+use `python -m patient_digital_twin` instead.
 STL/OBJ vertices use meters; optional `mesh_to_body` transforms place local meshes.
 Omitted transforms are identity. Install `trimesh` for STL/OBJ imports.
 See `python examples/pipeline.py --help` for all arguments and the

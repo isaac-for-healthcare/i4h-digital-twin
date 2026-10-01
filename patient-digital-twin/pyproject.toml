@@ -17,7 +17,6 @@ nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "ei
 nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
 pipeline = ["usd-core", "vtk", "scipy>=1.10"]
 dev = ["pytest>=8.0"]
-mesh = []  # Compatibility alias: meshing is now included in the base install.
 usd = ["usd-core"]
 
 [project.scripts]

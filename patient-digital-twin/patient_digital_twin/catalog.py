@@ -1,33 +1,34 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Curated kinds, system membership, and temporary matching hints.
+"""Curated kinds, system membership, and body regions.
 
 Application metadata, not a clinical reference ontology.
 """
 
 from __future__ import annotations
 
-from .structures import (
-    Kind,
-    System,
-)
+from dataclasses import dataclass
+
+from .structures import Kind, System
 
 
-def _catalog(field="kind") -> dict:
-    """Build kinds, system membership, or temporary joint-matching hints."""
+@dataclass(frozen=True)
+class Entry:
+    kind: Kind
+    systems: frozenset[System]
+    regions: frozenset[str]
+
+
+def _build() -> dict[str, Entry]:
     result = {}
 
-    def add(name, kind, systems, regions, *, side=None):
-        result[name] = {
-            "kind": kind,
-            "systems": frozenset(systems),
-            "matching": (frozenset(regions.split()), side),
-        }[field]
+    def add(name, kind, systems, regions):
+        result[name] = Entry(kind, frozenset(systems), frozenset(regions.split()))
 
     def paired(base, kind, systems, regions):
         for side in ("left", "right"):
-            add(f"{base}_{side}", kind, systems, regions, side=side)
+            add(f"{base}_{side}", kind, systems, regions)
 
     S, K = System, Kind
     for name in ("liver", "gallbladder", "stomach", "duodenum"):
@@ -46,31 +47,12 @@ def _catalog(field="kind") -> dict:
     add("brain", K.ORGAN, [S.NERVOUS], "head")
     add("spinal_cord", K.ORGAN, [S.NERVOUS], "neck thorax abdomen")
     add("heart", K.ORGAN, [S.CARDIOVASCULAR], "thorax")
-    add(
-        "atrial_appendage_left",
-        K.ORGAN_PART,
-        [S.CARDIOVASCULAR],
-        "thorax",
-        side="left",
-    )
+    add("atrial_appendage_left", K.ORGAN_PART, [S.CARDIOVASCULAR], "thorax")
     paired("lung", K.ORGAN, [S.RESPIRATORY], "thorax")
-    for side in ("left", "right"):
-        lobes = ("upper", "lower") if side == "left" else ("upper", "middle", "lower")
-        for lobe in lobes:
-            add(
-                f"lung_{lobe}_lobe_{side}",
-                K.ORGAN_PART,
-                [S.RESPIRATORY],
-                "thorax",
-                side=side,
-            )
-        add(
-            f"kidney_cyst_{side}",
-            K.FINDING,
-            [S.URINARY],
-            "abdomen",
-            side=side,
-        )
+    for side, lobes in (("left", "upper lower"), ("right", "upper middle lower")):
+        for lobe in lobes.split():
+            add(f"lung_{lobe}_lobe_{side}", K.ORGAN_PART, [S.RESPIRATORY], "thorax")
+        add(f"kidney_cyst_{side}", K.FINDING, [S.URINARY], "abdomen")
 
     for name, regions in {
         "aorta": "thorax abdomen",
@@ -113,15 +95,10 @@ def _catalog(field="kind") -> dict:
         ("S", 1, "pelvis"),
     ):
         for number in range(1, count + 1):
-            add(
-                f"vertebrae_{section}{number}",
-                K.BONE,
-                [S.SKELETAL],
-                region,
-            )
+            add(f"vertebrae_{section}{number}", K.BONE, [S.SKELETAL], region)
     for side in ("left", "right"):
         for number in range(1, 13):
-            add(f"rib_{side}_{number}", K.BONE, [S.SKELETAL], "thorax", side=side)
+            add(f"rib_{side}_{number}", K.BONE, [S.SKELETAL], "thorax")
     for base in ("gluteus_maximus", "gluteus_medius", "gluteus_minimus"):
         paired(base, K.MUSCLE, [S.MUSCULAR], "pelvis lower_limb")
     paired("autochthon", K.GROUP, [S.MUSCULAR], "thorax abdomen pelvis")
@@ -129,15 +106,22 @@ def _catalog(field="kind") -> dict:
     return result
 
 
-CATALOG = _catalog()
-SYSTEM_MEMBERSHIP = _catalog("systems")
-
-
-def matching_hints(name):
-    """Temporary regions/laterality for matching; never stored on a structure."""
-    return _catalog("matching").get(name, (frozenset(), None))
+ENTRIES = _build()
+CATALOG = {name: entry.kind for name, entry in ENTRIES.items()}
+_EMPTY = Entry(Kind.UNKNOWN, frozenset(), frozenset())
 
 
 def structure_systems(name):
     """Look up system membership by canonical name, independent of mesh state."""
-    return SYSTEM_MEMBERSHIP.get(name, frozenset())
+    return ENTRIES.get(name, _EMPTY).systems
+
+
+def structure_regions(name):
+    """Look up coarse body regions by canonical name."""
+    return ENTRIES.get(name, _EMPTY).regions
+
+
+def is_vessel(name, kind=None):
+    """True for vessel kinds and the merged portal/splenic vein label."""
+    kind = CATALOG.get(name) if kind is None else kind
+    return kind == Kind.VESSEL or name == "portal_vein_and_splenic_vein"

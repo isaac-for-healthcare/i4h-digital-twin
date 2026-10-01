@@ -8,7 +8,6 @@ from __future__ import annotations
 from .anatomy import AnatomyCollection
 from .geometry import transform_points
 from .imaging import ImagingVolume
-from .structures import Kind
 
 
 class HumanBody:
@@ -33,7 +32,7 @@ class HumanBody:
         if configuration is not None:
             self.anatomy.configure(configuration)
 
-    def AttachImaging(
+    def attach_imaging(
         self,
         volume,
         *,
@@ -41,6 +40,7 @@ class HumanBody:
         body_to_imaging=None,
         source_path=None,
         modality="CT",
+        source_scan=None,
     ):
         """Attach a NumPy ZYX volume without loading a file or moving anatomy.
 
@@ -54,30 +54,26 @@ class HumanBody:
             self.anatomy.body_to_imaging if body_to_imaging is None else body_to_imaging
         )
         if registration is None:
-            raise ValueError("AttachImaging requires body_to_imaging registration")
-        imaging = ImagingVolume(
-            volume, voxel_to_imaging, registration, source_path, modality
+            raise ValueError("attach_imaging requires body_to_imaging registration")
+        self.imaging = ImagingVolume(
+            volume, voxel_to_imaging, registration, source_path, modality, source_scan
         )
-        self.imaging = imaging
-        return imaging
+        return self.imaging
 
-    def AttachScan(self, scan, *, body_to_imaging=None, source_path=None):
+    def attach_scan(self, scan, *, body_to_imaging=None, source_path=None):
         """Attach a scan artifact while retaining its native array order and units."""
-        from dataclasses import replace
-
-        image = self.AttachImaging(
+        return self.attach_imaging(
             scan.values_kji,
             voxel_to_imaging=scan.ijk_to_ras_m,
             body_to_imaging=body_to_imaging,
             source_path=source_path,
+            source_scan=scan,
         )
-        self.imaging = replace(image, source_scan=scan)
-        return self.imaging
 
     def imaging_vertices(self, name):
         """Recover an enabled structure's original scan placement, before posing."""
         if self.imaging is None:
-            raise ValueError("Call AttachImaging before requesting imaging vertices")
+            raise ValueError("Call attach_imaging before requesting imaging vertices")
         points = self.anatomy.structures[name].body_vertices
         return (
             None
@@ -108,23 +104,23 @@ class HumanBody:
 
         return export_patient_twin(self, output, **options)
 
-    def extract_topology(self, *, names=None, spacing_m=None, **options):
+    def extract_topology(self, *, names=None, spacing_m=0.0015):
         """Store local centerlines for all retained vessel and airway meshes.
 
         Includes disabled anatomy and the catalog's composite portal-vein mask.
-        Options are passed to topology.extract_centerlines (grid coordinates must
-        be in each mesh's local frame). Missing meshes are skipped.
-        Set spacing_m to create a bounded voxel grid for each mesh. Results are
-        committed only after every extraction succeeds; failures identify the
-        offending anatomy. Optional names limits extraction to selected items.
+        Each mesh is voxelized on a bounded spacing_m grid in its local frame
+        and skeletonized. Missing meshes are skipped. Results are committed only
+        after every extraction succeeds; failures identify the offending
+        anatomy. Optional names limits extraction to selected items.
         """
         import numpy as np
 
+        from .catalog import is_vessel
+        from .structures import Kind
         from .topology import extract_centerlines
 
-        if spacing_m is not None and (not np.isfinite(spacing_m) or spacing_m <= 0):
+        if not np.isfinite(spacing_m) or spacing_m <= 0:
             raise ValueError("spacing_m must be positive and finite")
-
         selected = set(self.anatomy.structures) if names is None else set(names)
         unknown = selected - self.anatomy.structures.keys()
         if unknown:
@@ -133,28 +129,20 @@ class HumanBody:
         for name, structure in self.anatomy.structures.items():
             if name not in selected:
                 continue
-            if structure.kind not in {Kind.VESSEL, Kind.AIRWAY} and name not in {
-                "trachea",
-                "portal_vein_and_splenic_vein",
-            }:
+            if not (is_vessel(name, structure.kind) or structure.kind == Kind.AIRWAY):
                 continue
-            if structure.mesh.vertices is None or structure.mesh.faces is None:
+            vertices, faces = structure.mesh.vertices, structure.mesh.faces
+            if vertices is None or faces is None:
                 continue
-            extraction_options = dict(options)
-            if spacing_m is not None:
-                vertices = structure.mesh.vertices
-                origin = vertices.min(0) - 2 * spacing_m
-                shape = np.ceil((vertices.max(0) - origin) / spacing_m).astype(int) + 3
-                extraction_options = {
-                    "method": "skeleton",
-                    "shape_zyx": tuple(shape[::-1]),
-                    "spacing_zyx_m": (spacing_m,) * 3,
-                    "origin_xyz_m": origin,
-                    **extraction_options,
-                }
+            origin = vertices.min(0) - 2 * spacing_m
+            shape = np.ceil((vertices.max(0) - origin) / spacing_m).astype(int) + 3
             try:
                 results[name] = extract_centerlines(
-                    structure.mesh.vertices, structure.mesh.faces, **extraction_options
+                    vertices,
+                    faces,
+                    shape_zyx=tuple(shape[::-1]),
+                    spacing_zyx_m=(spacing_m,) * 3,
+                    origin_xyz_m=origin,
                 )
             except ImportError:
                 raise

@@ -26,21 +26,22 @@ def export_patient_twin(
     patient_id=None,
     vessel_names=(),
     world_from_patient_m=None,
-    exterior="auto",
+    ct_exterior=False,
     skin_opacity=0.15,
 ):
     """Write schema 3: native arrays, full affine, source-frame geometry and units.
 
     No CT canonicalization, mask cleanup, resampling, or simulator placement is
     performed. An explicit world_from_patient_m is retained as an optional hint.
+    Structure centerlines are stored on their USD prims; vessel_names adds a
+    native scan-grid vessel mask and centerline graph. ct_exterior adds a
+    CT-derived patient envelope.
     """
     output = Path(output).expanduser().resolve()
     if output.exists():
         raise FileExistsError(f"Use a new patient-twin output directory: {output}")
-    if exterior not in {"auto", "ct"}:
-        raise ValueError("exterior must be auto or ct")
     scan = scan_for_body(body)
-    if exterior == "ct" and scan is None:
+    if ct_exterior and scan is None:
         raise ValueError("CT exterior requires attached CT")
     for name in vessel_names:
         if (
@@ -49,6 +50,7 @@ def export_patient_twin(
         ):
             raise ValueError(f"Missing or disabled vessel mesh: {name}")
     units = scan.meters_per_unit if scan is not None else 1.0
+    spatial_unit = scan.metadata["output"]["world_unit"] if scan is not None else "m"
     frame = (
         scan.frame
         if scan is not None
@@ -64,7 +66,7 @@ def export_patient_twin(
         else None
     )
     exterior_mesh = None
-    if exterior == "ct":
+    if ct_exterior:
         from scipy import ndimage
 
         envelope = ndimage.binary_fill_holes(scan.values_kji[::3, ::3, ::3] > -300)
@@ -103,57 +105,28 @@ def export_patient_twin(
             points, edges, radii = native_centerline(mask, scan)
             artifacts.update(write_centerline(folder, points, edges, radii))
             artifacts["vessel_mask"] = "vessel_mask.npy"
-        root_scale = np.eye(4)
-        _export_to_usd(
+        prims = _export_to_usd(
             snapshot,
             folder / "patient_anatomy.usdc",
-            root_transform=root_scale,
             meters_per_unit=units,
             exterior_mesh=exterior_mesh,
             skin_name="CT",
             skin_opacity=skin_opacity,
         )
-        from pxr import Usd, UsdGeom
-
-        stage = Usd.Stage.Open(str(folder / "patient_anatomy.usdc"))
         structures = {
-            prim.GetCustomDataByKey("anatomy:name"): {
-                "prim_path": str(prim.GetPath()),
-                "kind": prim.GetCustomDataByKey("anatomy:kind"),
-                "enabled": UsdGeom.Imageable(prim).ComputeVisibility() != "invisible",
+            name: {
+                "prim_path": prim_path,
+                "kind": snapshot.anatomy.structures[name].kind.value,
+                "enabled": snapshot.anatomy.structures[name].enabled,
             }
-            for prim in stage.Traverse()
-            if prim.GetCustomDataByKey("anatomy:name") is not None
+            for name, prim_path in prims.items()
         }
-        centerlines = {}
-        for index, (name, structure) in enumerate(body.anatomy.structures.items()):
-            if structure.centerline is None:
-                continue
-            (folder / "centerlines").mkdir(exist_ok=True)
-            relative = f"centerlines/{index}.npz"
-            graph = structure.centerline
-            points = (
-                transform_points(graph.points, placement @ structure.local_to_body)
-                / units
-            )
-            np.savez_compressed(
-                folder / relative,
-                points=points,
-                edges=graph.edges,
-                radii=graph.radii / units,
-            )
-            centerlines[name] = {
-                "path": relative,
-                "units": scan.metadata["output"]["world_unit"] if scan else "m",
-                "coordinate_frame": frame,
-                "local_to_patient": np.eye(4).tolist(),
-            }
         manifest = {
             "schema_version": 3,
             "patient_id": patient_id
             or (Path(source_path).parent.name if source_path else "geometry"),
             "coordinate_frame": frame,
-            "spatial_unit": scan.metadata["output"]["world_unit"] if scan else "m",
+            "spatial_unit": spatial_unit,
             "meters_per_unit": units,
             "anatomy": {
                 "structures": structures,
@@ -172,7 +145,6 @@ def export_patient_twin(
             },
             "transforms": {"voxel_to_scan": scan.ijk_to_world.tolist()} if scan else {},
             "artifacts": artifacts,
-            "centerlines": centerlines,
         }
         if world_from_patient_m is not None:
             manifest["transforms"]["world_from_patient_m"] = rigid_transform(

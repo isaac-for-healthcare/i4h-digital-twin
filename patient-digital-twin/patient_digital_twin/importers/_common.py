@@ -16,7 +16,7 @@ import nibabel as nib
 import numpy as np
 
 from ..catalog import CATALOG
-from ._segmentation import SegmentationImporter, canonical_name
+from ._segmentation import SegmentationImporter, canonical_name, nifti_affine_m
 
 
 def image_input(image, affine_xyz_to_imaging_m=None):
@@ -38,7 +38,7 @@ def image_input(image, affine_xyz_to_imaging_m=None):
         image.header.set_xyzt_units("meter")
     if not isinstance(image, nib.spatialimages.SpatialImage):
         raise TypeError("Expected a NIfTI image/path or an XYZ NumPy array")
-    affine_m = SegmentationImporter._affine_m(image)
+    affine_m = nifti_affine_m(image)
     if not np.isfinite(affine_m).all() or abs(np.linalg.det(affine_m[:3, :3])) < 1e-18:
         raise ValueError("Image affine must be finite and invertible")
     # Backends generally assume NIfTI millimeters regardless of header units.
@@ -56,11 +56,8 @@ def image_input(image, affine_xyz_to_imaging_m=None):
 
 def catalog_labels(labelmap):
     """Keep supported canonical names; never infer label IDs from voxel values."""
-    return {
-        int(i): canonical_name(name)
-        for i, name in labelmap.items()
-        if canonical_name(name) in CATALOG
-    }
+    names = {int(i): canonical_name(name) for i, name in labelmap.items()}
+    return {i: name for i, name in names.items() if name in CATALOG}
 
 
 def selected_labels(labelmap, names=None):
@@ -96,7 +93,7 @@ def segmentation_anatomy(image, labelmap, *, configuration=None, names=None):
     importer = SegmentationImporter.from_array(
         data.transpose(2, 1, 0),
         mapping,
-        affine_xyz_to_imaging_m=SegmentationImporter._affine_m(image),
+        affine_xyz_to_imaging_m=nifti_affine_m(image),
     )
     return importer.to_anatomy_collection(configuration=configuration)
 
@@ -132,7 +129,7 @@ def runtime(python_executable, modules, install):
                 f"Run: {sys.executable} -m pip install '{install}'"
             )
         return None
-    python = str(python_executable or sys.executable)
+    python = str(python_executable)
     check = subprocess.run(
         [
             python,

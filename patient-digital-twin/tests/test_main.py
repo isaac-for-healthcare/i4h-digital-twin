@@ -132,7 +132,7 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     assert points[:, 2].min() > 6 and points[:, 2].max() < 74
     assert np.load(path.parent / "centerline_radii.npy").min() > 0
     assert manifest["coordinate_frame"] == "RAS"
-    assert "aorta" in manifest["centerlines"]
+    assert "centerlines" not in manifest
 
     # Navigation uses the final CT-grid mask, even when local graphs exist.
     from scipy.ndimage import distance_transform_edt
@@ -155,9 +155,12 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     assert len(edges) == len(points) - 1  # One unbranched tube.
     neighbor_offsets = np.abs(indices[edges[:, 1]] - indices[edges[:, 0]])
     assert (neighbor_offsets.max(axis=1) == 1).all()
-    with np.load(path.parent / manifest["centerlines"]["aorta"]["path"]) as saved:
-        placement = anatomy.body_to_imaging @ anatomy.structures["aorta"].local_to_body
-        expected_points = (graph.points @ placement[:3, :3].T + placement[:3, 3]) * 1000
-        np.testing.assert_allclose(saved["points"], expected_points)
-        np.testing.assert_array_equal(saved["edges"], graph.edges)
-        np.testing.assert_allclose(saved["radii"], graph.radii * 1000)
+    # The structure-local graph is stored once, on its USD prim, in scan units.
+    from pxr import Usd
+
+    stage = Usd.Stage.Open(str(path.parent / manifest["artifacts"]["anatomy_usd"]))
+    prim = stage.GetPrimAtPath(manifest["anatomy"]["structures"]["aorta"]["prim_path"])
+    np.testing.assert_allclose(
+        prim.GetAttribute("centerline:points").Get(), graph.points * 1000, rtol=1e-6
+    )
+    np.testing.assert_array_equal(prim.GetAttribute("centerline:edges").Get(), graph.edges)

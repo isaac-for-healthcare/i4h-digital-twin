@@ -10,12 +10,11 @@ from pathlib import Path
 
 import numpy as np
 
-from .catalog import CATALOG
+from .catalog import CATALOG, is_vessel
 from .human import HumanBody
 from .importers import NVGenerateImporter, NVSegmentImporter
 from .importers._common import image_input
 from .importers._segmentation import canonical_name
-from .structures import Kind
 
 
 def class_names(values):
@@ -70,10 +69,8 @@ def run_pipeline(
         raise ValueError("centerline_spacing_mm must be finite and positive")
     if format == "bundle" and modality != "CT":
         raise ValueError("bundle output requires CT in Hounsfield units")
-    if format == "bundle" and not any(
-        CATALOG[name] == Kind.VESSEL or name == "portal_vein_and_splenic_vein"
-        for name in names
-    ):
+    vessel_names = tuple(name for name in names if is_vessel(name))
+    if format == "bundle" and not vessel_names:
         raise ValueError("bundle output requires at least one vessel class")
     output = Path(output).expanduser().resolve()
     if format == "usd" and output.suffix.lower() not in {".usd", ".usda", ".usdc"}:
@@ -131,22 +128,9 @@ def run_pipeline(
         )
     body = HumanBody(anatomy)
     if source == "nvsegment" and modality == "CT":
-        body.AttachScan(scan, source_path=str(input))
+        body.attach_scan(scan, source_path=str(input))
     elif source == "nvgenerate":
-        if getattr(importer, "ct_scan", None) is not None:
-            body.AttachScan(importer.ct_scan)
-        else:
-            body.AttachImaging(
-                importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
-            )
-    vessel_names = tuple(
-        name
-        for name in names
-        if body.anatomy.structures[name].kind == Kind.VESSEL
-        or name == "portal_vein_and_splenic_vein"
-    )
-    if format == "bundle" and not vessel_names:
-        raise ValueError("bundle output requires at least one vessel class")
+        body.attach_scan(importer.ct_scan)
     missing = [
         name
         for name in vessel_names
@@ -158,7 +142,7 @@ def run_pipeline(
         return body.export_patient_twin(
             output,
             vessel_names=vessel_names,
-            exterior="ct",
+            ct_exterior=True,
         )
     output.parent.mkdir(parents=True, exist_ok=True)
     return body.export_to_usd(output)

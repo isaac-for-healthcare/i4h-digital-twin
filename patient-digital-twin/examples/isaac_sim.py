@@ -16,7 +16,7 @@ def generate_body(output, *, names=("aorta",), with_ct=False):
 
     body = HumanBody(SegmentationImporter(SAMPLE / "segmentations", names=names).to_anatomy_collection())
     if with_ct:
-        body.AttachScan(from_nifti(SAMPLE / "ct.nii.gz"))
+        body.attach_scan(from_nifti(SAMPLE / "ct.nii.gz"))
     output = Path(output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     return body.export_to_usd(output)

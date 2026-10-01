@@ -1752,7 +1752,7 @@ requires-dist = [
     { name = "usd-core", marker = "extra == 'usd'" },
     { name = "vtk", marker = "extra == 'pipeline'" },
 ]
-provides-extras = ["dicom", "nvsegment", "nvgenerate", "pipeline", "dev", "mesh", "usd"]
+provides-extras = ["dicom", "nvsegment", "nvgenerate", "pipeline", "dev", "usd"]
 
 [[package]]
 name = "pillow"

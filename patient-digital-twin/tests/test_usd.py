@@ -97,7 +97,7 @@ def test_embedded_ct_and_hidden_centerline_roundtrip(tmp_path):
     nib.save(nib.Nifti1Image(hu, affine), ct_path)
     affine_m = affine.copy()
     affine_m[:3] *= 0.001
-    patient.AttachImaging(
+    patient.attach_imaging(
         hu.transpose(2, 1, 0),
         voxel_to_imaging=affine_m,
         body_to_imaging=np.eye(4),

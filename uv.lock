@@ -671,7 +671,7 @@ requires-dist = [
     { name = "usd-core", marker = "extra == 'patient-usd'" },
     { name = "vtk", marker = "extra == 'patient-pipeline'" },
 ]
-provides-extras = ["patient-dicom", "patient-nvsegment", "patient-nvgenerate", "patient-pipeline", "dev", "patient-mesh", "patient-usd"]
+provides-extras = ["patient-dicom", "patient-nvsegment", "patient-nvgenerate", "patient-pipeline", "dev", "patient-usd"]
 
 [[package]]
 name = "einops"

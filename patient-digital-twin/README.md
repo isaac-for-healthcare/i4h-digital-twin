@@ -9,7 +9,7 @@ flowchart LR
     I --> M["Extract meshes"] --> B["HumanBody"]
     B --> A["NumPy vertices + faces"]
     B --> C["Optional: extract centerlines"]
-    T["Optional: matching CT"] --> V["AttachScan"]
+    T["Optional: matching CT"] --> V["attach_scan"]
     B --> V
     B --> E["Export"]
     C --> E
@@ -62,7 +62,7 @@ points, edges, radii = graph.points, graph.edges, graph.radii
 ```
 
 Points and radii use the mesh's **local meters**; edges index the points.
-The explicit spacing selects skeleton extraction without VMTK. Stored graphs
+Each mesh is voxelized at that spacing and skeletonized. Stored graphs
 are included when exporting USD or a patient bundle. Skip this step for meshes only.
 
 ## 3. Optionally attach CT
@@ -73,13 +73,13 @@ physical coordinate frame; the affine carries its spacing, orientation, and orig
 ```python
 from patient_digital_twin.scan_volume import from_nifti
 
-body.AttachScan(from_nifti(sample / "ct.nii.gz"))
+body.attach_scan(from_nifti(sample / "ct.nii.gz"))
 ```
 
-`AttachScan` preserves the source array axes, spacing, orientation, origin, and
+`attach_scan` preserves the source array axes, spacing, orientation, origin, and
 units for export, including oblique acquisitions. NIfTI uses its original IJK
 array and RAS affine; unspecified spatial units are interpreted as millimeters.
-The lower-level `AttachImaging` API still accepts KJI arrays with an IJK-to-RAS-meter affine.
+The lower-level `attach_imaging` API accepts KJI arrays with an IJK-to-RAS-meter affine.
 
 ## 4. Export
 
@@ -97,7 +97,7 @@ must be new. Export does not resample, reorient, or center the source scan.
 ```mermaid
 flowchart TD
     E["export_patient_twin"] --> A["Always: patient_twin.yaml + patient_anatomy.usdc"]
-    E --> G["With stored graphs: centerlines/*.npz"]
+    A --> G["With stored graphs: centerline attributes on anatomy prims"]
     E --> T["With CT: volume.npy + volume.yaml"]
     T --> V["With vessel_names: vessel_mask.npy + centerline_*.npy"]
 ```
@@ -106,14 +106,14 @@ For **i4h-workflows navigation**, attach CT and request the vessels explicitly:
 
 ```python
 manifest = body.export_patient_twin(
-    "navigation_bundle", vessel_names=["aorta"], exterior="ct"
+    "navigation_bundle", vessel_names=["aorta"], ct_exterior=True
 )
 ```
 
 The exporter retains the segmentation labels on the source CT grid and calculates
 navigation centerlines from that mask. If only meshes are available, it rasterizes
 them on that grid. It does not close the mask or discard components. This works
-without step 2; `exterior="ct"` adds a CT-derived patient envelope.
+without step 2; `ct_exterior=True` adds a CT-derived patient envelope.
 
 Schema-3 bundles preserve **scan array order** for CT and masks. Meshes and
 navigation points/radii use the **scan physical frame and units**, declared in
@@ -196,7 +196,7 @@ anatomy = NVSegmentImporter(
 # Alternative: generate paired anatomy and CT.
 generator = NVGenerateImporter(source_root="/path/to/NV-Generate-CTMR")
 anatomy = generator.to_anatomy_collection(names=["aorta"])
-# Matching source CT: generator.ct_scan (attach with body.AttachScan).
+# Matching source CT: generator.ct_scan (attach with body.attach_scan).
 ```
 
 An explicit `--python /model/env/bin/python` (or `python_executable=` in Python)

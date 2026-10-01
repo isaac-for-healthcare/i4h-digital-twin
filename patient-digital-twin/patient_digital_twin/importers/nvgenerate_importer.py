@@ -22,7 +22,7 @@ from ._common import (
     segmentation_anatomy,
     selected_labels,
 )
-from ._segmentation import SegmentationImporter
+from ._segmentation import nifti_affine_m
 
 
 class NVGenerateImporter:
@@ -30,9 +30,9 @@ class NVGenerateImporter:
 
     Install patient-digital-twin[nvgenerate] and provide the upstream checkout,
     mask/image checkpoints and conditioning dataset. Inference uses imports in
-    the current process; python_executable opts into a separate environment. All generated labels survive the upstream output filtering step.
-    After import, ct_volume_zyx and ct_voxel_to_imaging provide the matching CT
-    as a NumPy array and an XYZ-voxel-to-RAS-meter affine for AttachImaging().
+    the current process; python_executable opts into a separate environment.
+    All generated labels survive the upstream output filtering step. After
+    import, ct_scan holds the matching native CT for HumanBody.attach_scan().
     """
 
     def __init__(self, *, source_root=None, python_executable=None):
@@ -43,12 +43,10 @@ class NVGenerateImporter:
         self.report = None
         self.seed = None
         self.ct_scan = None
-        self.ct_volume_zyx = None
-        self.ct_voxel_to_imaging = None
 
     def to_anatomy_collection(self, *, configuration=None, names=None):
         """Return meshes and retain the matching CT array/affine on this importer."""
-        self.ct_volume_zyx = self.ct_voxel_to_imaging = None
+        self.ct_scan = None
         python = runtime(
             self.python_executable,
             ["torch", "monai", "einops", "huggingface_hub", "matplotlib"],
@@ -61,9 +59,7 @@ class NVGenerateImporter:
         labels = json.loads((self.root / "configs/label_dict.json").read_text())
         labelmap = {value: name for name, value in labels.items()}
         supported = selected_labels(labelmap, names)
-        previous = self.seed
-        while self.seed is None or self.seed == previous:
-            self.seed = secrets.randbits(32)
+        self.seed = secrets.randbits(32)
         with TemporaryDirectory(prefix="patient-nvgenerate-") as temp:
             output = Path(temp) / "mask.nii.gz"
             ct_output = Path(temp) / "ct.nii.gz"
@@ -79,30 +75,25 @@ class NVGenerateImporter:
                     cwd=self.root,
                 )
             mask_image, ct_image = nib.load(output), nib.load(ct_output)
-            mask_affine = SegmentationImporter._affine_m(mask_image)
-            ct_affine = SegmentationImporter._affine_m(ct_image)
             if mask_image.shape != ct_image.shape or not np.allclose(
-                mask_affine, ct_affine
+                nifti_affine_m(mask_image), nifti_affine_m(ct_image)
             ):
                 raise ValueError(
                     "Generated CT and segmentation must share their physical grid"
                 )
             from ..scan_volume import from_nifti
 
-            self.ct_scan = from_nifti(ct_output)
-            self.ct_scan.metadata["source"] = {
+            # ScanVolume rejects non-finite intensities.
+            scan = from_nifti(ct_output)
+            scan.metadata["source"] = {
                 "kind": "generated",
                 "backend": "NV-Generate-CTMR",
                 "seed": self.seed,
             }
-            ct_volume = ct_image.get_fdata(dtype=np.float32).transpose(2, 1, 0).copy()
-            if not np.isfinite(ct_volume).all():
-                raise ValueError("Generated CT contains non-finite intensities")
             body = segmentation_anatomy(
                 mask_image, labelmap, configuration=configuration, names=names
             )
-        self.ct_volume_zyx = ct_volume
-        self.ct_voxel_to_imaging = ct_affine
+        self.ct_scan = scan
         self.report = coverage(
             body,
             supported.values(),

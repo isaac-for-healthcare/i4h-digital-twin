@@ -62,11 +62,3 @@ def test_structure_coordinate_properties_and_reversible_visibility():
     structure.enabled = True
     structure.vertices = vertices.copy()
     np.testing.assert_array_equal(structure.world_vertices, vertices + [4, 5, 6])
-
-
-@pytest.mark.parametrize("kind", list(Kind))
-def test_structure_biological_organ_grouping(kind):
-    structure = AnatomicalStructure("item", kind)
-    assert structure.is_organ == (
-        kind in {Kind.ORGAN, Kind.BONE, Kind.MUSCLE, Kind.AIRWAY}
-    )

@@ -46,6 +46,19 @@ def canonical_name(raw: str) -> str:
     )
 
 
+def nifti_affine_m(image) -> np.ndarray:
+    """Normalize a 3D NIfTI voxel affine to XYZ meters without losing orientation."""
+    if len(image.shape) != 3:
+        raise ValueError(f"Expected a 3D NIfTI, got {image.shape}")
+    unit = image.header.get_xyzt_units()[0]
+    factors = {"unknown": 0.001, "mm": 0.001, "meter": 1.0, "micron": 1e-6}
+    if unit not in factors:
+        raise ValueError(f"Unsupported NIfTI spatial unit: {unit}")
+    affine = image.affine.copy()
+    affine[:3] *= factors[unit]
+    return affine
+
+
 def normalize_labelmap(value: Mapping | str | Path) -> dict[int, str]:
     """Accept NV-Generate name->ID JSON or an ID->name mapping."""
     if isinstance(value, (str, Path)):
@@ -103,25 +116,12 @@ class SegmentationImporter:
                     "Pass the matching NV-Generate configs/label_dict.json (or CTMR map)"
                 )
             image = nib.load(str(path))
-            affine = self._affine_m(image)
+            affine = nifti_affine_m(image)
             self._initialize(
                 np.asanyarray(image.dataobj).transpose(2, 1, 0),
                 normalize_labelmap(labelmap),
                 affine,
             )
-
-    @staticmethod
-    def _affine_m(image) -> np.ndarray:
-        """Normalize a 3D NIfTI voxel affine to XYZ meters without losing orientation."""
-        if len(image.shape) != 3:
-            raise ValueError(f"Expected a 3D NIfTI, got {image.shape}")
-        unit = image.header.get_xyzt_units()[0]
-        factors = {"unknown": 0.001, "mm": 0.001, "meter": 1.0, "micron": 1e-6}
-        if unit not in factors:
-            raise ValueError(f"Unsupported NIfTI spatial unit: {unit}")
-        affine = image.affine.copy()
-        affine[:3] *= factors[unit]
-        return affine
 
     def _load_directory(self, path, *, names=None):
         """Merge binary masks on one grid; reject overlaps rather than overwrite labels."""
@@ -135,13 +135,13 @@ class SegmentationImporter:
         if not files:
             raise FileNotFoundError(f"No NIfTI masks in {path}")
         reference = nib.load(str(files[0]))
-        affine = self._affine_m(reference)
+        affine = nifti_affine_m(reference)
         volume = np.zeros(reference.shape[::-1], dtype=np.int32)
         labels = {}
         for label_id, file in enumerate(files, 1):
             image = nib.load(str(file))
             if image.shape != reference.shape or not np.allclose(
-                self._affine_m(image), affine, atol=1e-8, rtol=1e-7
+                nifti_affine_m(image), affine, atol=1e-8, rtol=1e-7
             ):
                 raise ValueError(f"Mask grid/affine mismatch: {file}")
             name = file.name.removesuffix(".gz").removesuffix(".nii")
@@ -229,19 +229,26 @@ class SegmentationImporter:
         Optional configuration is a YAML path or AnatomyConfiguration policy.
         Disabled meshes are retained for later re-enabling, not skipped at import.
         """
+        from scipy.ndimage import find_objects
+
         from ..imaging_to_mesh import mask_to_mesh
         from ._labels import anatomy_from_labels
 
         body = anatomy_from_labels(self._names, strict=strict)
+        # One pass finds every present label's bounding box; absent labels stay empty.
+        boxes = find_objects(self.masks_zyx)
+        present = {}
+        for label_id, name in self._names.items():
+            if label_id <= len(boxes) and boxes[label_id - 1] is not None:
+                present.setdefault(name, []).append(label_id)
         bounds = []
-        for name, structure in body.structures.items():
-            ids = [label_id for label_id, value in self._names.items() if value == name]
-            mask = np.isin(self.masks_zyx, ids)
-            indices = np.argwhere(mask)
-            if not len(indices):
-                continue
-            low, high = indices.min(0), indices.max(0) + 1
-            window = mask[tuple(slice(a, b) for a, b in zip(low, high))]
+        for name, ids in present.items():
+            structure = body.structures[name]
+            low = np.min([[b.start for b in boxes[i - 1]] for i in ids], axis=0)
+            high = np.max([[b.stop for b in boxes[i - 1]] for i in ids], axis=0)
+            window = np.isin(
+                self.masks_zyx[tuple(slice(a, b) for a, b in zip(low, high))], ids
+            )
             # Unit-spacing converter output is voxel XYZ; apply the entire
             # original affine afterwards (not only spacing and origin).
             vertices, faces = mask_to_mesh(window)
@@ -269,12 +276,9 @@ class SegmentationImporter:
             if structure.mesh.vertices is not None:
                 structure.local_to_body[:3, 3] -= origin
                 structure.local_to_world = structure.local_to_body.copy()
-        body.body_to_voxel = (
-            np.linalg.inv(self.affine_xyz_to_imaging_m) @ body_to_imaging
-        )
-        body.source_shape_xyz = tuple(self.masks_zyx.shape[::-1])
-        body.source_segmentation = self.masks_zyx.copy()
-        body.source_segmentation.setflags(write=False)
+        # Share the importer's validated copy rather than duplicating the volume.
+        self.masks_zyx.setflags(write=False)
+        body.source_segmentation = self.masks_zyx
         body.source_label_names = dict(self._names)
         body.source_voxel_to_ras_m = self.affine_xyz_to_imaging_m.copy()
         body.source_path = (

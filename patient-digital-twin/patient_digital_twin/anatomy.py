@@ -21,9 +21,7 @@ class AnatomyCollection:
         self._configuration = AnatomyConfiguration()
         self.source_path = None
         self._body_to_imaging = None
-        # Optional acquisition bounds for identifying cropped surface geometry.
-        self.body_to_voxel = None
-        self.source_shape_xyz = None
+        # Optional source label volume, used to rasterize vessels on the scan grid.
         self.source_segmentation = None
         self.source_label_names = {}
         self.source_voxel_to_ras_m = None
@@ -79,7 +77,7 @@ class AnatomyCollection:
         include_empty: bool = True,
     ) -> list[AnatomicalStructure]:
         """Filter by kind and name-based catalog membership; include_empty=False returns only active meshes."""
-        from .catalog import matching_hints, structure_systems
+        from .catalog import structure_regions, structure_systems
 
         if system is not None:
             system = System(system)
@@ -88,7 +86,7 @@ class AnatomyCollection:
             for s in self.structures.values()
             if (kind is None or s.kind == kind)
             and (system is None or system in structure_systems(s.name))
-            and (region is None or region in matching_hints(s.name)[0])
+            and (region is None or region in structure_regions(s.name))
             and (include_empty or not s.is_empty)
         ]
 

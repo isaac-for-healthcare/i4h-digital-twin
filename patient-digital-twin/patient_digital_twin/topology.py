@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Automatic tubular mesh centerlines, following the vasculature VMTK workflow.
+"""Tubular centerlines from skeletonized voxel masks.
 
-VMTK's automatic network extractor supplies seeds for its centerline algorithm;
-no interactive seed selection is used. VTK/VMTK are optional runtime dependencies.
+Meshes are voxelized on an explicit grid with VTK, then thinned; native scan
+masks are thinned directly. Radii come from the Euclidean distance transform.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+
+from .geometry import validate_triangles
 
 
 @dataclass
@@ -23,39 +25,11 @@ class CenterlineGraph:
     edges: np.ndarray
 
 
-def _runtime():
-    try:
-        import vtk
-        from vmtk import vmtkscripts
-    except ImportError as exc:
-        raise ImportError(
-            "Centerline extraction requires optional VTK and VMTK. Install a "
-            "compatible VMTK distribution in this Python environment: "
-            "https://www.vmtk.org/download/"
-        ) from exc
-    return vtk, vmtkscripts
-
-
 def _surface(vertices, faces, vtk):
     """Validate and copy triangular geometry; weld coincident STL vertices."""
     from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
 
-    vertices, faces = np.asarray(vertices, dtype=float), np.asarray(faces)
-    if (
-        vertices.ndim != 2
-        or vertices.shape[1:] != (3,)
-        or len(vertices) < 3
-        or not np.isfinite(vertices).all()
-        or faces.ndim != 2
-        or faces.shape[1:] != (3,)
-        or not len(faces)
-        or not np.issubdtype(faces.dtype, np.integer)
-        or np.any(faces < 0)
-        or np.any(faces >= len(vertices))
-    ):
-        raise ValueError(
-            "Expected finite XYZ vertices and valid integer triangle indices"
-        )
+    vertices, faces = validate_triangles(vertices, faces)
     triangles = vertices[faces]
     if np.any(
         np.linalg.norm(
@@ -83,89 +57,6 @@ def _surface(vertices, faces, vtk):
     clean.SetInputData(surface)
     clean.Update()
     return clean.GetOutput()
-
-
-def _graph(polydata):
-    """Convert VMTK polylines without inventing radii when extraction fails."""
-    from vtk.util.numpy_support import vtk_to_numpy
-
-    if polydata is None or polydata.GetNumberOfPoints() < 2:
-        raise ValueError("VMTK did not produce a centerline")
-    points = vtk_to_numpy(polydata.GetPoints().GetData()).astype(float, copy=True)
-    radius = polydata.GetPointData().GetArray("MaximumInscribedSphereRadius")
-    if radius is None:
-        raise ValueError("VMTK output has no MaximumInscribedSphereRadius array")
-    radii = vtk_to_numpy(radius).astype(float, copy=True).reshape(-1)
-    edges = set()
-    for index in range(polydata.GetNumberOfCells()):
-        cell = polydata.GetCell(index)
-        if cell.GetCellDimension() != 1:
-            continue
-        for j in range(cell.GetNumberOfPoints() - 1):
-            a, b = cell.GetPointId(j), cell.GetPointId(j + 1)
-            if a != b:
-                edges.add(tuple(sorted((a, b))))
-    if (
-        len(radii) != len(points)
-        or not np.isfinite(points).all()
-        or not np.isfinite(radii).all()
-        or np.any(radii < 0)
-        or not edges
-    ):
-        raise ValueError("VMTK produced an invalid or empty centerline graph")
-    return CenterlineGraph(points, radii, np.asarray(sorted(edges), dtype=np.int64))
-
-
-def extract_centerlines(vertices, faces, *, method="vmtk", **grid) -> CenterlineGraph:
-    """Extract every connected tubular component from a mesh in local meters.
-
-    Handles capped and open surfaces using automatic VMTK seed discovery. Works
-    on copies: upstream network extraction may open a hole in its input surface.
-    Invalid/non-tubular surfaces may fail; no centerline is fabricated for them.
-    Alternatively, method="skeleton" samples a closed mesh on the caller's
-    shape_zyx, spacing_zyx_m, origin_xyz_m grid and thins that mask, without VMTK.
-    """
-    if method == "skeleton":
-        return _skeleton_centerlines(vertices, faces, **grid)
-    if method != "vmtk" or grid:
-        raise ValueError(
-            "Use method='vmtk' without grid options or method='skeleton' with an explicit grid"
-        )
-    vtk, scripts = _runtime()
-    surface = _surface(vertices, faces, vtk)
-    connectivity = vtk.vtkPolyDataConnectivityFilter()
-    connectivity.SetInputData(surface)
-    connectivity.SetExtractionModeToAllRegions()
-    connectivity.Update()
-    graphs = []
-    for region in range(connectivity.GetNumberOfExtractedRegions()):
-        component = vtk.vtkPolyDataConnectivityFilter()
-        component.SetInputData(surface)
-        component.SetExtractionModeToSpecifiedRegions()
-        component.AddSpecifiedRegion(region)
-        component.Update()
-        clean = vtk.vtkCleanPolyData()
-        clean.SetInputConnection(component.GetOutputPort())
-        clean.Update()
-        copied = vtk.vtkPolyData()
-        copied.DeepCopy(clean.GetOutput())
-        extractor = scripts.vmtkCenterlinesNetwork()
-        extractor.Surface = copied
-        extractor.UseJoblib = False
-        extractor.RandomSeed = 0
-        extractor.LogOn = 0
-        extractor.Execute()
-        graphs.append(_graph(extractor.Centerlines))
-    if not graphs:
-        raise ValueError("Mesh contains no connected surface")
-    offsets = np.cumsum([0] + [len(graph.points) for graph in graphs[:-1]])
-    return CenterlineGraph(
-        np.concatenate([graph.points for graph in graphs]),
-        np.concatenate([graph.radii for graph in graphs]),
-        np.concatenate(
-            [graph.edges + offset for graph, offset in zip(graphs, offsets)]
-        ),
-    )
 
 
 def voxelize_mesh(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
@@ -225,7 +116,8 @@ def voxelize_mesh(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
     )
 
 
-def _skeleton_centerlines(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
+def extract_centerlines(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
+    """Voxelize a closed local-meter mesh on the given grid and skeletonize it."""
     mask = voxelize_mesh(vertices, faces, shape_zyx=shape_zyx,
                          spacing_zyx_m=spacing_zyx_m, origin_xyz_m=origin_xyz_m)
     points, edges, radii = centerline_from_mask(mask, spacing_zyx_m, origin_xyz_m)
@@ -252,15 +144,9 @@ def centerline_from_mask(
             or origin.shape != (3,) or not np.isfinite(origin).all()):
         raise ValueError("Expected positive finite spacing and a finite XYZ origin")
     from scipy import ndimage
+    from skimage.morphology import skeletonize
 
-    try:
-        from skimage.morphology import skeletonize
-
-        skel = skeletonize(mask_zyx.astype(bool))
-    except TypeError:
-        from skimage.morphology import skeletonize_3d
-
-        skel = skeletonize_3d(mask_zyx.astype(bool)) > 0
+    skel = skeletonize(mask_zyx.astype(bool))
 
     sz, sy, sx = (float(v) for v in spacing_zyx)
     ox, oy, oz = (float(v) for v in origin_xyz)
@@ -296,6 +182,7 @@ def centerline_from_mask(
     if edges_arr.shape[0] < 1:
         raise ValueError("Skeleton produced no edges.")
     return pts, edges_arr, radii
+
 
 def native_centerline(mask, scan):
     """Extract on the native mask; map voxel centres and radii into scan units."""

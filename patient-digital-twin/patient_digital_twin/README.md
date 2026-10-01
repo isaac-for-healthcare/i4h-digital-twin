@@ -13,7 +13,7 @@ flowchart TD
     M --> A["AnatomyCollection: named structures + mesh placement"]
     A --> B["HumanBody: user API"]
     B --> T["extract_topology: local centerline graphs"]
-    CT["Native ScanVolume + full affine"] --> V["AttachScan: ImagingVolume"]
+    CT["Native ScanVolume + full affine"] --> V["attach_scan: ImagingVolume"]
     B --> V
     B --> E["exporters"]
     T --> E
@@ -27,7 +27,7 @@ flowchart TD
 - [SegmentationImporter](importers/_segmentation.py) reads labeled NIfTI,
   binary-mask directories, or NumPy masks. `to_anatomy_collection()` extracts meshes.
 - [HumanBody](human.py) owns `anatomy` and optional `imaging`, and exposes
-  `extract_topology()`, `AttachScan()`, `AttachImaging()`, `export_to_usd()`, and `export_patient_twin()`.
+  `extract_topology()`, `attach_scan()`, `attach_imaging()`, `export_to_usd()`, and `export_patient_twin()`.
 - [AnatomyCollection](anatomy.py) exposes `structures[name]` and controls visibility.
   Disabling a structure preserves its mesh.
 - The optional `nvsegment` and `nvgenerate` extras enable the corresponding
@@ -46,7 +46,7 @@ Meshes and stored structure centerlines use XYZ meters. `structure.mesh.vertices
 uses the local frame; `structure.body_vertices` includes the original body
 placement. `structure.world_vertices` includes the current display placement.
 
-`AttachScan()` retains native values and geometry for export; `AttachImaging()`
+`attach_scan()` retains native values and geometry for export; `attach_imaging()`
 remains a lower-level KJI/RAS-meter API. With CT, schema-3 USD and bundle geometry
 use the scan physical frame and units. CT and masks preserve source array order.
 Simulator world placement is applied downstream.

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..geometry import rigid_transform, transform_points
+from ..geometry import rigid_transform, transform_points, validate_triangles
 from ._labels import anatomy_from_labels
 from ._segmentation import canonical_name
 
@@ -109,19 +109,9 @@ class SimpleImporter:
         body.body_to_imaging = self.body_to_imaging
         for raw, name in names.items():
             placement = transforms.get(name, np.eye(4))
-            vertices, faces = _load_mesh(self.meshes[raw])
-            if (
-                vertices.ndim != 2
-                or vertices.shape[1] != 3
-                or not len(vertices)
-                or not np.isfinite(vertices).all()
-                or faces.ndim != 2
-                or faces.shape[1] != 3
-                or not len(faces)
-                or np.any(faces < 0)
-                or np.any(faces >= len(vertices))
-            ):
-                raise ValueError(f"Invalid mesh for {name}")
+            vertices, faces = validate_triangles(
+                *_load_mesh(self.meshes[raw]), name=name
+            )
             structure = body.structures[name]
             structure.vertices, structure.faces = vertices, faces
             structure.local_to_body = rigid_transform(placement)

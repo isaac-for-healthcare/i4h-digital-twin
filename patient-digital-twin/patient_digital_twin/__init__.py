@@ -5,7 +5,6 @@
 
 from .anatomy import AnatomicalSystem, AnatomyCollection
 from .configuration import AnatomyConfiguration
-from .geometry import Similarity
 from .human import HumanBody
 from .imaging import ImagingVolume
 from .importers import NVGenerateImporter, NVSegmentImporter, SegmentationImporter
@@ -30,6 +29,5 @@ __all__ = [
     "NVGenerateImporter",
     "NVSegmentImporter",
     "SegmentationImporter",
-    "Similarity",
     "System",
 ]

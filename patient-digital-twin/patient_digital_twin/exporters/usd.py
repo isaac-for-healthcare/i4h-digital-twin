@@ -12,6 +12,8 @@ from tempfile import NamedTemporaryFile
 
 import numpy as np
 
+from ..geometry import rigid_transform, validate_triangles
+
 
 def export_to_usd(body, path):
     """Export anatomy in its current placement using scan units and Z-up metadata.
@@ -27,37 +29,15 @@ def export_to_usd(body, path):
     placement = scan_from_body_m(body, scan)
     placement = placement.copy()
     placement[:3, 3] /= units
-    return _export_to_usd(
+    path = Path(path).expanduser().resolve()
+    _export_to_usd(
         body,
         path,
         native_scan=scan,
         meters_per_unit=units,
         root_transform=placement,
     )
-
-
-def summarize_usd(path):
-    """Return a short hierarchy/count summary without dumping voxel arrays."""
-    from pxr import Usd, UsdGeom
-
-    stage = Usd.Stage.Open(str(path))
-    anatomy = stage.GetPrimAtPath("/HumanBody/Anatomy").GetChildren()
-    hidden = sum(
-        UsdGeom.Imageable(p).ComputeVisibility() == "invisible" for p in anatomy
-    )
-    centerlines = sum(p.HasAttribute("centerline:points") for p in anatomy)
-    ct = stage.GetPrimAtPath("/HumanBody/Imaging/CT")
-    return (
-        f"{Path(path).name}: /HumanBody (default Xform, Z-up, metersPerUnit={UsdGeom.GetStageMetersPerUnit(stage)})\n"
-        f"  Anatomy: {len(anatomy)} meshes ({hidden} hidden), {centerlines} centerlines\n"
-        f"  Looks: UsdPreviewSurface materials\n"
-        + (
-            f"  Imaging/CT: custom HU voxels {tuple(ct.GetAttribute('ct:shape').Get())}, "
-            "array-to-scan transform\n"
-            if ct
-            else ""
-        )
-    )
+    return path
 
 
 def _export_to_usd(
@@ -75,7 +55,8 @@ def _export_to_usd(
 
     The stage is Z-up, uses the requested spatial units, and has a default /HumanBody prim. Meshes retain
     their rigid transforms. An optional exterior mesh uses the same frame.
-    This is a geometry snapshot, not an animated rig.
+    This is a geometry snapshot, not an animated rig. Returns each exported
+    structure's name mapped to its (sanitized, de-duplicated) prim path.
     """
     try:
         from pxr import Gf, Sdf, Tf, Usd, UsdGeom, UsdShade, Vt
@@ -110,23 +91,8 @@ def _export_to_usd(
         matrix=None,
         enabled=True,
     ):
-        vertices, faces = (
-            np.asarray(vertices, dtype=float) / meters_per_unit,
-            np.asarray(faces),
-        )
-        if (
-            vertices.ndim != 2
-            or vertices.shape[1:] != (3,)
-            or not len(vertices)
-            or not np.isfinite(vertices).all()
-            or faces.ndim != 2
-            or faces.shape[1:] != (3,)
-            or not len(faces)
-            or not np.issubdtype(faces.dtype, np.integer)
-            or np.any(faces < 0)
-            or np.any(faces >= len(vertices))
-        ):
-            raise ValueError(f"Invalid triangle mesh: {prim_path}")
+        vertices, faces = validate_triangles(vertices, faces, name=prim_path)
+        vertices = vertices / meters_per_unit
         result = UsdGeom.Mesh.Define(stage, prim_path)
         result.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(vertices.astype(np.float32)))
         result.CreateFaceVertexCountsAttr(
@@ -149,8 +115,6 @@ def _export_to_usd(
             UsdGeom.Tokens.inherited if enabled else UsdGeom.Tokens.invisible
         )
         if matrix is not None:
-            from ..geometry import rigid_transform
-
             matrix = rigid_transform(matrix).copy()
             matrix[:3, 3] /= meters_per_unit
             result.AddTransformOp().Set(Gf.Matrix4d(matrix.T.tolist()))
@@ -182,22 +146,22 @@ def _export_to_usd(
             skin_opacity,
         )
         skin.SetDisplayName(skin_name + " exterior")
-    used = set()
+    prims = {}
     for name, structure in body.anatomy.structures.items():
         if structure.mesh.vertices is None:
             continue
         identifier = Tf.MakeValidIdentifier(name)
         candidate, number = identifier, 2
-        while candidate in used:
+        while "/HumanBody/Anatomy/" + candidate in prims.values():
             candidate = f"{identifier}_{number}"
             number += 1
-        used.add(candidate)
+        prims[name] = "/HumanBody/Anatomy/" + candidate
         digest = hashlib.sha256(name.encode()).digest()
         color = tuple(0.25 + 0.65 * value / 255 for value in digest[:3])
         if structure.kind.value == "bone":
             color = (0.88, 0.84, 0.69)
         prim = mesh(
-            "/HumanBody/Anatomy/" + candidate,
+            prims[name],
             structure.mesh.vertices,
             structure.mesh.faces,
             color,
@@ -271,4 +235,4 @@ def _export_to_usd(
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
-    return path
+    return prims

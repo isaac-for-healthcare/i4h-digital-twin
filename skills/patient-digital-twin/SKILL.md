@@ -53,16 +53,16 @@ use the pipeline's `--anatomy` selection.
 
 Internal anatomy geometry and rigid transforms use XYZ meters. `local_to_body`
 is the original mesh placement and `local_to_world` is the current placement.
-Use `body.AttachScan(scan_volume.from_nifti(...))` for native CT exports; lower-level
-`AttachImaging` accepts KJI arrays and an IJK-to-RAS-meter affine. Schema-3 exports
+Use `body.attach_scan(scan_volume.from_nifti(...))` for native CT exports; lower-level
+`attach_imaging` accepts KJI arrays and an IJK-to-RAS-meter affine. Schema-3 exports
 retain source array order, physical frame, and units. Simulator placement belongs
 to the consumer; attenuation mapping belongs to sensor-simulation.
 
 ## Topology and export
 
-`body.extract_topology(spacing_m=0.0015)` selects skeleton extraction with a grid
-per structure; closed tubular meshes and VTK/SciPy/scikit-image are needed.
-Calling without spacing or a method uses VMTK. Extraction processes retained
+`body.extract_topology(spacing_m=0.0015)` voxelizes each structure on a grid and
+skeletonizes it; closed tubular meshes and VTK/SciPy/scikit-image are needed.
+Extraction processes retained
 vessels/airways, including disabled ones, and updates results only after success.
 Stored centerlines use each mesh's local meters.
 
@@ -79,8 +79,8 @@ This writes both a bundle and `human_body.usdc`. Simple pipeline input skips CT.
 The segmentation pipeline requires matching CT; use the Python API for segmentation-only geometry exports. Output directories must be new.
 
 `export_to_usd` preserves current structure transforms with an identity root.
-`export_patient_twin` allows anatomy-only bundles. Navigation artifacts require attached CT and explicit `vessel_names`; `exterior="auto"`
-does not create a CT envelope. Read [the USD guide](../../patient-digital-twin/docs/usd.md)
+`export_patient_twin` allows anatomy-only bundles. Navigation artifacts require attached CT and explicit `vessel_names`; pass `ct_exterior=True`
+for a CT envelope. Read [the USD guide](../../patient-digital-twin/docs/usd.md)
 for coordinate frames and optional artifacts.
 
 ## Verify the requested result

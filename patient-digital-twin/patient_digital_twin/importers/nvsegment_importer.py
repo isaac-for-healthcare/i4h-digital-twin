@@ -22,7 +22,7 @@ from ._common import (
     segmentation_anatomy,
     selected_labels,
 )
-from ._segmentation import SegmentationImporter
+from ._segmentation import nifti_affine_m
 
 
 class NVSegmentImporter:
@@ -124,8 +124,8 @@ class NVSegmentImporter:
                 )
             result = nib.load(outputs[0])
             if result.shape != input_image.shape or not np.allclose(
-                SegmentationImporter._affine_m(result),
-                SegmentationImporter._affine_m(input_image),
+                nifti_affine_m(result),
+                nifti_affine_m(input_image),
                 atol=1e-6,
             ):
                 raise ValueError(

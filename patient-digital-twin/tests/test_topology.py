@@ -1,10 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Topology selection, local-frame storage, and VTK/VMTK integration contracts."""
-
-import importlib.util
-from types import SimpleNamespace
+"""Topology selection, local-frame storage, and VTK skeleton contracts."""
 
 import numpy as np
 import pytest
@@ -46,7 +43,7 @@ def test_body_extracts_tubular_anatomy_including_disabled_and_composite(monkeypa
     body.anatomy.structures["empty"] = AnatomicalStructure("empty", Kind.VESSEL)
     calls = []
 
-    def extract(v, f):
+    def extract(v, f, **grid):
         calls.append((v, f))
         return graph()
 
@@ -87,7 +84,7 @@ def test_failure_is_named_and_does_not_commit_partial_results(monkeypatch):
     )
     previous = body.anatomy.structures["first"].centerline
 
-    def extract(v, f):
+    def extract(v, f, **grid):
         if v is body.anatomy.structures["second"].mesh.vertices:
             raise ValueError("bad tube")
         return graph()
@@ -98,91 +95,10 @@ def test_failure_is_named_and_does_not_commit_partial_results(monkeypatch):
     assert body.anatomy.structures["first"].centerline is previous
 
 
-def test_missing_optional_runtime(monkeypatch):
-    import sys
-
-    monkeypatch.setitem(sys.modules, "vmtk", None)
-    with pytest.raises(ImportError, match="optional VTK and VMTK"):
-        topology.extract_centerlines([], [])
+def test_empty_body_and_invalid_spacing():
     assert HumanBody().extract_topology() == {}
-
-
-def _cylinder(vtk, offset=0):
-    from vtk.util.numpy_support import vtk_to_numpy
-
-    source = vtk.vtkCylinderSource()
-    source.SetRadius(0.01)
-    source.SetHeight(0.1)
-    source.SetResolution(24)
-    source.SetCenter(offset, 0, 0)
-    triangulate = vtk.vtkTriangleFilter()
-    triangulate.SetInputConnection(source.GetOutputPort())
-    triangulate.Update()
-    mesh = triangulate.GetOutput()
-    return (
-        vtk_to_numpy(mesh.GetPoints().GetData()).copy(),
-        vtk_to_numpy(mesh.GetPolys().GetData()).reshape(-1, 4)[:, 1:].copy(),
-    )
-
-
-def test_vtk_components_polylines_and_radii(monkeypatch):
-    vtk = pytest.importorskip("vtk")
-    surfaces = []
-
-    class Extractor:
-        def Execute(self):
-            assert self.UseJoblib is False
-            surfaces.append(self.Surface)
-            points = vtk.vtkPoints()
-            for p in [(0, -0.04, 0), (0, 0, 0), (0, 0.04, 0)]:
-                points.InsertNextPoint(*p)
-            lines = vtk.vtkCellArray()
-            lines.InsertNextCell(3)
-            for i in range(3):
-                lines.InsertCellPoint(i)
-            radius = vtk.vtkDoubleArray()
-            radius.SetName("MaximumInscribedSphereRadius")
-            for _ in range(3):
-                radius.InsertNextValue(0.01)
-            self.Centerlines = vtk.vtkPolyData()
-            self.Centerlines.SetPoints(points)
-            self.Centerlines.SetLines(lines)
-            self.Centerlines.GetPointData().AddArray(radius)
-
-    monkeypatch.setattr(
-        topology,
-        "_runtime",
-        lambda: (vtk, SimpleNamespace(vmtkCenterlinesNetwork=Extractor)),
-    )
-    a, f = _cylinder(vtk)
-    b, g = _cylinder(vtk, 0.2)
-    vertices = np.concatenate([a, b])
-    original = vertices.copy()
-    result = topology.extract_centerlines(vertices, np.concatenate([f, g + len(a)]))
-    assert len(surfaces) == 2
-    np.testing.assert_array_equal(result.edges, [[0, 1], [1, 2], [3, 4], [4, 5]])
-    np.testing.assert_allclose(result.radii, 0.01)
-    np.testing.assert_array_equal(vertices, original)
-    with pytest.raises(ValueError, match="triangle indices"):
-        topology.extract_centerlines(a, [[0, 1, len(a)]])
-    with pytest.raises(ValueError, match="no MaximumInscribedSphereRadius"):
-        output = vtk.vtkPolyData()
-        output.SetPoints(surfaces[0].GetPoints())
-        topology._graph(output)
-
-
-@pytest.mark.skipif(
-    importlib.util.find_spec("vmtk") is None, reason="Optional VMTK not installed"
-)
-def test_real_vmtk_capped_tube():
-    import vtk
-
-    vertices, faces = _cylinder(vtk)
-    result = topology.extract_centerlines(vertices, faces)
-    assert len(result.edges) > 0
-    assert np.ptp(result.points[:, 1]) > 0.05
-    assert np.max(np.linalg.norm(result.points[:, [0, 2]], axis=1)) < 0.006
-    assert np.median(result.radii) == pytest.approx(0.01, rel=0.3)
+    with pytest.raises(ValueError, match="spacing_m"):
+        HumanBody().extract_topology(spacing_m=0)
 
 
 def test_mesh_skeleton_grid_round_trip_and_physical_radii():
@@ -201,9 +117,7 @@ def test_mesh_skeleton_grid_round_trip_and_physical_radii():
     grid = {"shape_zyx": mask.shape, "spacing_zyx_m": spacing, "origin_xyz_m": origin}
     recovered = topology.voxelize_mesh(vertices * 0.001, faces, **grid)
     np.testing.assert_array_equal(recovered, mask)
-    result = topology.extract_centerlines(
-        vertices * 0.001, faces, method="skeleton", **grid
-    )
+    result = topology.extract_centerlines(vertices * 0.001, faces, **grid)
     coordinates = np.argwhere(skeletonize(mask))
     np.testing.assert_allclose(
         result.points, origin + coordinates[:, ::-1] * spacing[::-1]
@@ -233,7 +147,7 @@ def test_topology_selection_preserves_other_centerlines(monkeypatch):
         }
     )
     original = body.anatomy.structures["aorta"].centerline
-    monkeypatch.setattr(topology, "extract_centerlines", lambda v, f: graph())
+    monkeypatch.setattr(topology, "extract_centerlines", lambda v, f, **grid: graph())
     assert set(body.extract_topology(names=["vascular_tree"])) == {"vascular_tree"}
     assert body.anatomy.structures["aorta"].centerline is original
     with pytest.raises(KeyError, match="Unknown anatomy"):

@@ -33,7 +33,7 @@ manifest = body.export_patient_twin("new_patient_bundle")
 
 Use `body` from the s0011 steps in the [package usage guide](../README.md).
 Run the snippets below in order from the repository root. CT is optional;
-attach it with `AttachScan()` when needed.
+attach it with `attach_scan()` when needed.
 
 Standalone export uses an identity root and current structure transforms.
 It preserves the live body's transforms and visibility. Do not apply a second
@@ -45,8 +45,8 @@ Simulator world placement is chosen downstream. An explicit optional
 `transforms.world_from_patient_m` is a column-vector placement matrix in meters;
 apply it once after converting scan units to meters.
 
-Bundle `exterior="auto"` omits an exterior. A CT envelope requires explicit
-`exterior="ct"` and attached CT. Standalone exports do not generate a CT envelope.
+Bundles omit an exterior by default. A CT envelope requires `ct_exterior=True`
+and attached CT. Standalone exports do not generate a CT envelope.
 
 A standalone USD replaces an existing file only after constructing the new
 layer. Bundle exporters require new output directories and publish
@@ -152,7 +152,7 @@ USD `centerline:points` and `centerline:radii` use local stage units, with
 `centerline:coordinateFrame="structure_local"`; transform points like mesh vertices
 and multiply radii by `metersPerUnit` to obtain meters.
 
-Bundle per-structure `centerlines/*.npz` and composite navigation
+Bundle per-structure graphs are stored only on their USD prims. Composite navigation
 `centerline_points.npy` / `centerline_radii.npy` use the declared scan physical
 frame and units. `centerline_edges.npy` stores index pairs. Navigation arrays
 are generated when attached CT and `vessel_names` request them.
