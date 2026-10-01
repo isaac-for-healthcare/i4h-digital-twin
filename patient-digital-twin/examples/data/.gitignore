@@ -1,8 +1,0 @@
-# Large sample scans and generated artifacts stay local.
-**/ct.nii.gz
-**/*.npy
-**/*.npz
-**/*.usdc
-**/*.usda
-**/*.stl
-# Keep pipeline outputs outside examples/data.

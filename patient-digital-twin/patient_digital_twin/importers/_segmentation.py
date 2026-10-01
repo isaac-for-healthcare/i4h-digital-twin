@@ -85,17 +85,19 @@ class SegmentationImporter:
     preserved. Missing NIfTI units default to millimeters, as in MAISI.
     """
 
-    def __init__(self, path: str | Path, labelmap: Mapping | str | Path | None = None):
+    def __init__(self, path: str | Path, labelmap: Mapping | str | Path | None = None, *, names=None):
         """Read a multi-label NIfTI plus matching map, or a binary-mask directory.
 
         Reading validates masks and coordinates but does not mesh them. Call
-        to_anatomy_collection() to extract surfaces. Directory names define their labels.
+        to_anatomy_collection() to extract surfaces. Filenames define their labels; names optionally selects directory masks before loading.
         """
         path = Path(path)
         self.source_path = path
         if path.is_dir():
-            self._load_directory(path)
+            self._load_directory(path, names=names)
         else:
+            if names is not None:
+                raise ValueError("names selects files in a binary-mask directory only")
             if labelmap is None:
                 raise ValueError(
                     "Pass the matching NV-Generate configs/label_dict.json (or CTMR map)"
@@ -121,9 +123,15 @@ class SegmentationImporter:
         affine[:3] *= factors[unit]
         return affine
 
-    def _load_directory(self, path):
+    def _load_directory(self, path, *, names=None):
         """Merge binary masks on one grid; reject overlaps rather than overwrite labels."""
         files = sorted(path.glob("*.nii")) + sorted(path.glob("*.nii.gz"))
+        if names is not None:
+            selected = {canonical_name(name) for name in names}
+            available = {canonical_name(file.name.removesuffix(".gz").removesuffix(".nii")): file for file in files}
+            if selected - available.keys():
+                raise ValueError(f"Missing binary masks: {sorted(selected - available.keys())}")
+            files = [file for name, file in available.items() if name in selected]
         if not files:
             raise FileNotFoundError(f"No NIfTI masks in {path}")
         reference = nib.load(str(files[0]))

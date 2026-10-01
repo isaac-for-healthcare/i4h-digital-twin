@@ -1,36 +1,37 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+"""The original s0011 CT/masks are available through Git LFS and retain their grid."""
 
-"""Check the bundled example's grid, label map and completed generation record."""
-
+import hashlib
 import json
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-import pytest
 
 
-def test_high_resolution_example_pair():
-    root = Path(__file__).parents[1] / "examples/data/nv_ct_high_resolution"
-    if not (root / "ct.nii.gz").exists():
-        pytest.skip("Generated example data is not present in this checkout")
-    mask = nib.load(root / "segmentation.nii.gz")
-    ct = nib.load(root / "ct.nii.gz")
-    assert mask.shape == ct.shape == (512, 512, 768)
-    np.testing.assert_allclose(mask.affine, ct.affine, atol=1e-4)
-    np.testing.assert_allclose(mask.header.get_zooms(), [0.763, 0.763, 0.7875])
-    assert mask.header.get_xyzt_units()[0] == ct.header.get_xyzt_units()[0] == "mm"
-    assert mask.get_data_dtype() == np.dtype("uint8")
-    assert ct.get_data_dtype() == np.dtype("int16")
-    labels = json.loads((root / "labels.json").read_text())
-    assert labels["body"] == 200 and labels["background"] == 0
-    sample = np.asarray(mask.dataobj[:, :, 384])
-    assert set(np.unique(sample)) <= set(labels.values())
-    metadata = json.loads((root / "provenance.json").read_text())
-    assert metadata["status"] == "complete"
-    assert set(metadata["sha256"]) == {
-        "ct.nii.gz",
-        "segmentation.nii.gz",
-        "labels.json",
-    }
+def test_s0011_dataset():
+    root = Path(__file__).parents[1] / "examples/data/s0011"
+    provenance = json.loads((root / "provenance.json").read_text())
+    assert provenance["license"] == "CC-BY-4.0" and not provenance["modified"]
+    ct = nib.load(root / "ct.nii.gz")  # An unresolved LFS pointer must fail, not skip.
+    assert ct.shape == (311, 311, 431)
+    for relative, expected_hash in provenance["sha256"].items():
+        path = root / relative
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected_hash
+        image = nib.load(path)
+        assert image.shape == ct.shape
+        np.testing.assert_allclose(image.affine, ct.affine)
+    aorta = nib.load(root / "segmentations/aorta.nii.gz")
+    assert set(np.unique(np.asanyarray(aorta.dataobj))) == {0, 1}
+
+
+def test_sample_mask_selection():
+    from patient_digital_twin import SegmentationImporter
+
+    root = Path(__file__).parents[1] / "examples/data/s0011/segmentations"
+    importer = SegmentationImporter(root, names=["aorta"])
+    assert set(importer.labelmap.values()) == {"aorta"}
+    anatomy = importer.to_anatomy_collection()
+    assert set(anatomy.structures) == {"aorta"}
+    assert not anatomy.structures["aorta"].is_empty

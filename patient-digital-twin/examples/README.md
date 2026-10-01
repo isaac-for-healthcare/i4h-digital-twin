@@ -1,89 +1,72 @@
-# HumanBody pipeline
+# Patient examples
 
-Run from `patient-digital-twin/`. Install `.[usd]` and the mesh/topology dependencies
-(`scipy`, `vtk`; add `trimesh` for STL/OBJ import).
-For optional inference, install `.[pipeline,nvsegment]` or
-`.[pipeline,nvgenerate]` and provide the upstream source and model assets.
-Both adapters use Python imports in the current process by default.
-`--python` explicitly selects a separate interpreter when needed.
-
-The pipeline imports anatomy, constructs `HumanBody`, attaches matching CT when
-available, extracts vessel/airway topology, then calls
-`body.export_patient_twin()` and `body.export_to_usd()`. Only those exporters write
-the output assets. Failure leaves no partially exported output directory.
-
-| Source | Anatomy | CT attachment |
-| --- | --- | --- |
-| `nvgenerate` | Fresh generated segmentation → meshes | Matching generated CT |
-| `nvsegment` | Input CT → segmentation → meshes | The input CT |
-| `simple` | Supplied STL/OBJ/USD meshes | Skipped |
-| `sample` / `segmentation` | Existing segmentation → meshes | Matching sample CT / required `--ct` |
+Run these commands from `patient-digital-twin/` with Python 3.10+:
 
 ```bash
-python examples/pipeline.py --source nvgenerate \
-  --source-root /path/to/NV-Generate-CTMR --output /tmp/generated-patient
-python examples/pipeline.py --source nvsegment --input /path/to/ct.nii.gz \
-  --bundle-root /path/to/NV-Segment-CTMR --output /tmp/segmented-patient
-
-python examples/pipeline.py --source simple --input /path/to/meshes.json \
-  --output /tmp/mesh-patient
-python examples/pipeline.py --source sample --output /tmp/sample-patient
+pip install -e '.[pipeline]'
+git lfs pull
+python examples/pipeline.py --source sample --anatomy aorta --output /tmp/s0011-patient
 ```
 
-NVGenerate uses upstream paired `rflow-ct` inference and retains all generated
-labels, rather than only the organ used to condition generation. It needs both
-mask and image-generation checkpoints and the anatomy-size conditioning dataset.
-The importer retains the matching NumPy CT and voxel affine long enough to attach
-them to the body; it does not substitute another scan.
+The default sample is the supplied s0011 aorta mask and matching CT. Other named
+masks can be selected with `--anatomy aorta liver`. The [dataset README](data/README.md)
+records its source and license. Every output directory must be new.
 
-Simple input JSON maps anatomy names to mesh files relative to the JSON:
-
-```json
-{"meshes": {"liver": "liver.stl", "aorta": "aorta.stl"}}
+```mermaid
+flowchart LR
+    S["s0011 CT + named binary masks"] --> I["Import selected anatomy"]
+    I --> M["Mesh + optional vessel topology"]
+    M --> B["Patient bundle + human_body.usdc"]
+    B --> V["Isaac Sim viewer"]
 ```
 
-Meshes use XYZ meters in a shared body frame. Optional `mesh_to_body` matrices
-place individual local meshes. Omitted matrices are identity in this pipeline;
-no sample-patient placement is inferred. `--ct` is rejected for simple inputs.
+The pipeline writes `patient_twin.yaml`, `patient_anatomy.usdc`, and a standalone
+`human_body.usdc`. CT remains native HU in `volume.npy` + `volume.yaml` and is also
+embedded in the standalone USD. Stored `centerlines/*.npz` use the scan frame and
+units declared in the manifest. Simulator placement and attenuation mapping happen
+downstream.
 
-Use `--anatomy aorta liver` to select exported structures, or omit it for all
-imported anatomy. Disabled meshes remain present but invisible. Topology is
-extracted in each structure's local coordinates.
-`--centerline-spacing-mm` controls its voxel grid. Extraction failures stop export.
-
-The output directory must be new and contains:
-
-| Output | Contents |
-| --- | --- |
-| `human_body.usdc` | All anatomy meshes, embedded centerlines, attached CT attributes |
-| `patient_twin.yaml` | Bundle inventory, coordinates, mesh paths, and centerline asset paths |
-| `patient_anatomy.usdc` | Bundle anatomy, embedded centerlines; CT is stored in external arrays |
-| `centerlines/*.npz` | Local-meter points, edges and radii; transforms recorded in the manifest |
-| `volume.npy`, `volume.yaml` | Attached CT in HU and spatial metadata, when CT exists |
-
-With no source registration, a mesh-only bundle explicitly uses the `body` frame.
-Bundles preserve the attached scan frame, units, and array axes. The pipeline omits an exterior.
-The bundle export API still offers explicit CT-envelope and composite navigation
-exports through `exterior="ct"` and `vessel_names=...`; the pipeline does not require
-them. Physics-demo exports are separate from this pipeline.
+`pipeline.py` also accepts `segmentation` (with `--input`, `--labels`, and matching
+`--ct`), `simple` (a mesh-map JSON), `nvsegment`, and `nvgenerate`.
+STL/OBJ vertices use meters; optional `mesh_to_body` transforms place local meshes.
+Omitted transforms are identity. Install `trimesh` for STL/OBJ imports.
+See `python examples/pipeline.py --help` for all arguments and the
+[optional model setup](../README.md#start-from-ct-or-generate-a-patient).
 
 ## Isaac Sim viewer
 
-```bash
-/path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/mesh-patient/human_body.usdc
-```
-
-The loader opens the USD, adds session-only lighting, and frames the patient.
-Select structures under `/HumanBody/Anatomy`; when present, hide
-`/HumanBody/Exterior` to inspect internal anatomy. Imaging attributes store data;
-they do not provide volume rendering. USD is a static snapshot.
-
-For the separate minimal example that exports the sample anatomy:
+Export the supplied aorta and liver with matching CT, then open the stage using
+an installed Isaac Sim Python runtime:
 
 ```bash
-python examples/isaac_sim.py export /tmp/human_body.usdc
-/path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/human_body.usdc
+python examples/isaac_sim.py export /tmp/s0011.usdc --anatomy aorta liver --with-ct
+/path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/s0011.usdc
 ```
 
-See [Working with patient USD files](../docs/usd.md) for programmatic inspection,
-coordinate handling, and the differences between the two USD outputs.
+The viewer frames anatomy using the stage's spatial units and adds session-only
+lighting and a camera. It renders until closed. CT attributes store data; they do
+not display a CT volume. Omit `--with-ct` for a smaller anatomy-only USD.
+
+For a bounded headless check and a rendered PNG (requires Pillow in that runtime):
+
+```bash
+/path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/s0011.usdc \
+  --headless --frames 20 --screenshot /tmp/s0011.png
+```
+
+## CT and centerline arrays only
+
+```bash
+python -m patient_digital_twin.artifacts \
+  --ct examples/data/s0011/ct.nii.gz \
+  --vessel-mask examples/data/s0011/segmentations/aorta.nii.gz \
+  --output /tmp/s0011-arrays
+```
+
+This writes native `volume.npy` + `volume.yaml`, `vessel_mask.npy`, and
+`centerline_points.npy`, `centerline_edges.npy`, `centerline_radii.npy`.
+`topology.py` calculates centerlines; `artifacts.py` writes the arrays.
+Points/radii use the scan frame and units. Omit `--vessel-mask` for CT-only output.
+For a navigation bundle with USD, use
+`body.export_patient_twin(..., vessel_names=["aorta"])` as shown in the
+[main guide](../README.md#4-export).

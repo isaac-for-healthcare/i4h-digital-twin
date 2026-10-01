@@ -18,7 +18,7 @@ from patient_digital_twin.importers import (
     SimpleImporter,
 )
 
-SAMPLE = Path(__file__).parent / "data/nv_ct_high_resolution"
+SAMPLE = Path(__file__).parent / "data/s0011"
 
 
 def parser():
@@ -57,7 +57,7 @@ def import_body(args):
     ct = None
     if source == "sample":
         importer = SegmentationImporter(
-            SAMPLE / "segmentation.nii.gz", SAMPLE / "labels.json"
+            SAMPLE / "segmentations", names=[name.strip() for value in (args.anatomy or ["aorta"]) for name in value.split(",") if name.strip()]
         )
         ct = SAMPLE / "ct.nii.gz"
     elif source == "nvgenerate":
@@ -89,8 +89,6 @@ def import_body(args):
     else:
         raise ValueError(f"Unsupported source: {source}")
     body = HumanBody(importer.to_anatomy_collection())
-    if source == "sample":
-        body.anatomy.configure(SAMPLE / "anatomy.yaml")
     if source == "nvgenerate":
         if getattr(importer, "ct_scan", None) is not None:
             body.AttachScan(importer.ct_scan)
