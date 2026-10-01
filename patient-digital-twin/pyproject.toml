@@ -17,6 +17,9 @@ dev = ["pytest>=8.0"]
 mesh = []  # Compatibility alias: meshing is now included in the base install.
 usd = ["usd-core"]
 
+[project.scripts]
+patient-digital-twin = "patient_digital_twin.main:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["patient_digital_twin*"]

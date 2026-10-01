@@ -17,11 +17,11 @@ import numpy as np
 from ._segmentation import SegmentationImporter
 
 from ._common import (
-    catalog_labels,
     coverage,
     run_backend,
     runtime,
     segmentation_anatomy,
+    selected_labels,
 )
 
 
@@ -44,7 +44,7 @@ class NVGenerateImporter:
         self.ct_volume_zyx = None
         self.ct_voxel_to_imaging = None
 
-    def to_anatomy_collection(self, *, configuration=None):
+    def to_anatomy_collection(self, *, configuration=None, names=None):
         """Return meshes and retain the matching CT array/affine on this importer."""
         self.ct_volume_zyx = self.ct_voxel_to_imaging = None
         python = runtime(
@@ -56,7 +56,7 @@ class NVGenerateImporter:
             )
         labels = json.loads((self.root / "configs/label_dict.json").read_text())
         labelmap = {value: name for name, value in labels.items()}
-        supported = catalog_labels(labelmap)
+        supported = selected_labels(labelmap, names)
         previous = self.seed
         while self.seed is None or self.seed == previous:
             self.seed = secrets.randbits(32)
@@ -80,7 +80,7 @@ class NVGenerateImporter:
             if not np.isfinite(ct_volume).all():
                 raise ValueError("Generated CT contains non-finite intensities")
             body = segmentation_anatomy(
-                mask_image, labelmap, configuration=configuration
+                mask_image, labelmap, configuration=configuration, names=names
             )
         self.ct_volume_zyx = ct_volume
         self.ct_voxel_to_imaging = ct_affine

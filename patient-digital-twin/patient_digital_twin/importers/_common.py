@@ -62,9 +62,23 @@ def catalog_labels(labelmap):
     }
 
 
-def segmentation_anatomy(image, labelmap, *, configuration=None):
-    """Mesh catalog labels and keep unsupported/unobserved catalog entries empty."""
+def selected_labels(labelmap, names=None):
+    """Resolve an explicit class list against a backend's supported labels."""
     labels = catalog_labels(labelmap)
+    if names is None:
+        return labels
+    names = tuple(dict.fromkeys(canonical_name(name) for name in names))
+    if not names:
+        raise ValueError("Provide at least one anatomical class")
+    missing = set(names) - set(labels.values())
+    if missing:
+        raise ValueError(f"Unsupported anatomical classes: {sorted(missing)}")
+    return {i: name for i, name in labels.items() if name in names}
+
+
+def segmentation_anatomy(image, labelmap, *, configuration=None, names=None):
+    """Mesh catalog labels and keep unsupported/unobserved catalog entries empty."""
+    labels = selected_labels(labelmap, names)
     data = np.asanyarray(image.dataobj)
     if data.ndim != 3 or not np.isfinite(data).all() or np.any(data != np.floor(data)):
         raise ValueError(
@@ -74,7 +88,7 @@ def segmentation_anatomy(image, labelmap, *, configuration=None):
     # Include every catalog entry, without reassigning a backend's real IDs.
     mapping = dict(labels)
     next_id = max(mapping, default=0) + 1
-    for name in CATALOG:
+    for name in CATALOG if names is None else ():
         if name not in mapping.values():
             mapping[next_id] = name
             next_id += 1

@@ -11,14 +11,17 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import nibabel as nib
+import numpy as np
+
+from ._segmentation import SegmentationImporter
 
 from ._common import (
-    catalog_labels,
     coverage,
     image_input,
     run_backend,
     runtime,
     segmentation_anatomy,
+    selected_labels,
 )
 
 
@@ -50,7 +53,7 @@ class NVSegmentImporter:
         self.python_executable = python_executable
         self.report = None
 
-    def to_anatomy_collection(self, *, configuration=None):
+    def to_anatomy_collection(self, *, configuration=None, names=None):
         """Request supported catalog prompts, invert preprocessing, and mesh output."""
         python = runtime(
             self.python_executable,
@@ -69,7 +72,7 @@ class NVSegmentImporter:
             for name, item in definitions.items()
             if dataset in item.get("datasets", [])
         }
-        supported = catalog_labels(labelmap)
+        supported = selected_labels(labelmap, names)
         if not supported:
             raise ValueError(
                 f"No catalog labels supported by NV-Segment for {self.modality}"
@@ -77,7 +80,8 @@ class NVSegmentImporter:
         with TemporaryDirectory(prefix="patient-nvsegment-") as temp:
             temp = Path(temp)
             source = temp / "image.nii.gz"
-            nib.save(image_input(self.image, self.affine), source)
+            input_image = image_input(self.image, self.affine)
+            nib.save(input_image, source)
             overrides = json.loads(config.read_text())
             overrides.update(
                 bundle_root=str(self.root),
@@ -108,9 +112,18 @@ class NVSegmentImporter:
                 raise RuntimeError(
                     f"Expected one NV-Segment output, found {len(outputs)}"
                 )
+            result = nib.load(outputs[0])
+            if result.shape != input_image.shape or not np.allclose(
+                SegmentationImporter._affine_m(result),
+                SegmentationImporter._affine_m(input_image),
+                atol=1e-6,
+            ):
+                raise ValueError(
+                    "NV-Segment output must match the input image physical grid"
+                )
             # VistaPostTransformd restores prompt IDs before saving the NIfTI.
             body = segmentation_anatomy(
-                nib.load(outputs[0]), supported, configuration=configuration
+                result, supported, configuration=configuration, names=names
             )
         body.source_path = (
             str(self.image) if isinstance(self.image, (str, Path)) else None
