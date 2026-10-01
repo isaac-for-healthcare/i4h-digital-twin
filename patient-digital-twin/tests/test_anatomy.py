@@ -48,12 +48,11 @@ def test_collection_filters_and_live_shared_system_views():
     assert not view.is_empty
 
 
-def test_empty_system_and_configuration_validation():
+def test_empty_system_and_unknown_names():
     anatomy = AnatomyCollection()
     assert anatomy.system("skeletal").is_empty
     assert anatomy.system("skeletal").structures == []
     with pytest.raises(ValueError):
         anatomy.system("misspelled")
-    with pytest.raises(ValueError, match="Unknown"):
-        anatomy.configure({"anatomy": {"structures": {"absent": False}}})
-    assert anatomy.configuration.enabled
+    with pytest.raises(KeyError):
+        anatomy.set_structure_enabled("absent", False)

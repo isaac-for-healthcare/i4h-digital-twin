@@ -10,8 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from patient_digital_twin.importers._backend_context import backend_context
-from patient_digital_twin.importers._common import runtime
+from patient_digital_twin.importers._common import backend_context, runtime
 
 
 @pytest.mark.parametrize("fail", [False, True])

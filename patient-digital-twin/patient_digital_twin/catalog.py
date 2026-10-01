@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .structures import Kind, System
+from .anatomy import Kind, System
 
 
 @dataclass(frozen=True)

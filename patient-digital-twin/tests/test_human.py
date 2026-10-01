@@ -4,7 +4,7 @@
 import numpy as np
 import pytest
 from patient_digital_twin import HumanBody, Kind, System
-from patient_digital_twin.importers._labels import anatomy_from_labels
+from patient_digital_twin.importers._segmentation import anatomy_from_labels
 
 
 def test_human_body_owns_anatomy_without_an_external_body():
@@ -26,7 +26,7 @@ def test_human_body_owns_anatomy_without_an_external_body():
 
 def test_human_body_and_catalog():
     body = HumanBody(
-        anatomy_from_labels({1: "liver", 2: "kidney_left", 3: "femur_left"})
+        anatomy_from_labels(["liver", "kidney_left", "femur_left"])
     )
     assert isinstance(body, HumanBody)
     assert [s.name for s in body.anatomy.select(kind=Kind.BONE)] == ["femur_left"]
@@ -34,15 +34,6 @@ def test_human_body_and_catalog():
         "kidney_left"
     ]
     assert body.anatomy.structures["liver"].vertices is None
-
-
-def test_strict_label_import_is_atomic():
-    body = HumanBody(anatomy_from_labels(["liver"]))
-    with pytest.raises(ValueError, match="Unmapped"):
-        HumanBody(
-            anatomy_from_labels({2: "heart", 3: "unmapped"}, anatomy=body.anatomy)
-        )
-    assert list(body.anatomy.structures) == ["liver"]
 
 
 def test_optional_imaging_transform_recovers_scan_coordinates_without_aliasing():
@@ -85,7 +76,6 @@ def test_optional_imaging_transform_recovers_scan_coordinates_without_aliasing()
 def test_attach_imaging_owns_volume_and_metadata_without_loading_provenance():
     body = HumanBody()
     body.anatomy.body_to_imaging = np.eye(4)
-    body.anatomy.source_path = "segmentation.nii.gz"
     assert body.imaging is None
     volume = np.arange(24, dtype=np.int16).reshape(2, 3, 4)
     affine = np.diag([0.001, 0.002, 0.003, 1])
@@ -102,7 +92,6 @@ def test_attach_imaging_owns_volume_and_metadata_without_loading_provenance():
         result.volume[0, 0, 0] = 7
     with pytest.raises(ValueError):
         result.body_to_imaging[0, 0] = 2
-    assert body.anatomy.source_path == "segmentation.nii.gz"
 
 
 @pytest.mark.parametrize(
@@ -142,3 +131,17 @@ def test_imaging_requires_explicit_spatial_metadata_and_numpy_volume():
                 np.zeros((2, 3, 4)), voxel_to_imaging=affine, body_to_imaging=np.eye(4)
             )
     assert body.imaging is None
+
+
+def test_attach_scan_shares_native_buffer_and_keeps_axes():
+    from patient_digital_twin.scan_volume import from_array
+
+    scan = from_array(np.arange(24).reshape(2, 3, 4), np.diag([2, 3, 4, 1]),
+                      array_axes="ijk", world_frame="LPS", world_unit="mm")
+    body = HumanBody()
+    imaging = body.attach_scan(scan, body_to_imaging=np.eye(4))
+    assert imaging.source_scan is scan
+    assert np.shares_memory(imaging.volume, scan.values)
+    assert imaging.volume.shape == (4, 3, 2)
+    assert not imaging.volume.flags.writeable
+    np.testing.assert_allclose(imaging.voxel_to_imaging, scan.ijk_to_ras_m)

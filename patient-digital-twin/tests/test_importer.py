@@ -84,13 +84,12 @@ def test_nifti_units(tmp_path):
         )
 
 
-def test_importer_accepts_anatomy_configuration(tmp_path):
-    path = tmp_path / "anatomy.yaml"
-    path.write_text("anatomy:\n  enabled: false\n", encoding="utf-8")
+def test_imported_geometry_can_be_hidden_and_restored():
     importer = SegmentationImporter.from_array(
         np.ones((3, 3, 3)), {1: "liver", 2: "heart"}
     )
-    body = HumanBody(importer.to_anatomy_collection(configuration=path))
+    body = HumanBody(importer.to_anatomy_collection())
+    body.anatomy.set_enabled(False)
     assert body.anatomy.structures["liver"].is_empty
     assert body.anatomy.structures["liver"].faces is None
     assert body.anatomy.structures["heart"].is_empty
@@ -144,7 +143,7 @@ def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibilit
     second = HumanBody(
         SegmentationImporter.from_array(
             masks, labelmap, affine_xyz_to_imaging_m=shifted
-        ).to_anatomy_collection(configuration={"anatomy": {"enabled": False}})
+        ).to_anatomy_collection()
     )
     second.anatomy.set_enabled(True)
     all_points = np.concatenate(

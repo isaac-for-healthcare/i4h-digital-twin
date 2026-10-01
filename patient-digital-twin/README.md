@@ -47,6 +47,9 @@ vertices = aorta.body_vertices  # XYZ meters in the shared body frame.
 faces = aorta.faces             # Triangle vertex indices.
 ```
 
+To hide a mesh without deleting it, set `aorta.enabled = False`; set it to `True`
+to restore it. YAML configuration policies are no longer supported.
+
 For a single label volume, pass its matching ID-to-name dictionary instead.
 Directory inputs use binary-mask filenames as names; `names` selects masks before
 loading them. No model inference is needed to use the supplied s0011 masks.

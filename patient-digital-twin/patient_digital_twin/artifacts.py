@@ -32,24 +32,31 @@ def write_centerline(output, points, edges, radii):
     return artifacts
 
 
-def write_artifacts(scan, output, *, vessel_mask=None):
-    """Atomically export native HU/YAML and optional scan-grid vessel topology."""
-    output = Path(output).expanduser().resolve()
-    if output.exists():
-        raise FileExistsError(f"Use a new output directory: {output}")
+def write_scan_artifacts(scan, folder, *, vessel_mask=None):
+    """Write into a new staging folder owned by the calling exporter."""
     graph = None
     if vessel_mask is not None:
         mask = np.asarray(vessel_mask)
         if mask.shape != scan.values.shape:
             raise ValueError("Vessel mask must match the scan grid")
         graph = native_centerline(mask, scan)
+    scan.save(folder)
+    paths = dict(hu_volume="volume.npy", volume_metadata="volume.yaml")
+    if graph is not None:
+        np.save(Path(folder) / "vessel_mask.npy", mask.astype(np.uint8))
+        paths.update(write_centerline(folder, *graph), vessel_mask="vessel_mask.npy")
+    return paths
+
+
+def write_artifacts(scan, output, *, vessel_mask=None):
+    """Atomically export native HU/YAML and optional scan-grid vessel topology."""
+    output = Path(output).expanduser().resolve()
+    if output.exists():
+        raise FileExistsError(f"Use a new output directory: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=output.parent, prefix=".ct-artifacts-") as temp:
         folder = Path(temp) / "artifacts"
-        scan.save(folder)
-        if graph is not None:
-            np.save(folder / "vessel_mask.npy", mask.astype(np.uint8))
-            write_centerline(folder, *graph)
+        write_scan_artifacts(scan, folder, vessel_mask=vessel_mask)
         shutil.move(str(folder), output)
     return output
 

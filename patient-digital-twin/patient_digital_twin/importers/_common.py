@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
+from threading import RLock
 
 import nibabel as nib
 import numpy as np
@@ -74,7 +77,7 @@ def selected_labels(labelmap, names=None):
     return {i: name for i, name in labels.items() if name in names}
 
 
-def segmentation_anatomy(image, labelmap, *, configuration=None, names=None):
+def segmentation_anatomy(image, labelmap, *, names=None):
     """Mesh catalog labels and keep unsupported/unobserved catalog entries empty."""
     labels = selected_labels(labelmap, names)
     data = np.asanyarray(image.dataobj)
@@ -95,7 +98,7 @@ def segmentation_anatomy(image, labelmap, *, configuration=None, names=None):
         mapping,
         affine_xyz_to_imaging_m=nifti_affine_m(image),
     )
-    return importer.to_anatomy_collection(configuration=configuration)
+    return importer.to_anatomy_collection()
 
 
 def coverage(body, supported, *, backend, requested=None, **details):
@@ -152,6 +155,36 @@ def runtime(python_executable, modules, install):
     return python
 
 
-def run_backend(command, *, cwd=None):
-    """Run a backend with visible progress; fail rather than import stale output."""
-    subprocess.run([str(item) for item in command], cwd=cwd, check=True)
+
+_BACKEND_LOCK = RLock()
+
+
+def _script_modules():
+    return [name for name in sys.modules if name == "scripts" or name.startswith("scripts.")]
+
+
+@contextmanager
+def backend_context(root):
+    """Serialize our adapters and restore import/CLI state, even after failure.
+
+    Upstream uses relative paths and a top-level scripts package. These are
+    process-wide settings; unrelated threads must not depend on the cwd during
+    inference. Use python_executable for process isolation when needed.
+    """
+    root = Path(root).resolve()
+    with _BACKEND_LOCK:
+        cwd, path, argv = Path.cwd(), sys.path[:], sys.argv
+        saved = {name: sys.modules.pop(name) for name in _script_modules()}
+        try:
+            sys.path.insert(0, str(root))
+            os.chdir(root)
+            importlib.invalidate_caches()
+            yield
+        finally:
+            for name in _script_modules():
+                del sys.modules[name]
+            sys.modules.update(saved)
+            sys.path[:] = path
+            sys.argv = argv
+            os.chdir(cwd)
+            importlib.invalidate_caches()

@@ -10,8 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from ..geometry import rigid_transform, transform_points, validate_triangles
-from ._labels import anatomy_from_labels
-from ._segmentation import canonical_name
+from ._segmentation import anatomy_from_labels, canonical_name
 
 
 def _load_mesh(path):
@@ -95,7 +94,7 @@ class SimpleImporter:
         self.body_to_imaging = body_to_imaging
         self.report = None
 
-    def to_anatomy_collection(self, *, configuration=None):
+    def to_anatomy_collection(self):
         """Return a body containing only the requested structures and retained meshes."""
         names = {raw: canonical_name(raw) for raw in self.meshes}
         if len(set(names.values())) != len(names):
@@ -116,8 +115,6 @@ class SimpleImporter:
             structure.vertices, structure.faces = vertices, faces
             structure.local_to_body = rigid_transform(placement)
             structure.local_to_world = structure.local_to_body.copy()
-        if configuration is not None:
-            body.configure(configuration)
         self.report = {
             "backend": "simple",
             "present": sorted(body.structures),

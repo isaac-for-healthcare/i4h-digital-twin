@@ -9,14 +9,81 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import yaml
 
-from ..artifacts import write_centerline
+from ..anatomy import MeshGeometry
+from ..artifacts import write_scan_artifacts
 from ..geometry import rigid_transform, transform_points
-from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
-from ..structures import AnatomicalStructure, MeshGeometry
-from ..topology import native_centerline
-from .native import mask_on_scan, scan_for_body, scan_from_body_m
+from ..scan_volume import from_array
 from .usd import _export_to_usd
+
+
+def scan_for_body(body):
+    imaging = body.imaging
+    if imaging is None:
+        return None
+    if imaging.source_scan is not None:
+        return imaging.source_scan
+    reverse = np.eye(4)
+    reverse[:3, :3] = np.eye(3)[:, [2, 1, 0]]
+    return from_array(
+        imaging.volume,
+        imaging.voxel_to_imaging @ reverse,
+        array_axes="kji",
+        world_unit="m",
+    )
+
+
+def scan_from_body_m(body, scan):
+    registration = (
+        body.imaging.body_to_imaging
+        if body.imaging is not None
+        else body.anatomy.body_to_imaging
+    )
+    if registration is None:
+        return np.eye(4)
+    ras_to_scan = (
+        np.diag([-1.0, -1.0, 1.0, 1.0])
+        if scan is not None and scan.frame == "LPS"
+        else np.eye(4)
+    )
+    return ras_to_scan @ registration
+
+
+def mask_on_scan(body, scan, names):
+    anatomy = body.anatomy
+    labels = anatomy.source_segmentation
+    if labels is not None:
+        if labels.shape != scan.values_kji.shape or not np.allclose(
+            anatomy.source_voxel_to_ras_m, scan.ijk_to_ras_m, atol=1e-9, rtol=1e-6
+        ):
+            raise ValueError(
+                "Segmentation and attached scan must share the same physical grid"
+            )
+        ids = [i for i, name in anatomy.source_label_names.items() if name in names]
+        mask = np.isin(labels, ids)
+    else:
+        # Mesh-only inputs have no source labels. Rasterize in native voxel indices.
+        from ..topology import voxelize_mesh
+
+        mask = np.zeros(scan.values_kji.shape, bool)
+        for name in names:
+            structure = anatomy.structures[name]
+            matrix = (
+                np.linalg.inv(scan.ijk_to_ras_m)
+                @ body.imaging.body_to_imaging
+                @ structure.local_to_body
+            )
+            vertices = transform_points(structure.mesh.vertices, matrix)
+            mask |= voxelize_mesh(
+                vertices,
+                structure.mesh.faces,
+                shape_zyx=mask.shape,
+                spacing_zyx_m=(1.0, 1.0, 1.0),
+                origin_xyz_m=(0.0, 0.0, 0.0),
+            )
+    if not mask.any():
+        raise ValueError("Selected vessels have no foreground in the scan")
+    return mask.transpose(["kji".index(c) for c in scan.array_axes])
 
 
 def export_patient_twin(
@@ -76,39 +143,19 @@ def export_patient_twin(
             if np.linalg.det(scan.ijk_to_world[:3, :3]) < 0:
                 faces = faces[:, ::-1]
             exterior_mesh = MeshGeometry(points, faces)
-    snapshot = HumanBody(
-        {
-            name: AnatomicalStructure(
-                name,
-                structure.kind,
-                structure.mesh.vertices,
-                structure.mesh.faces,
-                local_to_world=placement @ structure.local_to_body,
-                enabled=structure.enabled,
-                centerline=structure.centerline,
-            )
-            for name, structure in body.anatomy.structures.items()
-            if structure.mesh.vertices is not None
-        }
-    )
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=output.parent, prefix=".patient-twin-") as temp:
         folder = Path(temp) / "bundle"
         artifacts = {"anatomy_usd": "patient_anatomy.usdc"}
         if scan is not None:
-            scan.save(folder)
-            artifacts.update(hu_volume="volume.npy", volume_metadata="volume.yaml")
+            artifacts.update(write_scan_artifacts(scan, folder, vessel_mask=mask))
         else:
             folder.mkdir()
-        if mask is not None:
-            np.save(folder / "vessel_mask.npy", mask.astype(np.uint8))
-            points, edges, radii = native_centerline(mask, scan)
-            artifacts.update(write_centerline(folder, points, edges, radii))
-            artifacts["vessel_mask"] = "vessel_mask.npy"
         prims = _export_to_usd(
-            snapshot,
+            body,
             folder / "patient_anatomy.usdc",
             meters_per_unit=units,
+            body_placement=placement,
             exterior_mesh=exterior_mesh,
             skin_name="CT",
             skin_opacity=skin_opacity,
@@ -116,8 +163,8 @@ def export_patient_twin(
         structures = {
             name: {
                 "prim_path": prim_path,
-                "kind": snapshot.anatomy.structures[name].kind.value,
-                "enabled": snapshot.anatomy.structures[name].enabled,
+                "kind": body.anatomy.structures[name].kind.value,
+                "enabled": body.anatomy.structures[name].enabled,
             }
             for name, prim_path in prims.items()
         }

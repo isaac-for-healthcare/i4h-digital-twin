@@ -121,7 +121,7 @@ def extract_centerlines(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz
     mask = voxelize_mesh(vertices, faces, shape_zyx=shape_zyx,
                          spacing_zyx_m=spacing_zyx_m, origin_xyz_m=origin_xyz_m)
     points, edges, radii = centerline_from_mask(mask, spacing_zyx_m, origin_xyz_m)
-    return CenterlineGraph(points, radii, edges)
+    return CenterlineGraph(points=points, radii=radii, edges=edges)
 
 
 def centerline_from_mask(

@@ -69,7 +69,7 @@ def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_pr
             command[-1],
         )
 
-    monkeypatch.setattr(module, "run_backend", run)
+    monkeypatch.setattr(module.subprocess, "run", run)
     from patient_digital_twin.importers import _nvgenerate_worker
 
     def generate(seed, output, ct_output):
@@ -121,7 +121,7 @@ def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
             out / "image_segmentation.nii.gz",
         )
 
-    monkeypatch.setattr(module, "run_backend", run)
+    monkeypatch.setattr(module.subprocess, "run", run)
     bundle = ModuleType("monai.bundle")
 
     def bundle_run(*, config_file, meta_file):

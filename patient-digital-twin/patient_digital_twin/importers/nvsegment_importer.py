@@ -7,17 +7,17 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import nibabel as nib
 import numpy as np
 
-from ._backend_context import backend_context
 from ._common import (
+    backend_context,
     coverage,
     image_input,
-    run_backend,
     runtime,
     segmentation_anatomy,
     selected_labels,
@@ -43,18 +43,17 @@ class NVSegmentImporter:
         affine_xyz_to_imaging_m=None,
         python_executable=None,
     ):
-        self.image = image
+        self.image = image_input(image, affine_xyz_to_imaging_m)
         self.root = Path(
             bundle_root or os.environ.get("NV_SEGMENT_CTMR_ROOT", ".")
         ).resolve()
         self.modality = modality.upper()
         if self.modality not in ("CT", "MR"):
             raise ValueError("modality must be CT or MR")
-        self.affine = affine_xyz_to_imaging_m
         self.python_executable = python_executable
         self.report = None
 
-    def to_anatomy_collection(self, *, configuration=None, names=None):
+    def to_anatomy_collection(self, *, names=None):
         """Request supported catalog prompts, invert preprocessing, and mesh output."""
         python = runtime(
             self.python_executable,
@@ -81,7 +80,7 @@ class NVSegmentImporter:
         with TemporaryDirectory(prefix="patient-nvsegment-") as temp:
             temp = Path(temp)
             source = temp / "image.nii.gz"
-            input_image = image_input(self.image, self.affine)
+            input_image = self.image
             nib.save(input_image, source)
             overrides = json.loads(config.read_text())
             overrides.update(
@@ -104,7 +103,7 @@ class NVSegmentImporter:
                         meta_file=str(self.root / "configs/metadata.json"),
                     )
             else:
-                run_backend(
+                subprocess.run(
                     [
                         python,
                         "-m",
@@ -115,7 +114,7 @@ class NVSegmentImporter:
                         "--meta_file",
                         self.root / "configs/metadata.json",
                     ],
-                    cwd=self.root,
+                    cwd=self.root, check=True,
                 )
             outputs = list((temp / "masks").rglob("*.nii.gz"))
             if len(outputs) != 1:
@@ -133,11 +132,8 @@ class NVSegmentImporter:
                 )
             # VistaPostTransformd restores prompt IDs before saving the NIfTI.
             body = segmentation_anatomy(
-                result, supported, configuration=configuration, names=names
+                result, supported, names=names
             )
-        body.source_path = (
-            str(self.image) if isinstance(self.image, (str, Path)) else None
-        )
         self.report = coverage(
             body,
             supported.values(),

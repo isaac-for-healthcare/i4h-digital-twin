@@ -17,7 +17,8 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from ..anatomy import AnatomyCollection
+from ..anatomy import AnatomicalStructure, AnatomyCollection, Kind
+from ..catalog import CATALOG
 from ..geometry import transform_points
 
 SKIP_STRUCTURES = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
@@ -88,6 +89,18 @@ def normalize_labelmap(value: Mapping | str | Path) -> dict[int, str]:
     return result
 
 
+def anatomy_from_labels(names, *, strict=True):
+    """Create one collection from canonical names; IDs belong to the importer."""
+    names = tuple(dict.fromkeys(names))
+    unknown = set(names) - CATALOG.keys()
+    if strict and unknown:
+        raise ValueError(f"Unmapped labels: {sorted(unknown)}")
+    return AnatomyCollection({
+        name: AnatomicalStructure(name, CATALOG.get(name, Kind.UNKNOWN))
+        for name in names
+    })
+
+
 class SegmentationImporter:
     """One 3D integer mask volume indexed (slice Z, Y, X), plus its labelmap.
 
@@ -105,7 +118,6 @@ class SegmentationImporter:
         to_anatomy_collection() to extract surfaces. Filenames define their labels; names optionally selects directory masks before loading.
         """
         path = Path(path)
-        self.source_path = path
         if path.is_dir():
             self._load_directory(path, names=names)
         else:
@@ -168,7 +180,6 @@ class SegmentationImporter:
         deferred until to_anatomy_collection(), just as for file-based construction.
         """
         instance = cls.__new__(cls)
-        instance.source_path = None
         instance._initialize(
             masks_zyx,
             normalize_labelmap(labelmap),
@@ -217,7 +228,6 @@ class SegmentationImporter:
         self,
         *,
         strict: bool = False,
-        configuration=None,
     ) -> AnatomyCollection:
         """Extract present labels with the bundled imaging_to_mesh.mask_to_mesh.
 
@@ -226,15 +236,13 @@ class SegmentationImporter:
         are baked into the vertices, so even sheared images have rigid frames.
         The shared body origin is the extracted anatomy's bounding-box center.
         The collection retains source coordinates and scan bounds as import metadata.
-        Optional configuration is a YAML path or AnatomyConfiguration policy.
         Disabled meshes are retained for later re-enabling, not skipped at import.
         """
         from scipy.ndimage import find_objects
 
         from ..imaging_to_mesh import mask_to_mesh
-        from ._labels import anatomy_from_labels
 
-        body = anatomy_from_labels(self._names, strict=strict)
+        body = anatomy_from_labels(self._names.values(), strict=strict)
         # One pass finds every present label's bounding box; absent labels stay empty.
         boxes = find_objects(self.masks_zyx)
         present = {}
@@ -281,9 +289,4 @@ class SegmentationImporter:
         body.source_segmentation = self.masks_zyx
         body.source_label_names = dict(self._names)
         body.source_voxel_to_ras_m = self.affine_xyz_to_imaging_m.copy()
-        body.source_path = (
-            str(self.source_path) if self.source_path is not None else None
-        )
-        if configuration is not None:
-            body.configure(configuration)
         return body

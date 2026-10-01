@@ -22,7 +22,7 @@ def export_to_usd(body, path):
     Centerlines share their structure's local frame. Export does not change
     structure transforms or visibility.
     """
-    from .native import scan_for_body, scan_from_body_m
+    from .patient_twin import scan_for_body, scan_from_body_m
 
     scan = scan_for_body(body)
     units = scan.meters_per_unit if scan is not None else 1.0
@@ -50,6 +50,7 @@ def _export_to_usd(
     skin_name="CT",
     native_scan=None,
     meters_per_unit=1.0,
+    body_placement=None,
 ):
     """Write current posed geometry to USD, preserving hidden source meshes.
 
@@ -166,7 +167,8 @@ def _export_to_usd(
             structure.mesh.faces,
             color,
             1.0,
-            structure.local_to_world,
+            structure.local_to_world if body_placement is None
+            else body_placement @ structure.local_to_body,
             structure.enabled,
         )
         prim.SetDisplayName(name)

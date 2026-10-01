@@ -1,15 +1,154 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Anatomy collection and shared system views."""
+"""Rigid anatomical structures and reversible mesh availability.
+
+MeshGeometry retains source geometry even while a structure is empty.
+The public vertices/faces properties expose only enabled geometry.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import TYPE_CHECKING
 
-from .configuration import AnatomyConfiguration
-from .geometry import rigid_transform
-from .structures import AnatomicalStructure, Kind, System
+import numpy as np
+
+from .geometry import rigid_transform, transform_points
+
+if TYPE_CHECKING:
+    from .topology import CenterlineGraph
+
+
+class Kind(str, Enum):
+    """Segmentation category; use enum values when filtering with body.anatomy.select()."""
+
+    ORGAN = "organ"
+    BONE = "bone"
+    MUSCLE = "muscle"
+    VESSEL = "vessel"
+    AIRWAY = "airway"
+    ORGAN_PART = "organ_part"
+    GROUP = "structure_group"
+    FINDING = "finding"
+    UNKNOWN = "unknown"
+
+
+class System(str, Enum):
+    """Supported system names, also used verbatim as YAML systems keys."""
+
+    SKELETAL = "skeletal"
+    MUSCULAR = "muscular"
+    NERVOUS = "nervous"
+    CARDIOVASCULAR = "cardiovascular"
+    RESPIRATORY = "respiratory"
+    DIGESTIVE = "digestive"
+    URINARY = "urinary"
+    ENDOCRINE = "endocrine"
+    LYMPHATIC_IMMUNE = "lymphatic_immune"
+    REPRODUCTIVE = "reproductive"
+
+
+@dataclass
+class MeshGeometry:
+    """Stored local XYZ-meter vertices and triangle indices."""
+
+    vertices: np.ndarray | None = field(default=None, repr=False)
+    faces: np.ndarray | None = field(default=None, repr=False)
+
+
+@dataclass(init=False)
+class AnatomicalStructure:
+    """One anatomy item with source geometry and rigid placement.
+
+    Normally created by an importer. For manual construction supply local XYZ
+    vertices in meters, triangle indices, and local_to_body. Use the public
+    geometry properties for display and mesh for retained disabled storage.
+    centerline stores topology in the same local frame as the source mesh.
+    Replacing vertices/faces clears it; after direct in-place mesh edits, call
+    HumanBody.extract_topology() again to refresh it.
+    """
+
+    name: str
+    kind: Kind
+    mesh: MeshGeometry = field(repr=False)
+    centerline: CenterlineGraph | None = field(default=None, repr=False)
+    enabled: bool
+    local_to_body: np.ndarray = field(repr=False)
+    local_to_world: np.ndarray = field(repr=False)
+
+    def __init__(
+        self,
+        name,
+        kind,
+        vertices=None,
+        faces=None,
+        local_to_body=None,
+        local_to_world=None,
+        *,
+        enabled=True,
+        centerline=None,
+    ):
+        """Create metadata alone or retain caller-supplied local mesh arrays.
+
+        Arrays are not copied or automatically meshed. local_to_body describes
+        the imported placement relative to the shared body origin.
+        """
+        self.name = name
+        self.kind = Kind(kind)
+        self.mesh = MeshGeometry(vertices, faces)
+        self.centerline = centerline
+        self.enabled = enabled
+        self.local_to_body = np.eye(4) if local_to_body is None else local_to_body
+        self.local_to_world = (
+            self.local_to_body.copy() if local_to_world is None else local_to_world
+        )
+
+    @property
+    def is_empty(self) -> bool:
+        """True when disabled or when no segmentation geometry was supplied."""
+        return self.vertices is None
+
+    @property
+    def vertices(self) -> np.ndarray | None:
+        """Enabled source vertices in local XYZ meters, or None when empty."""
+        return self.mesh.vertices if self.enabled else None
+
+    @vertices.setter
+    def vertices(self, value):
+        """Replace source vertices and clear the cached centerline."""
+        self.mesh.vertices = value
+        self.centerline = None
+
+    @property
+    def faces(self) -> np.ndarray | None:
+        """Enabled triangle indices into vertices; None when geometry is unavailable."""
+        return (
+            self.mesh.faces if self.enabled and self.mesh.vertices is not None else None
+        )
+
+    @faces.setter
+    def faces(self, value):
+        """Store triangle connectivity, including while disabled; no remeshing occurs."""
+        self.mesh.faces = value
+        self.centerline = None
+
+    @property
+    def body_vertices(self) -> np.ndarray | None:
+        """Recover imported body-frame coordinates, unaffected by posing."""
+        return (
+            None
+            if self.is_empty
+            else transform_points(self.vertices, self.local_to_body)
+        )
+
+    @property
+    def world_vertices(self) -> np.ndarray | None:
+        """Render these current world coordinates; do not apply local_to_world again."""
+        if self.is_empty:
+            return None
+        return transform_points(self.vertices, self.local_to_world)
 
 
 class AnatomyCollection:
@@ -18,8 +157,6 @@ class AnatomyCollection:
     def __init__(self, structures=None):
         """Wrap a shared structure dictionary; this does not copy meshes or labels."""
         self.structures = {} if structures is None else structures
-        self._configuration = AnatomyConfiguration()
-        self.source_path = None
         self._body_to_imaging = None
         # Optional source label volume, used to rasterize vessels on the scan grid.
         self.source_segmentation = None
@@ -35,38 +172,21 @@ class AnatomyCollection:
     def body_to_imaging(self, value):
         self._body_to_imaging = None if value is None else rigid_transform(value).copy()
 
-    @property
-    def configuration(self) -> AnatomyConfiguration:
-        """Current immutable policy; setters create and validate a replacement."""
-        return self._configuration
-
-    def configure(self, source) -> None:
-        """Replace the policy atomically. Unknown structure names are errors."""
-        configuration = AnatomyConfiguration.load(source)
-        unknown = set(configuration.structures) - self.structures.keys()
-        if unknown:
-            raise ValueError(f"Unknown anatomical structures: {sorted(unknown)}")
-        self._configuration = configuration
-        self.apply_configuration()
-
-    def apply_configuration(self) -> None:
-        """Apply current settings, including to labels imported after configuration."""
-        for structure in self.structures.values():
-            structure.enabled = self._configuration.allows(structure)
-
     def set_enabled(self, enabled: bool) -> None:
-        """Toggle the master switch while retaining system and structure choices."""
-        self.configure(replace(self._configuration, enabled=enabled))
+        """Set visibility of all structures without discarding geometry."""
+        for structure in self.structures.values():
+            self.set_structure_enabled(structure.name, enabled)
 
     def set_system_enabled(self, system: System | str, enabled: bool) -> None:
-        """Change one system rule; explicit structure rules override it."""
-        settings = {**self._configuration.systems, System(system): enabled}
-        self.configure(replace(self._configuration, systems=settings))
+        """Set visibility of the current members of a system."""
+        for structure in self.select(system=system):
+            self.set_structure_enabled(structure.name, enabled)
 
     def set_structure_enabled(self, name: str, enabled: bool) -> None:
-        """Override a known structure without changing other policy settings."""
-        settings = {**self._configuration.structures, name: enabled}
-        self.configure(replace(self._configuration, structures=settings))
+        """Set visibility directly; later calls take precedence."""
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a boolean")
+        self.structures[name].enabled = enabled
 
     def select(
         self,
@@ -113,5 +233,5 @@ class AnatomicalSystem:
         return all(s.is_empty for s in self.structures)
 
     def set_enabled(self, enabled: bool) -> None:
-        """Change the system policy; explicit per-structure overrides still apply."""
+        """Set visibility of this system’s current structures."""
         self.anatomy.set_system_enabled(self.name, enabled)

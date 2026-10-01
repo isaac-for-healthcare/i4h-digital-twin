@@ -8,12 +8,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 
 from .catalog import CATALOG, is_vessel
 from .human import HumanBody
 from .importers import NVGenerateImporter, NVSegmentImporter
-from .importers._common import image_input
 from .importers._segmentation import canonical_name
 
 
@@ -91,17 +91,16 @@ def run_pipeline(
                 series_uid=series_uid,
                 conversion=scan_volume.Conversion(world_frame="LPS", world_unit="mm"),
             )
-            image = image_input(scan.values_kji.transpose(2, 1, 0), scan.ijk_to_ras_m)
         elif input.suffix in {".yaml", ".yml"}:
             scan = scan_volume.load_artifact(input)
-            image = image_input(scan.values_kji.transpose(2, 1, 0), scan.ijk_to_ras_m)
         elif input.is_file() and str(input).lower().endswith((".nii", ".nii.gz")):
             scan = scan_volume.from_nifti(input)
-            image = image_input(input)
         else:
             raise ValueError(
                 "input must be a DICOM directory, .nii/.nii.gz image, or volume.yaml"
             )
+        image = nib.Nifti1Image(scan.values_kji.transpose(2, 1, 0), scan.ijk_to_ras_m)
+        image.header.set_xyzt_units("meter")
         importer = NVSegmentImporter(
             image,
             bundle_root=bundle_root,

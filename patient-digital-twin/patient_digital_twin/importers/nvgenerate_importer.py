@@ -8,16 +8,16 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import nibabel as nib
 import numpy as np
 
-from ._backend_context import backend_context
 from ._common import (
+    backend_context,
     coverage,
-    run_backend,
     runtime,
     segmentation_anatomy,
     selected_labels,
@@ -44,7 +44,7 @@ class NVGenerateImporter:
         self.seed = None
         self.ct_scan = None
 
-    def to_anatomy_collection(self, *, configuration=None, names=None):
+    def to_anatomy_collection(self, *, names=None):
         """Return meshes and retain the matching CT array/affine on this importer."""
         self.ct_scan = None
         python = runtime(
@@ -70,9 +70,9 @@ class NVGenerateImporter:
                     generate(self.seed, output, ct_output)
             else:
                 worker = Path(__file__).with_name("_nvgenerate_worker.py").read_text()
-                run_backend(
+                subprocess.run(
                     [python, "-c", worker, str(self.seed), output, ct_output],
-                    cwd=self.root,
+                    cwd=self.root, check=True,
                 )
             mask_image, ct_image = nib.load(output), nib.load(ct_output)
             if mask_image.shape != ct_image.shape or not np.allclose(
@@ -91,7 +91,7 @@ class NVGenerateImporter:
                 "seed": self.seed,
             }
             body = segmentation_anatomy(
-                mask_image, labelmap, configuration=configuration, names=names
+                mask_image, labelmap, names=names
             )
         self.ct_scan = scan
         self.report = coverage(

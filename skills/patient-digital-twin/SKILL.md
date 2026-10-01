@@ -47,7 +47,9 @@ body.export_to_usd("patient.usdc")
 ```
 
 Importers return `AnatomyCollection`; `body.imaging` starts as `None`.
-Use `body.anatomy` for configuration, systems and selection. Disabled geometry remains in `structure.mesh`, while public geometry
+Use `body.anatomy` for direct visibility, systems and selection.
+Visibility setters apply immediately; the last call wins. There is no YAML
+configuration policy or `configuration=` argument. Disabled geometry remains in `structure.mesh`, while public geometry
 properties return `None`; export keeps it invisible. To omit structures entirely,
 use the pipeline's `--anatomy` selection.
 

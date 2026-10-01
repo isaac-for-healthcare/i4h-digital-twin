@@ -3,24 +3,22 @@
 
 """Public API for patient digital twins."""
 
-from .anatomy import AnatomicalSystem, AnatomyCollection
-from .configuration import AnatomyConfiguration
-from .human import HumanBody
-from .imaging import ImagingVolume
-from .importers import NVGenerateImporter, NVSegmentImporter, SegmentationImporter
-from .structures import (
+from .anatomy import (
     AnatomicalStructure,
+    AnatomicalSystem,
+    AnatomyCollection,
     Kind,
     MeshGeometry,
     System,
 )
+from .human import HumanBody, ImagingVolume
+from .importers import NVGenerateImporter, NVSegmentImporter, SegmentationImporter
 from .topology import CenterlineGraph
 
 __all__ = [
     "AnatomicalStructure",
     "AnatomicalSystem",
     "AnatomyCollection",
-    "AnatomyConfiguration",
     "CenterlineGraph",
     "HumanBody",
     "ImagingVolume",

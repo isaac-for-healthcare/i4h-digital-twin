@@ -5,9 +5,74 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import numpy as np
+
 from .anatomy import AnatomyCollection
-from .geometry import transform_points
-from .imaging import ImagingVolume
+from .geometry import rigid_transform, transform_points
+
+
+@dataclass(frozen=True)
+class ImagingVolume:
+    """Owned ZYX voxels with XYZ voxel-to-RAS and body-to-RAS transforms in meters.
+
+    CT values must already be Hounsfield units. source_path is optional provenance,
+    never an instruction to load a file. Raw arrays are copied; an attached ScanVolume shares its read-only buffer.
+    """
+
+    volume: np.ndarray
+    voxel_to_imaging: np.ndarray
+    body_to_imaging: np.ndarray
+    source_path: str | None = None
+    modality: str = "CT"
+    source_scan: object | None = None
+
+    def __post_init__(self):
+        if not isinstance(self.volume, np.ndarray):
+            raise TypeError("Imaging must be provided as a NumPy volume")
+        if (
+            self.volume.ndim != 3
+            or not self.volume.size
+            or self.volume.dtype.kind not in "iuf"
+            or not np.isfinite(self.volume).all()
+        ):
+            raise ValueError(
+                "Imaging must be a non-empty, finite, real numeric 3D ZYX volume"
+            )
+        affine = np.array(self.voxel_to_imaging, dtype=float, copy=True)
+        if (
+            affine.shape != (4, 4)
+            or not np.isfinite(affine).all()
+            or not np.allclose(affine[3], [0, 0, 0, 1])
+            or np.linalg.matrix_rank(affine[:3, :3]) < 3
+        ):
+            raise ValueError("voxel_to_imaging must be an invertible affine in meters")
+        registration = rigid_transform(self.body_to_imaging).copy()
+        if self.source_scan is None:
+            volume = self.volume.copy()
+        else:
+            from .scan_volume import ScanVolume
+
+            if not isinstance(self.source_scan, ScanVolume):
+                raise TypeError("source_scan must be a ScanVolume")
+            volume = self.source_scan.values_kji
+            if not np.shares_memory(volume, self.volume) or not np.allclose(
+                affine, self.source_scan.ijk_to_ras_m
+            ):
+                raise ValueError("Attached volume and affine must match source_scan")
+        for name, value in (
+            ("volume", volume),
+            ("voxel_to_imaging", affine),
+            ("body_to_imaging", registration),
+        ):
+            value.setflags(write=False)
+            object.__setattr__(self, name, value)
+        if not isinstance(self.modality, str) or not self.modality.strip():
+            raise ValueError("modality must be a non-empty string")
+        object.__setattr__(self, "modality", self.modality.upper())
+        if self.source_path is not None:
+            object.__setattr__(self, "source_path", str(self.source_path))
 
 
 class HumanBody:
@@ -16,12 +81,7 @@ class HumanBody:
     Use body.anatomy to configure mesh availability and access system views.
     """
 
-    def __init__(
-        self,
-        anatomy=None,
-        *,
-        configuration=None,
-    ):
+    def __init__(self, anatomy=None):
         """Wrap imported anatomy (or a structure dictionary)."""
         self.anatomy = (
             anatomy
@@ -29,8 +89,6 @@ class HumanBody:
             else AnatomyCollection(anatomy)
         )
         self.imaging: ImagingVolume | None = None
-        if configuration is not None:
-            self.anatomy.configure(configuration)
 
     def attach_imaging(
         self,
@@ -113,10 +171,8 @@ class HumanBody:
         after every extraction succeeds; failures identify the offending
         anatomy. Optional names limits extraction to selected items.
         """
-        import numpy as np
-
+        from .anatomy import Kind
         from .catalog import is_vessel
-        from .structures import Kind
         from .topology import extract_centerlines
 
         if not np.isfinite(spacing_m) or spacing_m <= 0:
