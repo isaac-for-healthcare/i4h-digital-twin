@@ -49,7 +49,9 @@ def export_patient_twin(
 
     Source registration selects DICOM LPS; otherwise use the body frame.
     CT is optional. An empty vessel_names tuple omits the composite navigation
-    mask and centerline. CT and anatomy retain original imaging placement.
+    mask and centerline. The navigation graph is calculated from the final
+    CT-grid mask; per-structure graphs are retained separately. CT and anatomy
+    retain original imaging placement.
     Use exterior="ct" to request a CT envelope; exterior="auto" omits it.
     All retained anatomy meshes are included, even hidden ones.
     Output must be a new directory to avoid stale bundles. Pass physics_root
@@ -110,31 +112,6 @@ def export_patient_twin(
                 vessel_mask, structure=np.ones((3, 3, 3)), iterations=2
             )
         )
-        # Reuse stored structure graphs in original patient placement when available.
-        # Otherwise the isolated artifact writer calculates the composite mask graph.
-        centerline = None
-        if all(
-            body.anatomy.structures[name].centerline is not None
-            for name in vessel_names
-        ):
-            points, edges, radii, offset = [], [], [], 0
-            for name in vessel_names:
-                structure = body.anatomy.structures[name]
-                graph = structure.centerline
-                points.append(
-                    transform_points(
-                        graph.points, lps_from_body @ structure.local_to_body
-                    )
-                    * 1000
-                )
-                edges.append(graph.edges + offset)
-                radii.append(graph.radii * 1000)
-                offset += len(graph.points)
-            centerline = (
-                np.concatenate(points),
-                np.concatenate(edges),
-                np.concatenate(radii),
-            )
     if ct is not None:
         voxel_to_patient = np.diag([*spacing[::-1], 1.0])
         voxel_to_patient[:3, 3] = origin
@@ -194,7 +171,6 @@ def export_patient_twin(
                 folder,
                 source=source_path or "numpy",
                 vessel_mask=vessel_mask if vessel_names else None,
-                centerline=centerline if vessel_names else None,
                 hu_to_mu_preset=hu_to_mu_preset,
             )
         _export_to_usd(

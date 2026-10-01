@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+
 import nibabel as nib
 import numpy as np
 import pytest
@@ -71,7 +73,7 @@ def test_nvsegment_to_real_usd(monkeypatch, tmp_path, modality):
 
 
 @pytest.mark.parametrize("stored", [False, True])
-def test_workflow_has_physical_centerlines_and_reuses_existing(
+def test_workflow_centerline_uses_ct_grid_and_preserves_structure_graph(
     monkeypatch, tmp_path, stored
 ):
     pytest.importorskip("pxr")
@@ -127,3 +129,27 @@ def test_workflow_has_physical_centerlines_and_reuses_existing(
     assert np.load(path.parent / "centerline_radii_mm.npy").min() > 0
     assert manifest["coordinate_frame"] == "DICOM_LPS"
     assert "aorta" in manifest["centerlines"]
+
+    # Navigation uses the final CT-grid mask, even when local graphs exist.
+    from scipy.ndimage import distance_transform_edt
+
+    metadata = json.loads((path.parent / "metadata.json").read_text())
+    spacing = np.asarray(metadata["spacing_zyx_mm"])
+    origin = np.asarray(metadata["origin_xyz_mm"])
+    voxel_xyz = (points - origin) / spacing[::-1]
+    np.testing.assert_allclose(voxel_xyz, np.rint(voxel_xyz), atol=1e-6)
+    indices = np.rint(voxel_xyz).astype(int)[:, ::-1]
+    final_mask = np.load(path.parent / "vessel_mask.npy")
+    assert final_mask[tuple(indices.T)].all()
+    distances = distance_transform_edt(final_mask, sampling=spacing)
+    np.testing.assert_array_equal(
+        np.load(path.parent / "centerline_radii_mm.npy"),
+        distances[tuple(indices.T)].astype(np.float32),
+    )
+    edges = np.load(path.parent / "centerline_edges.npy")
+    assert len(edges) == len(points) - 1  # One unbranched tube.
+    neighbor_offsets = np.abs(indices[edges[:, 1]] - indices[edges[:, 0]])
+    assert (neighbor_offsets.max(axis=1) == 1).all()
+    with np.load(path.parent / manifest["centerlines"]["aorta"]["path"]) as saved:
+        for key in ("points", "edges", "radii"):
+            np.testing.assert_array_equal(saved[key], getattr(graph, key))

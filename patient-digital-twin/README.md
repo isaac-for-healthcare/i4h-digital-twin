@@ -58,9 +58,12 @@ vessel class and includes:
   navigation graph in LPS millimeters.
 - `centerlines/*.npz`: per-structure graphs in local meters, indexed by the manifest.
 
-Missing vessel centerlines are extracted before either export. Existing graphs
-are reused with their physical transforms. Skeleton extraction defaults to
-`--centerline-spacing-mm 1.5`; VMTK is not required for this pipeline.
+Missing per-structure vessel centerlines are extracted before either export.
+Existing per-structure graphs are reused with their physical transforms in USD
+and `centerlines/*.npz`. This extraction defaults to
+`--centerline-spacing-mm 1.5`. The workflow navigation graph is always calculated
+from the final `vessel_mask.npy` on the CT grid, independently of that setting.
+VMTK is not required for this pipeline.
 Workflow volumes must be axis-aligned after reorientation: resample oblique CT
 before running. `--patient-id` sets the manifest identifier. `--hu-to-mu linear`
 is the default, matching main: HU values from -1000 to 3000 map linearly to
@@ -478,9 +481,11 @@ manifest = body.export_patient_twin(
 Only attached CT plus nonempty `vessel_names` produces the composite vessel mask
 and navigation centerline. Requested vessels must have enabled meshes. Their
 original scan-frame surfaces are voxelized on the CT grid, closed, reduced to the
-largest component. Stored centerlines are reused; when missing, the composite
-mask is skeletonized. This requires VTK in addition to SciPy and
-usd-core. Geometry-only bundles do not supply a fluoroscopy/navigation volume;
+largest component, then skeletonized to produce the navigation graph. Navigation
+points use CT voxel centers in LPS millimeters; radii use the final mask’s distance
+transform with CT spacing. Stored per-structure graphs remain in USD and
+`centerlines/*.npz`. This requires VTK, SciPy, scikit-image, and usd-core.
+Geometry-only bundles do not supply a fluoroscopy/navigation volume;
 check the consuming application's required artifacts before using them.
 
 Exporter functions are also available from `patient_digital_twin.exporters`:
