@@ -12,7 +12,6 @@ patient package, NumPy and the `usd` extra installed.
 | Standalone `.usd`, `.usda`, `.usdc` | `body.export_to_usd(path)` | Presentation stage; anatomy, stored centerlines and embedded attached CT |
 | `patient_anatomy.usdc` plus `patient_twin.yaml` | `body.export_patient_twin(new_directory)` | Patient-frame anatomy and stored centerlines; HU CT and spatial metadata are separate bundle files |
 | Both of the above | `examples/pipeline.py` | Adds `human_body.usdc` alongside the patient bundle |
-| Physics-demo assets and extended manifest | `export_physics_examples(...)` | Derived meshes/configuration for the supported external physics demos |
 
 All patient stages have default prim `/HumanBody` and Z-up metadata.
 With CT, `metersPerUnit` matches the scan's declared spatial units; anatomy-only
@@ -32,8 +31,9 @@ body.export_to_usd("human_body.usdc")
 manifest = body.export_patient_twin("new_patient_bundle")
 ```
 
-`body` is a `HumanBody` constructed from imported anatomy. CT is optional;
-attach it with `AttachImaging()` when needed. See the [package usage guide](../README.md).
+Use `body` from the s0011 steps in the [package usage guide](../README.md).
+Run the snippets below in order from the repository root. CT is optional;
+attach it with `AttachScan()` when needed.
 
 Standalone export uses an identity root and current structure transforms.
 It preserves the live body's transforms and visibility. Do not apply a second
@@ -49,7 +49,7 @@ Bundle `exterior="auto"` omits an exterior. A CT envelope requires explicit
 `exterior="ct"` and attached CT. Standalone exports do not generate a CT envelope.
 
 A standalone USD replaces an existing file only after constructing the new
-layer. Bundle and physics exporters require new output directories and publish
+layer. Bundle exporters require new output directories and publish
 their completed output together. Keep all bundle artifacts with their manifest.
 
 ## Hierarchy and visibility
@@ -162,7 +162,7 @@ are generated when attached CT and `vessel_names` request them.
 Use the checked-in viewer with Isaac Sim's Python interpreter:
 
 ```bash
-/path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/patient/human_body.usdc
+/path/to/isaac-sim/python.sh examples/isaac_sim.py view human_body.usdc
 ```
 
 The script starts `SimulationApp` before importing Kit modules, opens the stage,
@@ -172,7 +172,7 @@ renders until closed and does not save the lighting or camera to the asset.
 
 For generation from your own inputs, use the [pipeline commands](../examples/README.md).
 The separate `isaac_sim.py export` command exports anatomy from the bundled
-sample segmentation; it requires that sample's mask and label dictionary.
+s0011 binary masks; the aorta is selected by default.
 
 ## Reimporting mesh files
 
@@ -185,44 +185,5 @@ round-trip patient serialization format for `SimpleImporter`.
 
 For already-positioned per-structure meshes, supply explicit `mesh_to_body`
 matrices (identity when already in a shared body frame). The Python importer's
-omitted transforms use bundled reference placements, whereas the simple pipeline
-supplies identity for omitted transforms. STL/OBJ coordinates must already be
+omitted transforms are identity, as in the simple pipeline. STL/OBJ coordinates must already be
 XYZ meters.
-
-## Physics-demo exports
-
-Install the patient's `physics` extra and provide the physics source checkout
-containing `physics_simulation/endoluminal/xcath/scenes/` and, for liver,
-`physics_simulation/surgical/examples/`. Export from an existing bundle:
-
-```python
-from patient_digital_twin.exporters import export_physics_examples
-
-manifest = export_physics_examples(
-    "patient_bundle/patient_twin.yaml",
-    "new_physics_bundle",
-    physics_root="/path/to/physics-checkout",
-    demos=("aorta",),
-)
-```
-
-Supported demos are `aorta`, `airways` (requires `trachea`), and `liver`.
-Omitting `demos` requests all three, each requiring an enabled source mesh.
-The exporter reads source geometry and demo configuration, keeps the largest
-mesh component, simplifies large meshes, repairs surfaces, and derives demo
-inputs. Aorta/airway exports cut an entry and use a numerical scene scale of 30;
-liver export tetrahedralizes and uses scale 20. The manifest records
-`scene_from_patient_m` for each demo. These are demo-specific scales, not a claim
-that solver parameters are calibrated to SI tissue properties.
-
-The new manifest references original bundle artifacts instead of copying them.
-Keep those source files available. Some liver configuration also references the
-physics checkout, so the output is not a portable standalone USD package.
-`body.export_patient_twin(..., physics_root=...)` can request all physics demos
-during bundle creation; use the separate function to select a subset.
-
-The implementation and behavioral checks live in
-[usd.py](../patient_digital_twin/exporters/usd.py),
-[patient_twin.py](../patient_digital_twin/exporters/patient_twin.py),
-[physics_export.py](../patient_digital_twin/exporters/physics_export.py), and
-[the export tests](../tests/test_usd.py).

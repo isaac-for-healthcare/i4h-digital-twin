@@ -22,7 +22,7 @@ when changing the API. Resolve these paths relative to this skill's directory.
 - Existing named meshes: `SimpleImporter` from `patient_digital_twin.importers`.
   STL/OBJ must use XYZ meters; USD imports bake units and transforms. Supply
   explicit `mesh_to_body` matrices for your data. Omitted Python API placements
-  use the bundled reference patient, not identity.
+  are identity; no sample-based placement is inferred.
 - CT requiring segmentation: `NVSegmentImporter`.
   Fresh paired generation: `NVGenerateImporter`. Read the relevant adapter's
   constructor before choosing backend options; models/runtimes are separate
@@ -30,7 +30,7 @@ when changing the API. Resolve these paths relative to this skill's directory.
 
 Install only integrations required for the task: from the root,
 `uv pip install './patient-digital-twin[usd]'` enables USD. Patient extras are
-`usd`, `physics`, and `dev`; root extras prefix the integration
+`pipeline`, `dicom`, `usd`, and `dev`; root extras prefix the integration
 names with `patient-`. Skeleton topology also needs `vtk` and `scipy`.
 `usd-core` does not install Isaac Sim. Use the caller's provided input paths;
 sample data is not a substitute for the requested patient.
@@ -51,15 +51,12 @@ Use `body.anatomy` for configuration, systems and selection. Disabled geometry r
 properties return `None`; export keeps it invisible. To omit structures entirely,
 use the pipeline's `--anatomy` selection.
 
-All geometry and rigid transforms use XYZ meters. Image arrays use ZYX indexing;
-voxel affines take XYZ indices. `body.anatomy.body_to_imaging` preserves import
-registration; `local_to_body` is the original mesh placement and `local_to_world`
-is the current placement. Do not transform `world_vertices` a second time.
-
-Attach matching CT using `body.AttachImaging(volume_zyx,
-voxel_to_imaging=voxel_to_ras_m)`, with an explicit `body_to_imaging` when the
-image uses another frame. CT must already be HU. `source_path` is provenance,
-not a file loader. Exporters do not accept the old `ct_path` argument.
+Internal anatomy geometry and rigid transforms use XYZ meters. `local_to_body`
+is the original mesh placement and `local_to_world` is the current placement.
+Use `body.AttachScan(scan_volume.from_nifti(...))` for native CT exports; lower-level
+`AttachImaging` accepts KJI arrays and an IJK-to-RAS-meter affine. Schema-3 exports
+retain source array order, physical frame, and units. Simulator placement belongs
+to the consumer; attenuation mapping belongs to sensor-simulation.
 
 ## Topology and export
 
@@ -84,7 +81,7 @@ The segmentation pipeline requires matching CT; use the Python API for segmentat
 `export_to_usd` preserves current structure transforms with an identity root.
 `export_patient_twin` allows anatomy-only bundles. Navigation artifacts require attached CT and explicit `vessel_names`; `exterior="auto"`
 does not create a CT envelope. Read [the USD guide](../../patient-digital-twin/docs/usd.md)
-for coordinate frames, optional artifacts and physics-demo exports.
+for coordinate frames and optional artifacts.
 
 ## Verify the requested result
 

@@ -26,29 +26,30 @@ Python 3.10+, from the repository root:
 pip install -e './patient-digital-twin[pipeline]'
 ```
 
-The `pipeline` extra supplies USD and skeleton-centerline dependencies for all
+The `pipeline` extra supplies USD and skeleton-centerline dependencies for the segmentation and export
 examples below. For mesh extraction alone, install `./patient-digital-twin`.
 
 ## 1. Load a segmentation and extract meshes
 
-Use a 3D integer NIfTI and its matching label dictionary. This example assumes
-background is `0` and aorta is `1`; replace the map with your image's IDs, or pass
-a matching JSON file. Every nonzero ID in the image must have a name.
+Use the bundled [s0011 CT and masks](examples/data/README.md). Fetch its CT with
+Git LFS first (`git lfs pull`). The following Python snippets run in sequence from
+the repository root and use new output directories.
 
 ```python
+from pathlib import Path
 from patient_digital_twin import HumanBody, SegmentationImporter
 
-importer = SegmentationImporter("segmentation.nii.gz", {1: "aorta"})
-body = HumanBody(importer.to_anatomy_collection())  # Extracts the surfaces.
+sample = Path("patient-digital-twin/examples/data/s0011")
+importer = SegmentationImporter(sample / "segmentations", names=["aorta"])
+body = HumanBody(importer.to_anatomy_collection())
 aorta = body.anatomy.structures["aorta"]
-
-vertices = aorta.body_vertices  # (N, 3), XYZ meters in the shared body frame.
-faces = aorta.faces             # (M, 3), triangle vertex indices.
+vertices = aorta.body_vertices  # XYZ meters in the shared body frame.
+faces = aorta.faces             # Triangle vertex indices.
 ```
 
-A directory of non-overlapping binary NIfTI masks is also supported:
-`SegmentationImporter("masks/")` uses filenames such as `aorta.nii.gz` as names.
-No CT or model inference is needed to extract meshes.
+For a single label volume, pass its matching ID-to-name dictionary instead.
+Directory inputs use binary-mask filenames as names; `names` selects masks before
+loading them. No model inference is needed to use the supplied s0011 masks.
 
 ## 2. Optionally extract centerlines
 
@@ -72,7 +73,7 @@ physical coordinate frame; the affine carries its spacing, orientation, and orig
 ```python
 from patient_digital_twin.scan_volume import from_nifti
 
-body.AttachScan(from_nifti("ct.nii.gz"))
+body.AttachScan(from_nifti(sample / "ct.nii.gz"))
 ```
 
 `AttachScan` preserves the source array axes, spacing, orientation, origin, and
@@ -131,7 +132,9 @@ series), or an existing `volume.yaml`, in place of the NIfTI input below.
 DICOM CLI export keeps the acquisition grid in LPS millimeters and KJI array order.
 
 The small `scan_volume` helper is also shipped in sensor-simulation. Use it
-explicitly when a consumer needs a chosen frame, units, axes, or voxel spacing:
+explicitly when a consumer needs a chosen frame, units, axes, or voxel spacing.
+This separate example requires your own regular CT series in `dicom/` and the
+`dicom` extra; s0011 is supplied as NIfTI:
 
 ```python
 from patient_digital_twin.scan_volume import Conversion, export_ct, replay
@@ -171,7 +174,7 @@ NV-Segment rather than the supplied masks:
 
 ```bash
 python -m patient_digital_twin \
-  --source nvsegment --input /path/to/s0011/ct.nii.gz \
+  --source nvsegment --input patient-digital-twin/examples/data/s0011/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
   --classes aorta \
   --format bundle --output ./output/s0011_aorta
@@ -181,13 +184,13 @@ python -m patient_digital_twin \
   --classes aorta liver --format usd --output ./output/generated.usdc
 ```
 
-The import API uses the same backends:
+The import API uses the same backends (requires the indicated model checkout and weights):
 
 ```python
 from patient_digital_twin import NVSegmentImporter, NVGenerateImporter
 
 anatomy = NVSegmentImporter(
-    "ct.nii.gz", bundle_root="/path/to/NV-Segment-CTMR/NV-Segment-CTMR"
+    sample / "ct.nii.gz", bundle_root="/path/to/NV-Segment-CTMR/NV-Segment-CTMR"
 ).to_anatomy_collection(names=["aorta"])
 
 # Alternative: generate paired anatomy and CT.
@@ -224,4 +227,4 @@ Add `--headless` when no display is available.
 - [Package architecture](patient_digital_twin/README.md)
 - [USD layout and coordinate transforms](docs/usd.md)
 - [Example scripts and viewer](examples/README.md)
-- [Standalone CT artifact component](patient_digital_twin/legacy_ct/README.md)
+- [Standalone CT and centerline artifacts](examples/README.md#ct-and-centerline-arrays-only)

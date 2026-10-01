@@ -1,6 +1,6 @@
 ---
 name: patient-usd
-description: Inspect, display, transform, or consume USD and patient_twin.yaml assets exported by patient_digital_twin, including embedded CT, centerlines, Isaac Sim viewing, and physics-demo bundles. Use for this repository's patient USD contract, not general USD authoring.
+description: Inspect, display, transform, or consume USD and patient_twin.yaml assets exported by patient_digital_twin, including embedded CT, centerlines, Isaac Sim viewing. Use for this repository's patient USD contract, not general USD authoring.
 ---
 
 # Patient USD assets
@@ -19,10 +19,9 @@ coordinate frame or available imaging:
 | --- | --- |
 | Standalone `human_body.usdc` or another `export_to_usd` file | Presentation stage; CT may be embedded |
 | Manifest's `artifacts.anatomy_usd` (normally `patient_anatomy.usdc`) | Patient-frame anatomy; CT/attenuation are separate manifest artifacts |
-| Physics-demo output | Derived geometry with recorded scene transforms and external source/configuration dependencies |
 
 Names alone are not proof: inspect the stage and manifest. Patient stages have
-`/HumanBody` as default prim, meters and Z-up metadata. Exterior, CT and
+`/HumanBody` as default prim, declared `metersPerUnit`, and Z-up metadata. Exterior, CT and
 centerlines are optional. Summarize hierarchy, names, visibility and array shapes
 before loading or printing large voxel arrays. Open stages using `pxr.Usd`, not
 text parsing of binary `.usdc` files.
@@ -35,10 +34,9 @@ text parsing of binary `.usdc` files.
 - Use `UsdGeom.XformCache` for complete local-to-world transforms, including
   `/HumanBody`. Transpose Gf matrices when using the package's NumPy column-vector
   convention. Respect `metersPerUnit`; do not apply a second axis conversion.
-- Standalone export uses an identity root and retains current structure placements.
-- Bundle anatomy is in `coordinate_frame` (`DICOM_LPS` or `body`). Apply manifest
-  `world_from_patient_m` once for consumer world placement; it is not baked into
-  the bundle USD. Do not apply that matrix to the standalone presentation file.
+- Standalone export preserves current placements, transformed into the scan frame.
+- Schema-3 bundle anatomy uses the scan physical frame (`RAS`/`LPS`) and units.
+  Apply simulator placement downstream, after converting declared scan units.
 - Use computed visibility, including ancestors. Disabled meshes are retained
   but invisible; missing meshes have no prim. Hide `/HumanBody/Exterior` for
   inspection instead of removing skin. Preview changes in a session layer;
@@ -50,24 +48,15 @@ after export does not update the saved stage.
 
 ## CT and topology
 
-Standalone `/HumanBody/Imaging/CT` stores `ct:hu`, `ct:shapeZYX`,
-`ct:arrayOrder="ZYX_C"`, `ct:units="HU"`, and `ct:voxelToHuman`.
-Reshape HU in C order to ZYX. Transform XYZ voxel indices with `ct:voxelToHuman`
-then the HumanBody root transform. Do not assume an identity root, infer voxel
-spacing from shape, or infer imaging placement from an exterior mesh.
+Standalone CT stores `ct:hu`, `ct:shape`, `ct:arrayOrder`, and
+`ct:arrayIndexToScan`, plus physical frame and units. Reshape in C order using the
+recorded shape; the full affine maps array indices to scan coordinates.
 
-Mesh `centerline:points` and `centerline:radii` use local meters;
-`centerline:edges` indexes the points. Apply the mesh's complete transform to
-points; rigid transforms leave radii unchanged. The attributes do not render
-curves by themselves.
+USD mesh centerlines use local stage units. Bundle graph arrays use scan units and
+physical coordinates. Read `patient_twin.yaml` and `volume.yaml`; do not assume
+ZYX, LPS, or millimeters. `topology.py` calculates graphs and `artifacts.py` writes them.
 
-Resolve bundle paths relative to `patient_twin.yaml`. Per-structure centerline
-NPZ files use local meters and YAML `local_to_patient`. Optional composite
-navigation `centerline_points_mm.npy` and `centerline_radii_mm.npy` use patient
-millimeters. Check artifact presence instead of treating an anatomy-only bundle
-as a complete navigation input.
-
-## View, reuse, or export physics
+## View or reuse
 
 For interactive viewing, run from `patient-digital-twin/` using the installed
 Isaac Sim runtime:
@@ -85,14 +74,6 @@ it merges all meshes, including hidden ones, into a single named structure per
 input file and loses patient-level CT, topology and policy state. For
 per-structure import, use triangulated assets and explicit `mesh_to_body` placement.
 
-For physics requests, read the guide's physics section before calling
-`export_physics_examples`. It takes an existing manifest, a new output directory,
-a physics checkout and optional `demos`. Supported inputs are enabled `aorta`,
-`trachea` for `airways`, and `liver`; omitting `demos` requests all three.
-Derived geometry is repaired/simplified and uses demo-specific scales recorded
-in `scene_from_patient_m`. Keep original bundle artifacts and referenced checkout
-files available. Do not present these demo scales as calibrated tissue physics.
-
 ## Check the result
 
 After an edit or export, reopen the output. Check default prim, units, up axis,
@@ -100,4 +81,4 @@ expected named meshes, computed visibility and transforms. If relevant, check CT
 shape/affine and centerline alignment without dumping full data. For bundle edits,
 resolve affected artifact and prim paths and verify coordinate units. Test the
 requested runtime behavior when available and distinguish file validation from
-an Isaac Sim session or a physics run.
+an Isaac Sim session .
