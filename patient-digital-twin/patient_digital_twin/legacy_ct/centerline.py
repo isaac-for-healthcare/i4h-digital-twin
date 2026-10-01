@@ -56,8 +56,9 @@ def centerline_from_mask(
             j = index_of.get((int(z + dz), int(y + dy), int(x + dx)))
             if j is not None and j > i:
                 edges.append((i, j))
-    edges_arr = np.asarray(edges, dtype=np.int64) if edges else np.zeros((0, 2), dtype=np.int64)
+    edges_arr = (
+        np.asarray(edges, dtype=np.int64) if edges else np.zeros((0, 2), dtype=np.int64)
+    )
     if edges_arr.shape[0] < 1:
         raise RuntimeError("Skeleton produced no edges.")
     return pts, edges_arr, radii
-

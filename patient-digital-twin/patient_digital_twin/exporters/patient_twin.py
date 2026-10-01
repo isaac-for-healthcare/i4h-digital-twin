@@ -15,9 +15,9 @@ import yaml
 from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
+from ..legacy_ct.artifacts import write_artifacts
 from ..structures import AnatomicalStructure, MeshGeometry
 from ..topology import voxelize_mesh
-from ..legacy_ct.artifacts import write_artifacts
 from .usd import _export_to_usd
 from .utils import attached_ct
 

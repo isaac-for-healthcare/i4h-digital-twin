@@ -110,7 +110,8 @@ def load_dicom_series_hu(dicom_dir: str | Path, reorient: bool = True) -> CtVolu
         import SimpleITK as sitk  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
-            "SimpleITK is required to load DICOM series. Install it with:\n" "  pip install SimpleITK"
+            "SimpleITK is required to load DICOM series. Install it with:\n"
+            "  pip install SimpleITK"
         ) from exc
 
     ddir = Path(dicom_dir)
@@ -172,7 +173,9 @@ def load_nifti_hu(nifti_path: str | Path, reorient: bool = True) -> CtVolume:
     try:
         import nibabel as nib  # type: ignore
     except Exception as exc:  # pragma: no cover
-        raise RuntimeError("nibabel is required to load NIfTI files. Install with:\n  pip install nibabel") from exc
+        raise RuntimeError(
+            "nibabel is required to load NIfTI files. Install with:\n  pip install nibabel"
+        ) from exc
 
     nifti_path = Path(nifti_path)
     if not nifti_path.exists():

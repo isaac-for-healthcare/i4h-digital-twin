@@ -60,18 +60,22 @@ class VolumeMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "VolumeMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> VolumeMetadata:
         return cls(
             shape_zyx=tuple(data["shape_zyx"]),
             spacing_zyx_mm=tuple(data["spacing_zyx_mm"]),
-            origin_xyz_mm=tuple(data["origin_xyz_mm"]) if data.get("origin_xyz_mm") else None,
+            origin_xyz_mm=tuple(data["origin_xyz_mm"])
+            if data.get("origin_xyz_mm")
+            else None,
             hu_range=tuple(data["hu_range"]) if data.get("hu_range") else None,
             mu_range=tuple(data["mu_range"]) if data.get("mu_range") else None,
             source=data.get("source"),
             hu_to_mu=dict(data["hu_to_mu"]) if data.get("hu_to_mu") else None,
             anatomical_frame=data.get("anatomical_frame"),
             source_orientation=data.get("source_orientation"),
-            direction=tuple(data["direction_row_major_3x3"]) if data.get("direction_row_major_3x3") else None,
+            direction=tuple(data["direction_row_major_3x3"])
+            if data.get("direction_row_major_3x3")
+            else None,
         )
 
 
@@ -119,7 +123,7 @@ class PreprocessedVolume:
         return output_dir
 
     @classmethod
-    def load(cls, input_dir: str | Path) -> "PreprocessedVolume":
+    def load(cls, input_dir: str | Path) -> PreprocessedVolume:
         input_dir = Path(input_dir)
         mu_path = input_dir / "mu_volume.npy"
         meta_path = input_dir / "metadata.json"
@@ -128,5 +132,7 @@ class PreprocessedVolume:
         if not meta_path.exists():
             raise FileNotFoundError(f"Metadata file not found: {meta_path}")
         mu_volume = np.load(mu_path)
-        metadata = VolumeMetadata.from_dict(json.loads(meta_path.read_text(encoding="utf-8")))
+        metadata = VolumeMetadata.from_dict(
+            json.loads(meta_path.read_text(encoding="utf-8"))
+        )
         return cls(mu_volume, metadata)

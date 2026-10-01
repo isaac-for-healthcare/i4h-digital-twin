@@ -59,11 +59,15 @@ class TestWindowLevel:
     """Window/level parameterization of the ramp."""
 
     def test_from_window_level_sets_endpoints(self):
-        mapping = HuToMuMapping.from_window_level(window_center=100.0, window_width=800.0)
+        mapping = HuToMuMapping.from_window_level(
+            window_center=100.0, window_width=800.0
+        )
         assert (mapping.hu_min, mapping.hu_max) == (-300.0, 500.0)
 
     def test_window_center_and_width_round_trip(self):
-        mapping = HuToMuMapping.from_window_level(window_center=250.0, window_width=1500.0)
+        mapping = HuToMuMapping.from_window_level(
+            window_center=250.0, window_width=1500.0
+        )
         assert mapping.window_center == pytest.approx(250.0)
         assert mapping.window_width == pytest.approx(1500.0)
 
@@ -79,7 +83,9 @@ class TestWindowLevel:
         assert narrow.slope > wide.slope
 
     def test_shifted_moves_ramp_without_changing_width(self):
-        mapping = HuToMuMapping.from_window_level(window_center=0.0, window_width=1000.0)
+        mapping = HuToMuMapping.from_window_level(
+            window_center=0.0, window_width=1000.0
+        )
         moved = mapping.shifted(300.0)
         assert moved.window_center == pytest.approx(300.0)
         assert moved.window_width == pytest.approx(mapping.window_width)
@@ -92,13 +98,17 @@ class TestWindowLevel:
         assert steeper.slope == pytest.approx(1.5 * mapping.slope)
 
     def test_scaled_preserves_intermediate_knots(self):
-        mapping = HuToMuMapping(control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02)))
+        mapping = HuToMuMapping(
+            control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02))
+        )
         steeper = mapping.scaled(2.0)
         assert steeper.mu_knots == pytest.approx((0.0, 0.008, 0.04))
         assert steeper.hu_knots == mapping.hu_knots
 
     def test_with_window_level_rescales_intermediate_knots(self):
-        mapping = HuToMuMapping(control_points=((0.0, 0.0), (500.0, 0.005), (1000.0, 0.02)))
+        mapping = HuToMuMapping(
+            control_points=((0.0, 0.0), (500.0, 0.005), (1000.0, 0.02))
+        )
         rescaled = mapping.with_window_level(window_center=0.0, window_width=2000.0)
         assert rescaled.hu_knots == pytest.approx((-1000.0, 0.0, 1000.0))
         assert rescaled.mu_knots == pytest.approx(mapping.mu_knots)
@@ -114,19 +124,25 @@ class TestMultiPointCurve:
         np.testing.assert_allclose(mu, [mu_ for _, mu_ in points], rtol=1e-6)
 
     def test_bands_have_different_slopes(self):
-        mapping = HuToMuMapping(control_points=((0.0, 0.0), (100.0, 0.010), (1000.0, 0.012)))
+        mapping = HuToMuMapping(
+            control_points=((0.0, 0.0), (100.0, 0.010), (1000.0, 0.012))
+        )
         soft = hu_to_mu(np.array([50.0]), mapping)[0]
         bone = hu_to_mu(np.array([550.0]), mapping)[0]
         assert soft == pytest.approx(0.005, rel=1e-5)
         assert bone == pytest.approx(0.011, rel=1e-5)
 
     def test_endpoints_synced_to_scalar_fields(self):
-        mapping = HuToMuMapping(control_points=((-500.0, 0.001), (0.0, 0.004), (900.0, 0.03)))
+        mapping = HuToMuMapping(
+            control_points=((-500.0, 0.001), (0.0, 0.004), (900.0, 0.03))
+        )
         assert (mapping.hu_min, mapping.hu_max) == (-500.0, 900.0)
         assert (mapping.mu_min, mapping.mu_max) == (0.001, 0.03)
 
     def test_clamped_outside_outer_knots(self):
-        mapping = HuToMuMapping(control_points=((0.0, 0.002), (100.0, 0.01), (1000.0, 0.02)))
+        mapping = HuToMuMapping(
+            control_points=((0.0, 0.002), (100.0, 0.01), (1000.0, 0.02))
+        )
         mu = hu_to_mu(np.array([-4000.0, 6000.0]), mapping)
         np.testing.assert_allclose(mu, [0.002, 0.02], rtol=1e-6)
 
@@ -183,14 +199,18 @@ class TestSerialization:
         assert HuToMuMapping.from_dict(mapping.to_dict()) == mapping
 
     def test_control_points_round_trip(self):
-        mapping = HuToMuMapping(control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02)))
+        mapping = HuToMuMapping(
+            control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02))
+        )
         assert HuToMuMapping.from_dict(mapping.to_dict()) == mapping
 
     def test_ramp_dict_omits_control_points(self):
         assert "control_points" not in HuToMuMapping().to_dict()
 
     def test_from_dict_accepts_window_level(self):
-        mapping = HuToMuMapping.from_dict({"window_center": 100.0, "window_width": 800.0, "mu_max": 0.02})
+        mapping = HuToMuMapping.from_dict(
+            {"window_center": 100.0, "window_width": 800.0, "mu_max": 0.02}
+        )
         assert (mapping.hu_min, mapping.hu_max, mapping.mu_max) == (-300.0, 500.0, 0.02)
 
     def test_from_dict_falls_back_to_defaults(self):
@@ -222,21 +242,32 @@ class TestPreprocessorIntegration:
     """The configured curve is what lands in mu_volume and metadata."""
 
     def test_preprocess_applies_configured_ramp(self, synthetic_ct_hu, spacing_zyx_mm):
-        from patient_digital_twin.legacy_ct import PreprocessingSettings, VolumePreprocessor
+        from patient_digital_twin.legacy_ct import (
+            PreprocessingSettings,
+            VolumePreprocessor,
+        )
 
-        mapping = HuToMuMapping.from_window_level(window_center=100.0, window_width=800.0)
+        mapping = HuToMuMapping.from_window_level(
+            window_center=100.0, window_width=800.0
+        )
         volume = VolumePreprocessor.from_numpy(
             synthetic_ct_hu,
             spacing_zyx_mm=spacing_zyx_mm,
             settings=PreprocessingSettings(hu_to_mu=mapping),
         ).preprocess()
 
-        np.testing.assert_allclose(volume.mu_volume, hu_to_mu(synthetic_ct_hu, mapping), rtol=1e-6)
+        np.testing.assert_allclose(
+            volume.mu_volume, hu_to_mu(synthetic_ct_hu, mapping), rtol=1e-6
+        )
 
-    def test_narrower_window_raises_vessel_contrast(self, synthetic_ct_hu, spacing_zyx_mm):
+    def test_narrower_window_raises_vessel_contrast(
+        self, synthetic_ct_hu, spacing_zyx_mm
+    ):
         from patient_digital_twin.legacy_ct import VolumePreprocessor
 
-        preprocessor = VolumePreprocessor.from_numpy(synthetic_ct_hu, spacing_zyx_mm=spacing_zyx_mm)
+        preprocessor = VolumePreprocessor.from_numpy(
+            synthetic_ct_hu, spacing_zyx_mm=spacing_zyx_mm
+        )
         wide = preprocessor.preprocess().mu_volume
         narrow = preprocessor.with_hu_to_mu(
             HuToMuMapping.from_window_level(window_center=100.0, window_width=800.0)
@@ -247,7 +278,9 @@ class TestPreprocessorIntegration:
     def test_with_hu_to_mu_reuses_the_hu_volume(self, synthetic_ct_hu, spacing_zyx_mm):
         from patient_digital_twin.legacy_ct import VolumePreprocessor
 
-        preprocessor = VolumePreprocessor.from_numpy(synthetic_ct_hu, spacing_zyx_mm=spacing_zyx_mm)
+        preprocessor = VolumePreprocessor.from_numpy(
+            synthetic_ct_hu, spacing_zyx_mm=spacing_zyx_mm
+        )
         rewindowed = preprocessor.with_hu_to_mu(HuToMuMapping(hu_min=0.0, hu_max=500.0))
 
         assert rewindowed.hu_volume_zyx is preprocessor.hu_volume_zyx
@@ -255,9 +288,14 @@ class TestPreprocessorIntegration:
         assert preprocessor.settings.hu_to_mu.hu_max == HuToMuMapping().hu_max
 
     def test_metadata_records_the_curve(self, synthetic_ct_hu, spacing_zyx_mm):
-        from patient_digital_twin.legacy_ct import PreprocessingSettings, VolumePreprocessor
+        from patient_digital_twin.legacy_ct import (
+            PreprocessingSettings,
+            VolumePreprocessor,
+        )
 
-        mapping = HuToMuMapping(control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02)))
+        mapping = HuToMuMapping(
+            control_points=((-1000.0, 0.0), (0.0, 0.004), (1000.0, 0.02))
+        )
         volume = VolumePreprocessor.from_numpy(
             synthetic_ct_hu,
             spacing_zyx_mm=spacing_zyx_mm,

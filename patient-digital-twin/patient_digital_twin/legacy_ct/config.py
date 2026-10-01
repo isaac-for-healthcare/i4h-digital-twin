@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -73,13 +74,19 @@ class HuToMuMapping:
 
         points = tuple((float(hu), float(mu)) for hu, mu in self.control_points)
         if len(points) < 2:
-            raise ValueError(f"control_points needs at least 2 knots, got {len(points)}")
-        for (hu_lo, _), (hu_hi, _) in zip(points, points[1:]):
+            raise ValueError(
+                f"control_points needs at least 2 knots, got {len(points)}"
+            )
+        for (hu_lo, _), (hu_hi, _) in itertools.pairwise(points):
             if hu_hi <= hu_lo:
-                raise ValueError(f"control_points must have strictly increasing HU, got {points}")
+                raise ValueError(
+                    f"control_points must have strictly increasing HU, got {points}"
+                )
         for _, mu in points:
             if mu < 0.0:
-                raise ValueError(f"control_points must have non-negative mu, got {points}")
+                raise ValueError(
+                    f"control_points must have non-negative mu, got {points}"
+                )
 
         object.__setattr__(self, "control_points", points)
         object.__setattr__(self, "hu_min", points[0][0])
@@ -88,11 +95,17 @@ class HuToMuMapping:
         object.__setattr__(self, "mu_max", points[-1][1])
 
     @staticmethod
-    def _validate_ramp(hu_min: float, hu_max: float, mu_min: float, mu_max: float) -> None:
+    def _validate_ramp(
+        hu_min: float, hu_max: float, mu_min: float, mu_max: float
+    ) -> None:
         if hu_max <= hu_min:
-            raise ValueError(f"hu_max must be greater than hu_min, got hu_min={hu_min}, hu_max={hu_max}")
+            raise ValueError(
+                f"hu_max must be greater than hu_min, got hu_min={hu_min}, hu_max={hu_max}"
+            )
         if mu_min < 0.0 or mu_max < 0.0:
-            raise ValueError(f"mu values must be non-negative, got mu_min={mu_min}, mu_max={mu_max}")
+            raise ValueError(
+                f"mu values must be non-negative, got mu_min={mu_min}, mu_max={mu_max}"
+            )
 
     @property
     def points(self) -> tuple[tuple[float, float], ...]:
@@ -133,7 +146,7 @@ class HuToMuMapping:
         window_width: float,
         mu_max: float = 0.02,
         mu_min: float = 0.0,
-    ) -> "HuToMuMapping":
+    ) -> HuToMuMapping:
         """Build a two-point ramp from window/level parameters.
 
         Args:
@@ -162,7 +175,7 @@ class HuToMuMapping:
         self,
         window_center: float | None = None,
         window_width: float | None = None,
-    ) -> "HuToMuMapping":
+    ) -> HuToMuMapping:
         """Return a mapping repositioned and rescaled on the HU axis.
 
         The mu values and the relative spacing of any intermediate control points are
@@ -185,9 +198,11 @@ class HuToMuMapping:
 
         scale = width / self.window_width
         new_lo = center - 0.5 * width
-        return self._rebuilt((new_lo + (hu - self.hu_min) * scale, mu) for hu, mu in self.points)
+        return self._rebuilt(
+            (new_lo + (hu - self.hu_min) * scale, mu) for hu, mu in self.points
+        )
 
-    def shifted(self, delta_hu: float) -> "HuToMuMapping":
+    def shifted(self, delta_hu: float) -> HuToMuMapping:
         """Return a mapping translated along the HU axis (level control).
 
         Args:
@@ -198,7 +213,7 @@ class HuToMuMapping:
         """
         return self._rebuilt((hu + delta_hu, mu) for hu, mu in self.points)
 
-    def scaled(self, factor: float) -> "HuToMuMapping":
+    def scaled(self, factor: float) -> HuToMuMapping:
         """Return a mapping with all mu values scaled (contrast control).
 
         Args:
@@ -214,7 +229,7 @@ class HuToMuMapping:
             raise ValueError(f"factor must be non-negative, got {factor}")
         return self._rebuilt((hu, mu * factor) for hu, mu in self.points)
 
-    def _rebuilt(self, points: Iterable[tuple[float, float]]) -> "HuToMuMapping":
+    def _rebuilt(self, points: Iterable[tuple[float, float]]) -> HuToMuMapping:
         knots = tuple(points)
         if len(knots) == 2:
             (hu_lo, mu_lo), (hu_hi, mu_hi) = knots
@@ -234,7 +249,7 @@ class HuToMuMapping:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "HuToMuMapping":
+    def from_dict(cls, data: dict[str, Any]) -> HuToMuMapping:
         """Create a mapping from a config dictionary.
 
         Accepts either explicit ``control_points``, a ``window_center``/``window_width``
@@ -248,7 +263,11 @@ class HuToMuMapping:
             Mapping built from the recognised keys.
         """
         if data.get("control_points"):
-            return cls(control_points=tuple((float(hu), float(mu)) for hu, mu in data["control_points"]))
+            return cls(
+                control_points=tuple(
+                    (float(hu), float(mu)) for hu, mu in data["control_points"]
+                )
+            )
 
         defaults = cls()
         mu_min = float(data.get("mu_min", defaults.mu_min))

@@ -4,7 +4,6 @@
 import nibabel as nib
 import numpy as np
 import pytest
-
 from patient_digital_twin import main
 from patient_digital_twin.importers._common import segmentation_anatomy, selected_labels
 
@@ -30,7 +29,7 @@ def test_named_selection_uses_native_ids_and_limits_meshes():
     ],
 )
 def test_invalid_arguments_fail_before_model(options, message, tmp_path):
-    args = dict(source="nvsegment", classes=["aorta"], output=tmp_path / "patient.usdc")
+    args = {"source": "nvsegment", "classes": ["aorta"], "output": tmp_path / "patient.usdc"}
     args.update(options)
     with pytest.raises(ValueError, match=message):
         main.run_pipeline(**args)

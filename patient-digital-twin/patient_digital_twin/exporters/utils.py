@@ -73,7 +73,8 @@ def _image_to_ct(image):
 
 def hu_to_mu(hu):
     """Apply the navigation compatibility component's interventional curve."""
-    from ..legacy_ct import INTERVENTIONAL, hu_to_mu as convert
+    from ..legacy_ct import INTERVENTIONAL
+    from ..legacy_ct import hu_to_mu as convert
 
     return convert(hu, INTERVENTIONAL)
 

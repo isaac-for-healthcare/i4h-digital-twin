@@ -103,7 +103,9 @@ def _direction_matrix(direction: tuple[float, ...] | np.ndarray) -> np.ndarray:
         raise ValueError(f"direction contains non-finite values: {matrix.tolist()}")
     norms = np.linalg.norm(matrix, axis=0)
     if np.any(norms < 1e-9):
-        raise ValueError(f"direction has a degenerate column with zero length: {matrix.tolist()}")
+        raise ValueError(
+            f"direction has a degenerate column with zero length: {matrix.tolist()}"
+        )
     return matrix / norms
 
 
@@ -124,12 +126,16 @@ def _nearest_patient_axes(matrix: np.ndarray) -> tuple[tuple[int, int], ...]:
     Returns:
         ``(patient_axis, sign)`` per array axis ``(0, 1, 2)``.
     """
-    cosines = np.array([_axis_vector(matrix, axis) for axis in range(3)])  # [array axis, patient axis]
+    cosines = np.array(
+        [_axis_vector(matrix, axis) for axis in range(3)]
+    )  # [array axis, patient axis]
     assignment: dict[int, tuple[int, int]] = {}
     remaining = np.abs(cosines).copy()
 
     for _ in range(3):
-        array_axis, patient_axis = np.unravel_index(int(np.argmax(remaining)), remaining.shape)
+        array_axis, patient_axis = np.unravel_index(
+            int(np.argmax(remaining)), remaining.shape
+        )
         sign = 1 if cosines[array_axis, patient_axis] >= 0.0 else -1
         assignment[int(array_axis)] = (int(patient_axis), sign)
         remaining[array_axis, :] = -1.0
@@ -150,7 +156,9 @@ def orientation_code(direction: tuple[float, ...] | np.ndarray) -> str:
         is ``"SPL"``.
     """
     axes = _nearest_patient_axes(_direction_matrix(direction))
-    return "".join(_AXIS_LETTERS[patient_axis][1 if sign > 0 else 0] for patient_axis, sign in axes)
+    return "".join(
+        _AXIS_LETTERS[patient_axis][1 if sign > 0 else 0] for patient_axis, sign in axes
+    )
 
 
 def to_canonical_lps(
@@ -185,7 +193,9 @@ def to_canonical_lps(
         return CanonicalVolume(
             hu_zyx=np.ascontiguousarray(hu_zyx),
             spacing_zyx_mm=tuple(float(s) for s in spacing_zyx_mm),
-            origin_xyz_mm=tuple(float(v) for v in origin_xyz_mm) if origin_xyz_mm is not None else None,
+            origin_xyz_mm=tuple(float(v) for v in origin_xyz_mm)
+            if origin_xyz_mm is not None
+            else None,
             direction=tuple(np.eye(3).flatten()),
             source_code=_canonical_code(),
             permutation=(0, 1, 2),
@@ -195,12 +205,20 @@ def to_canonical_lps(
 
     matrix = _direction_matrix(direction)
     axes = _nearest_patient_axes(matrix)
-    source_code = "".join(_AXIS_LETTERS[patient_axis][1 if sign > 0 else 0] for patient_axis, sign in axes)
+    source_code = "".join(
+        _AXIS_LETTERS[patient_axis][1 if sign > 0 else 0] for patient_axis, sign in axes
+    )
 
-    by_patient_axis = {patient_axis: (array_axis, sign) for array_axis, (patient_axis, sign) in enumerate(axes)}
-    permutation = tuple(by_patient_axis[patient_axis][0] for patient_axis, _ in _CANONICAL_TARGETS)
+    by_patient_axis = {
+        patient_axis: (array_axis, sign)
+        for array_axis, (patient_axis, sign) in enumerate(axes)
+    }
+    permutation = tuple(
+        by_patient_axis[patient_axis][0] for patient_axis, _ in _CANONICAL_TARGETS
+    )
     signs = tuple(
-        by_patient_axis[patient_axis][1] * target_sign for patient_axis, target_sign in _CANONICAL_TARGETS
+        by_patient_axis[patient_axis][1] * target_sign
+        for patient_axis, target_sign in _CANONICAL_TARGETS
     )
     flipped_axes = tuple(axis for axis, sign in enumerate(signs) if sign < 0)
 
@@ -212,7 +230,9 @@ def to_canonical_lps(
     spacing = tuple(float(spacing_zyx_mm[source_axis]) for source_axis in permutation)
 
     # Columns of the reoriented direction matrix, in index order (i, j, k) = axes (2, 1, 0).
-    columns = [signs[axis] * _axis_vector(matrix, permutation[axis]) for axis in range(3)]
+    columns = [
+        signs[axis] * _axis_vector(matrix, permutation[axis]) for axis in range(3)
+    ]
     canonical_matrix = np.stack(columns[::-1], axis=1)
 
     origin = _reoriented_origin(
@@ -224,7 +244,10 @@ def to_canonical_lps(
         signs=signs,
     )
 
-    cosines = [float(np.dot(columns[axis], _unit_patient_axis(_CANONICAL_TARGETS[axis]))) for axis in range(3)]
+    cosines = [
+        float(np.dot(columns[axis], _unit_patient_axis(_CANONICAL_TARGETS[axis])))
+        for axis in range(3)
+    ]
     max_obliquity_deg = float(np.degrees(np.arccos(np.clip(min(cosines), -1.0, 1.0))))
 
     return CanonicalVolume(
@@ -275,7 +298,10 @@ def affine_to_lps(
 
 
 def _canonical_code() -> str:
-    return "".join(_AXIS_LETTERS[patient_axis][1 if sign > 0 else 0] for patient_axis, sign in _CANONICAL_TARGETS)
+    return "".join(
+        _AXIS_LETTERS[patient_axis][1 if sign > 0 else 0]
+        for patient_axis, sign in _CANONICAL_TARGETS
+    )
 
 
 def _unit_patient_axis(target: tuple[int, int]) -> np.ndarray:

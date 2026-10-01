@@ -12,11 +12,11 @@ import numpy as np
 
 from .catalog import CATALOG
 from .human import HumanBody
-from .structures import Kind
-from .legacy_ct.artifacts import PRESETS
 from .importers import NVGenerateImporter, NVSegmentImporter
 from .importers._common import image_input
 from .importers._segmentation import SegmentationImporter, canonical_name
+from .legacy_ct.artifacts import PRESETS
+from .structures import Kind
 
 
 def class_names(values):

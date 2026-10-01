@@ -14,8 +14,6 @@ from tempfile import TemporaryDirectory
 import nibabel as nib
 import numpy as np
 
-from ._segmentation import SegmentationImporter
-
 from ._common import (
     coverage,
     run_backend,
@@ -23,6 +21,7 @@ from ._common import (
     segmentation_anatomy,
     selected_labels,
 )
+from ._segmentation import SegmentationImporter
 
 
 class NVGenerateImporter:

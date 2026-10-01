@@ -46,7 +46,7 @@ class VolumePreprocessor:
         ct: CtVolume,
         source: str,
         settings: PreprocessingSettings | None,
-    ) -> "VolumePreprocessor":
+    ) -> VolumePreprocessor:
         return cls(
             hu_volume=ct.hu_zyx,
             spacing_zyx_mm=ct.spacing_zyx_mm or (1.0, 1.0, 1.0),
@@ -64,7 +64,7 @@ class VolumePreprocessor:
         dicom_dir: str | Path,
         settings: PreprocessingSettings | None = None,
         reorient: bool = True,
-    ) -> "VolumePreprocessor":
+    ) -> VolumePreprocessor:
         """Load a DICOM series, reoriented into the canonical LPS frame by default."""
         dicom_dir = Path(dicom_dir)
         if not dicom_dir.exists():
@@ -78,7 +78,7 @@ class VolumePreprocessor:
         nifti_path: str | Path,
         settings: PreprocessingSettings | None = None,
         reorient: bool = True,
-    ) -> "VolumePreprocessor":
+    ) -> VolumePreprocessor:
         """Load a NIfTI file, reoriented into the canonical LPS frame by default."""
         nifti_path = Path(nifti_path)
         if not nifti_path.exists():
@@ -93,7 +93,7 @@ class VolumePreprocessor:
         spacing_zyx_mm: tuple[float, float, float] = (1.0, 1.0, 1.0),
         settings: PreprocessingSettings | None = None,
         anatomical_frame: str | None = None,
-    ) -> "VolumePreprocessor":
+    ) -> VolumePreprocessor:
         """Wrap an in-memory HU volume.
 
         Args:
@@ -131,7 +131,7 @@ class VolumePreprocessor:
     def anatomical_frame(self) -> str | None:
         return self._anatomical_frame
 
-    def with_hu_to_mu(self, mapping: HuToMuMapping) -> "VolumePreprocessor":
+    def with_hu_to_mu(self, mapping: HuToMuMapping) -> VolumePreprocessor:
         """Return a preprocessor with a different transfer function, same HU volume.
 
         Lets a window/level sweep re-run :meth:`preprocess` without reloading the CT.

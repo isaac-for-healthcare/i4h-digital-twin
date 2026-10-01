@@ -10,7 +10,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from patient_digital_twin.legacy_ct import CANONICAL_FRAME, orientation_code, to_canonical_lps
+from patient_digital_twin.legacy_ct import (
+    CANONICAL_FRAME,
+    orientation_code,
+    to_canonical_lps,
+)
 
 # Patient-space (LPS) direction of each canonical array axis: axis 0 Superior,
 # axis 1 Posterior, axis 2 Left.
@@ -34,7 +38,9 @@ def canonical_hu() -> np.ndarray:
     return hu
 
 
-def direction_from_axes(axis_vectors: tuple[np.ndarray, np.ndarray, np.ndarray]) -> tuple[float, ...]:
+def direction_from_axes(
+    axis_vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
+) -> tuple[float, ...]:
     """Build a row-major direction matrix from the patient direction of each array axis.
 
     Columns are index axes ``(i, j, k)``, i.e. array axes ``(2, 1, 0)``.
@@ -66,7 +72,9 @@ def as_stored(
     flips = tuple(axis for axis, sign in enumerate(signs) if sign < 0)
     if flips:
         stored = np.flip(stored, axis=flips)
-    axis_vectors = tuple(signs[axis] * _CANONICAL_AXIS_VECTORS[permutation[axis]] for axis in range(3))
+    axis_vectors = tuple(
+        signs[axis] * _CANONICAL_AXIS_VECTORS[permutation[axis]] for axis in range(3)
+    )
     return np.ascontiguousarray(stored), direction_from_axes(axis_vectors)
 
 
@@ -114,7 +122,9 @@ class TestCanonicalReorientation:
     """Volumes are permuted and flipped into the LPS frame without resampling."""
 
     def test_canonical_input_is_untouched(self, canonical_hu):
-        result = to_canonical_lps(canonical_hu, np.eye(3).flatten(), SPACING_ZYX_MM, ORIGIN_XYZ_MM)
+        result = to_canonical_lps(
+            canonical_hu, np.eye(3).flatten(), SPACING_ZYX_MM, ORIGIN_XYZ_MM
+        )
 
         assert result.is_identity
         assert result.source_code == "SPL"
@@ -142,7 +152,9 @@ class TestCanonicalReorientation:
         stored, direction = as_stored(canonical_hu, (2, 0, 1), (1, 1, 1))
         assert stored.shape == (4, 8, 6)
 
-        result = to_canonical_lps(stored, direction, reorder(SPACING_ZYX_MM, (2, 0, 1)), ORIGIN_XYZ_MM)
+        result = to_canonical_lps(
+            stored, direction, reorder(SPACING_ZYX_MM, (2, 0, 1)), ORIGIN_XYZ_MM
+        )
 
         assert result.permutation == (1, 2, 0)
         np.testing.assert_array_equal(result.hu_zyx, canonical_hu)
@@ -150,23 +162,37 @@ class TestCanonicalReorientation:
 
     @pytest.mark.parametrize(
         "permutation,signs",
-        list(itertools.product(itertools.permutations((0, 1, 2)), itertools.product((1, -1), repeat=3))),
+        list(
+            itertools.product(
+                itertools.permutations((0, 1, 2)), itertools.product((1, -1), repeat=3)
+            )
+        ),
     )
-    def test_every_axis_aligned_orientation_is_recovered(self, canonical_hu, permutation, signs):
+    def test_every_axis_aligned_orientation_is_recovered(
+        self, canonical_hu, permutation, signs
+    ):
         stored, direction = as_stored(canonical_hu, permutation, signs)
-        result = to_canonical_lps(stored, direction, reorder(SPACING_ZYX_MM, permutation), ORIGIN_XYZ_MM)
+        result = to_canonical_lps(
+            stored, direction, reorder(SPACING_ZYX_MM, permutation), ORIGIN_XYZ_MM
+        )
 
         np.testing.assert_array_equal(result.hu_zyx, canonical_hu)
         assert result.spacing_zyx_mm == SPACING_ZYX_MM
         assert result.source_code == orientation_code(direction)
         assert orientation_code(result.direction) == "SPL"
-        np.testing.assert_allclose(np.asarray(result.direction).reshape(3, 3), np.eye(3), atol=1e-12)
+        np.testing.assert_allclose(
+            np.asarray(result.direction).reshape(3, 3), np.eye(3), atol=1e-12
+        )
         assert result.max_obliquity_deg == pytest.approx(0.0)
         assert not result.is_oblique
 
     @pytest.mark.parametrize(
         "permutation,signs",
-        list(itertools.product(itertools.permutations((0, 1, 2)), itertools.product((1, -1), repeat=3))),
+        list(
+            itertools.product(
+                itertools.permutations((0, 1, 2)), itertools.product((1, -1), repeat=3)
+            )
+        ),
     )
     def test_marker_positions_are_preserved(self, canonical_hu, permutation, signs):
         stored, direction = as_stored(canonical_hu, permutation, signs)
@@ -174,7 +200,9 @@ class TestCanonicalReorientation:
         result = to_canonical_lps(stored, direction, stored_spacing, ORIGIN_XYZ_MM)
 
         for value in (300.0, 400.0, 500.0):
-            before = voxel_position_mm(marker_index(stored, value), ORIGIN_XYZ_MM, direction, stored_spacing)
+            before = voxel_position_mm(
+                marker_index(stored, value), ORIGIN_XYZ_MM, direction, stored_spacing
+            )
             after = voxel_position_mm(
                 marker_index(result.hu_zyx, value),
                 result.origin_xyz_mm,
@@ -185,7 +213,9 @@ class TestCanonicalReorientation:
 
     def test_output_is_contiguous(self, canonical_hu):
         stored, direction = as_stored(canonical_hu, (1, 2, 0), (-1, 1, -1))
-        result = to_canonical_lps(stored, direction, reorder(SPACING_ZYX_MM, (1, 2, 0)), ORIGIN_XYZ_MM)
+        result = to_canonical_lps(
+            stored, direction, reorder(SPACING_ZYX_MM, (1, 2, 0)), ORIGIN_XYZ_MM
+        )
         assert result.hu_zyx.flags["C_CONTIGUOUS"]
 
     def test_unknown_origin_stays_unknown(self, canonical_hu):
@@ -194,7 +224,9 @@ class TestCanonicalReorientation:
 
     def test_summary_reports_the_applied_transform(self, canonical_hu):
         stored, direction = as_stored(canonical_hu, (0, 1, 2), (-1, 1, 1))
-        summary = to_canonical_lps(stored, direction, SPACING_ZYX_MM, ORIGIN_XYZ_MM).summary()
+        summary = to_canonical_lps(
+            stored, direction, SPACING_ZYX_MM, ORIGIN_XYZ_MM
+        ).summary()
         assert "IPL" in summary and CANONICAL_FRAME in summary
 
 
@@ -209,12 +241,16 @@ class TestObliqueAndInvalidInput:
         return direction_from_axes((_CANONICAL_AXIS_VECTORS[0], posterior, left))
 
     def test_small_tilt_is_not_flagged(self, canonical_hu):
-        result = to_canonical_lps(canonical_hu, self._rotated_about_superior(5.0), SPACING_ZYX_MM)
+        result = to_canonical_lps(
+            canonical_hu, self._rotated_about_superior(5.0), SPACING_ZYX_MM
+        )
         assert result.max_obliquity_deg == pytest.approx(5.0, abs=1e-6)
         assert not result.is_oblique
 
     def test_large_tilt_is_flagged_and_nearest_axes_are_used(self, canonical_hu):
-        result = to_canonical_lps(canonical_hu, self._rotated_about_superior(30.0), SPACING_ZYX_MM)
+        result = to_canonical_lps(
+            canonical_hu, self._rotated_about_superior(30.0), SPACING_ZYX_MM
+        )
 
         assert result.max_obliquity_deg == pytest.approx(30.0, abs=1e-6)
         assert result.is_oblique
@@ -249,7 +285,9 @@ class TestAffineToLps:
 
         direction, spacing, origin = affine_to_lps(np.eye(4))
 
-        np.testing.assert_allclose(np.asarray(direction).reshape(3, 3), np.diag([-1.0, -1.0, 1.0]))
+        np.testing.assert_allclose(
+            np.asarray(direction).reshape(3, 3), np.diag([-1.0, -1.0, 1.0])
+        )
         assert spacing == (1.0, 1.0, 1.0)
         assert origin == (0.0, 0.0, 0.0)
 
@@ -274,7 +312,9 @@ class TestAffineToLps:
 class TestLoaderIntegration:
     """End-to-end: a NIfTI in RAS lands in the canonical frame with metadata recorded."""
 
-    def _write_nifti(self, path: Path, canonical_hu: np.ndarray) -> tuple[float, float, float]:
+    def _write_nifti(
+        self, path: Path, canonical_hu: np.ndarray
+    ) -> tuple[float, float, float]:
         nib = pytest.importorskip("nibabel")
 
         # Store the volume RAS-style, the layout nibabel-authored files usually carry.
@@ -311,7 +351,10 @@ class TestLoaderIntegration:
         assert ct.anatomical_frame is None
 
     def test_metadata_carries_the_frame_downstream(self, tmp_path: Path, canonical_hu):
-        from patient_digital_twin.legacy_ct import PreprocessedVolume, VolumePreprocessor
+        from patient_digital_twin.legacy_ct import (
+            PreprocessedVolume,
+            VolumePreprocessor,
+        )
 
         path = tmp_path / "ct.nii.gz"
         self._write_nifti(path, canonical_hu)
@@ -322,7 +365,9 @@ class TestLoaderIntegration:
 
         assert metadata.anatomical_frame == CANONICAL_FRAME
         assert metadata.source_orientation == "SAR"
-        np.testing.assert_allclose(np.asarray(metadata.direction).reshape(3, 3), np.eye(3), atol=1e-12)
+        np.testing.assert_allclose(
+            np.asarray(metadata.direction).reshape(3, 3), np.eye(3), atol=1e-12
+        )
 
     def test_oblique_acquisition_warns(self, tmp_path: Path, canonical_hu):
         nib = pytest.importorskip("nibabel")
@@ -330,7 +375,10 @@ class TestLoaderIntegration:
 
         angle = np.radians(25.0)
         affine = np.eye(4)
-        affine[:2, :2] = [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+        affine[:2, :2] = [
+            [np.cos(angle), -np.sin(angle)],
+            [np.sin(angle), np.cos(angle)],
+        ]
         path = tmp_path / "oblique.nii.gz"
         nib.save(nib.Nifti1Image(np.transpose(canonical_hu, (2, 1, 0)), affine), path)
 

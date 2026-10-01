@@ -52,7 +52,7 @@ def _brightest_index(volume: np.ndarray) -> tuple[int, int, int]:
 def _darkest_columns(slice_yx: np.ndarray) -> list[int]:
     """Columns holding the edge marker, located by rank rather than absolute HU."""
     return sorted(
-        set(int(c) for c in np.argwhere(np.isclose(slice_yx, slice_yx.min()))[:, 1])
+        {int(c) for c in np.argwhere(np.isclose(slice_yx, slice_yx.min()))[:, 1]}
     )
 
 
