@@ -129,14 +129,14 @@ def run_pipeline(
             f"Requested classes have no mesh in the model output: {absent}"
         )
     body = HumanBody(anatomy)
-    if source == "nvsegment":
+    if source == "nvsegment" and modality == "CT":
         body.AttachImaging(
             np.asarray(image.dataobj).transpose(2, 1, 0),
             voxel_to_imaging=SegmentationImporter._affine_m(image),
             source_path=str(input),
             modality=modality,
         )
-    else:
+    elif source == "nvgenerate":
         body.AttachImaging(
             importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
         )

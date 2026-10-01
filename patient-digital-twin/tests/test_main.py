@@ -36,7 +36,8 @@ def test_invalid_arguments_fail_before_model(options, message, tmp_path):
         main.run_pipeline(**args)
 
 
-def test_nvsegment_to_real_usd(monkeypatch, tmp_path):
+@pytest.mark.parametrize("modality", ["CT", "MR"])
+def test_nvsegment_to_real_usd(monkeypatch, tmp_path, modality):
     pytest.importorskip("pxr")
     from pxr import Usd
 
@@ -58,10 +59,12 @@ def test_nvsegment_to_real_usd(monkeypatch, tmp_path):
         input=ct,
         classes=["liver"],
         output=tmp_path / "patient.usdc",
+        modality=modality,
     )
     stage = Usd.Stage.Open(str(output))
     names = [p.GetCustomDataByKey("anatomy:name") for p in stage.Traverse()]
     assert "liver" in names and "aorta" not in names
+    assert bool(stage.GetPrimAtPath("/HumanBody/Imaging/CT")) == (modality == "CT")
 
 
 @pytest.mark.parametrize("stored", [False, True])

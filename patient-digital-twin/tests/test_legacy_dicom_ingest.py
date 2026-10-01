@@ -51,7 +51,9 @@ def _brightest_index(volume: np.ndarray) -> tuple[int, int, int]:
 
 def _darkest_columns(slice_yx: np.ndarray) -> list[int]:
     """Columns holding the edge marker, located by rank rather than absolute HU."""
-    return sorted(set(int(c) for c in np.argwhere(np.isclose(slice_yx, slice_yx.min()))[:, 1]))
+    return sorted(
+        set(int(c) for c in np.argwhere(np.isclose(slice_yx, slice_yx.min()))[:, 1])
+    )
 
 
 def _voxel_position_mm(
@@ -82,10 +84,16 @@ def dicom_series(tmp_path: Path) -> Path:
     frame_of_reference_uid = generate_uid()
 
     for slice_index in range(SLICES):
-        stored = np.full((ROWS, COLUMNS), BACKGROUND_HU - RESCALE_INTERCEPT, dtype=np.uint16)
-        stored[:, :2] = EDGE_HU - RESCALE_INTERCEPT  # asymmetric edge, detects a column flip
+        stored = np.full(
+            (ROWS, COLUMNS), BACKGROUND_HU - RESCALE_INTERCEPT, dtype=np.uint16
+        )
+        stored[:, :2] = (
+            EDGE_HU - RESCALE_INTERCEPT
+        )  # asymmetric edge, detects a column flip
         if slice_index == FIDUCIAL_INDEX[0]:
-            stored[FIDUCIAL_INDEX[1], FIDUCIAL_INDEX[2]] = int(FIDUCIAL_HU - RESCALE_INTERCEPT)
+            stored[FIDUCIAL_INDEX[1], FIDUCIAL_INDEX[2]] = int(
+                FIDUCIAL_HU - RESCALE_INTERCEPT
+            )
 
         meta = FileMetaDataset()
         meta.MediaStorageSOPClassUID = CTImageStorage
@@ -108,7 +116,9 @@ def dicom_series(tmp_path: Path) -> Path:
         ds.PixelSpacing = [ROW_SPACING_MM, COLUMN_SPACING_MM]
         ds.SliceThickness = SLICE_THICKNESS_MM
         ds.ImageOrientationPatient = [*ROW_DIRECTION, *COLUMN_DIRECTION]
-        ds.ImagePositionPatient = list(FIRST_SLICE_ORIGIN_MM + slice_index * SLICE_THICKNESS_MM * SLICE_DIRECTION)
+        ds.ImagePositionPatient = list(
+            FIRST_SLICE_ORIGIN_MM + slice_index * SLICE_THICKNESS_MM * SLICE_DIRECTION
+        )
         ds.RescaleIntercept = RESCALE_INTERCEPT
         ds.RescaleSlope = 1.0
         ds.SamplesPerPixel = 1
@@ -119,7 +129,9 @@ def dicom_series(tmp_path: Path) -> Path:
         ds.PixelRepresentation = 0
         ds.PixelData = stored.tobytes()
 
-        pydicom.dcmwrite(directory / f"slice_{slice_index:03d}.dcm", ds, enforce_file_format=True)
+        pydicom.dcmwrite(
+            directory / f"slice_{slice_index:03d}.dcm", ds, enforce_file_format=True
+        )
 
     return directory
 
@@ -133,7 +145,9 @@ class TestHounsfieldScaling:
         hu = load_dicom_series_hu(dicom_series).hu_zyx
 
         # Applying Rescale Intercept twice would shift all three values by -1024 HU.
-        np.testing.assert_allclose(sorted(np.unique(hu)), [EDGE_HU, BACKGROUND_HU, FIDUCIAL_HU])
+        np.testing.assert_allclose(
+            sorted(np.unique(hu)), [EDGE_HU, BACKGROUND_HU, FIDUCIAL_HU]
+        )
 
     def test_air_and_soft_tissue_stay_in_range(self, dicom_series: Path):
         from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_dicom_series_hu
@@ -157,20 +171,26 @@ class TestDicomOrientation:
         from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_dicom_series_hu
 
         ct = load_dicom_series_hu(dicom_series)
-        np.testing.assert_allclose(np.asarray(ct.direction).reshape(3, 3), np.eye(3), atol=1e-9)
+        np.testing.assert_allclose(
+            np.asarray(ct.direction).reshape(3, 3), np.eye(3), atol=1e-9
+        )
 
     def test_spacing_follows_the_permuted_axes(self, dicom_series: Path):
         from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_dicom_series_hu
 
         ct = load_dicom_series_hu(dicom_series)
-        assert ct.spacing_zyx_mm == pytest.approx((SLICE_THICKNESS_MM, ROW_SPACING_MM, COLUMN_SPACING_MM))
+        assert ct.spacing_zyx_mm == pytest.approx(
+            (SLICE_THICKNESS_MM, ROW_SPACING_MM, COLUMN_SPACING_MM)
+        )
 
     def test_fiducial_keeps_its_patient_space_position(self, dicom_series: Path):
         from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_dicom_series_hu
 
         ct = load_dicom_series_hu(dicom_series)
         index = _brightest_index(ct.hu_zyx)
-        position = _voxel_position_mm(index, ct.origin_xyz_mm, ct.direction, ct.spacing_zyx_mm)
+        position = _voxel_position_mm(
+            index, ct.origin_xyz_mm, ct.direction, ct.spacing_zyx_mm
+        )
 
         np.testing.assert_allclose(position, _fiducial_position_mm(), atol=1e-6)
 
@@ -189,3 +209,20 @@ class TestDicomOrientation:
 
         assert _darkest_columns(ct.hu_zyx[0]) == [0, 1]
         assert ct.anatomical_frame is None
+
+
+@pytest.mark.parametrize(
+    "unit, scale", [("mm", 1.0), ("meter", 0.001), ("micron", 1000.0)]
+)
+def test_nifti_header_units_are_normalized_to_millimeters(tmp_path, unit, scale):
+    import nibabel as nib
+    from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_nifti_hu
+
+    affine = np.diag([2.0, 3.0, 4.0, 1.0])
+    affine[:3] *= scale
+    image = nib.Nifti1Image(np.zeros((4, 5, 6), np.float32), affine)
+    image.header.set_xyzt_units(unit)
+    path = tmp_path / "ct.nii.gz"
+    nib.save(image, path)
+    result = load_nifti_hu(path)
+    np.testing.assert_allclose(result.spacing_zyx_mm, [4.0, 3.0, 2.0])

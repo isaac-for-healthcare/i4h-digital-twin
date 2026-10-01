@@ -179,10 +179,15 @@ def load_nifti_hu(nifti_path: str | Path, reorient: bool = True) -> CtVolume:
         raise FileNotFoundError(f"NIfTI file not found: {nifti_path}")
 
     image = nib.load(nifti_path)
+    if len(image.shape) != 3:
+        raise ValueError("Expected a 3D CT image")
     arr_ijk = image.get_fdata().astype(np.float32)
     arr_zyx = np.transpose(arr_ijk, (2, 1, 0))
 
-    direction, spacing_ijk, origin_xyz = affine_to_lps(image.affine)
+    unit = image.header.get_xyzt_units()[0]
+    affine_mm = np.asarray(image.affine).copy()
+    affine_mm[:3] *= {"meter": 1000.0, "micron": 0.001}.get(unit, 1.0)
+    direction, spacing_ijk, origin_xyz = affine_to_lps(affine_mm)
     spacing_zyx = (spacing_ijk[2], spacing_ijk[1], spacing_ijk[0])
 
     if not reorient:
