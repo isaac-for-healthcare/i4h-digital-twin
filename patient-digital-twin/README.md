@@ -1,5 +1,114 @@
 # Patient Digital Twin
 
+Build a patient from **NV-Generate** (`nvgenerate`) or segment a medical image
+with **NV-Segment** (`nvsegment`). Select anatomy by name and export either the
+existing USD format or an i4h-workflows navigation bundle.
+
+## Run the patient pipeline
+
+From the repository root, install the independently packaged library and its
+export/topology dependencies (Python 3.10+):
+
+```bash
+uv pip install -e './patient-digital-twin[pipeline]'
+# Or: pip install -e './patient-digital-twin[pipeline]'
+python -m patient_digital_twin.main --help
+```
+
+`patient-digital-twin` is the equivalent installed console command. Use
+`--classes aorta iliac_artery_left` or `--classes aorta,iliac_artery_left`.
+Names come from `patient_digital_twin.catalog.CATALOG`. Unknown classes,
+classes unsupported by the chosen model/modality, and requested classes absent
+from its output are errors. Only the requested classes are meshed; NV-Segment
+also receives only those class prompts.
+
+```bash
+python -m patient_digital_twin.main \
+  --source nvsegment --input /path/to/ct.nii.gz \
+  --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
+  --python /path/to/model-env/bin/python \
+  --classes aorta --format workflow --output ./output/patient_aorta
+
+python -m patient_digital_twin.main \
+  --source nvgenerate --source-root /path/to/NV-Generate-CTMR \
+  --python /path/to/model-env/bin/python \
+  --classes aorta liver --format usd --output ./output/generated.usdc
+```
+
+`--source`, `--classes`, and `--output` are required. NV-Segment also
+requires `--input`: a finite 3D `.nii` or `.nii.gz` medical image with valid
+physical spacing/orientation. Convert DICOM to NIfTI before segmentation.
+CT intensities must be in Hounsfield units. `--modality MR` supports NV-Segment
+with **geometry-only USD**; workflow rendering requires CT. NV-Generate creates
+its own paired CT and labels and does not accept `--input`.
+
+Output paths must be new. `--format usd` (default) accepts `.usd`, `.usda`, or
+`.usdc` and preserves the existing meter-scale, Z-up USD hierarchy, embedded
+CT, and structure-local centerline attributes. `--format workflow` takes a
+new directory and writes `patient_twin.yaml` for i4h-workflows'
+`endoluminal_navigation` catheter/vasculature workflow. It requires at least one
+vessel class and includes:
+
+- `patient_anatomy.usdc`: named meshes and a CT-derived patient envelope.
+- `hu_volume.npy`, `mu_volume.npy`, `metadata.json`: canonical LPS, ZYX CT and
+  attenuation volume, spacing/origin, and the selected HU-to-attenuation curve.
+- `vessel_mask.npy`: vessel union on the CT grid, closed and reduced to its
+  largest connected component.
+- `centerline_points_mm.npy`, `centerline_edges.npy`, `centerline_radii_mm.npy`:
+  navigation graph in LPS millimeters.
+- `centerlines/*.npz`: per-structure graphs in local meters, indexed by the manifest.
+
+Missing vessel centerlines are extracted before either export. Existing graphs
+are reused with their physical transforms. Skeleton extraction defaults to
+`--centerline-spacing-mm 1.5`; VMTK is not required for this pipeline.
+Workflow volumes must be axis-aligned after reorientation: resample oblique CT
+before running. `--patient-id` sets the manifest identifier. `--hu-to-mu linear`
+selects the older linear attenuation curve; the default is `interventional`.
+
+### Model setup
+
+Model inference is optional and runs in a separate interpreter selected by
+`--python` (the current interpreter by default). Library installation does not
+download weights. For NV-Segment, follow the
+[upstream setup](https://github.com/NVIDIA-Medtech/NV-Segment-CTMR), install
+`torch`, `monai`, `pytorch-ignite`, `fire`, `einops`, and `huggingface_hub` into
+that GPU environment, and make the official checkpoint available at
+`<bundle-root>/models/model.pt`:
+
+```bash
+git clone https://github.com/NVIDIA-Medtech/NV-Segment-CTMR.git
+hf download nvidia/NV-Segment-CTMR vista3d_pretrained_model/model.pt \
+  --local-dir ./nvsegment-weights
+mkdir -p NV-Segment-CTMR/NV-Segment-CTMR/models
+cp nvsegment-weights/vista3d_pretrained_model/model.pt \
+  NV-Segment-CTMR/NV-Segment-CTMR/models/model.pt
+```
+
+For generation, follow the
+[NV-Generate setup](https://github.com/NVIDIA-Medtech/NV-Generate-CTMR) for the
+rflow-ct model, paired mask/image checkpoints, and conditioning dataset.
+`NV_SEGMENT_CTMR_ROOT` and `NV_GENERATE_ROOT` can replace the corresponding root
+arguments. Use a PyTorch build that supports the installed GPU.
+
+### Isolated CT artifact component
+
+`patient_digital_twin.legacy_ct` contains the CT ingest, orientation,
+HU-to-attenuation conversion, and mask/centerline artifact writers ported from
+the main-branch legacy implementation. It is isolated so it can be removed
+or replaced without changing the model importers. It runs without inference:
+
+```bash
+python -m patient_digital_twin.legacy_ct \
+  --ct /path/to/ct.nii.gz --vessel-mask /path/to/vessel_mask.nii.gz \
+  --output ./output/ct_artifacts
+```
+
+This command writes the seven volume/mask/graph artifacts above, not USD or a
+workflow manifest. Omit the mask to write only CT artifacts. See its
+[component README](patient_digital_twin/legacy_ct/README.md) for the API and provenance.
+
+## Python API and supporting examples
+
 For a high-level explanation, class diagram, API guide, and class-by-class
 test map, start with the [Python package architecture README](patient_digital_twin/README.md).
 
@@ -76,7 +185,7 @@ extras for the operation you need:
 | --- | --- | --- |
 | USD read/write | `usd` | `patient-usd` |
 | Physics-demo export | `physics`, plus the physics demo source checkout | `patient-physics` |
-| Pipeline / skeleton topology | `usd`, plus `scipy` and `vtk` | `patient-usd`, plus `scipy` and `vtk` |
+| Pipeline / skeleton topology | `pipeline` | `patient-pipeline` |
 
 STL/OBJ import additionally uses `trimesh`. Inference adapters require their
 backend runtime and model files; installing this package alone does not install
@@ -102,7 +211,7 @@ uv sync --extra dev --extra patient-usd
 .venv/bin/python patient-digital-twin/examples/pipeline.py --help
 ```
 
-The primary input is an NV-Generate-CTMR/MAISI `*_label.nii.gz` and the
+The lower-level `SegmentationImporter` input is an NV-Generate-CTMR/MAISI `*_label.nii.gz` and the
 **matching** `configs/label_dict.json` (or `label_dict_ctmr.json`). Never
 substitute a different model's ID map: IDs differ between workflows.
 The importer consumes existing segmentations; it does not run a generation
@@ -231,6 +340,8 @@ CT, topology, and physics-demo exports when their dependencies are installed.
 
 ## Import and export pipeline
 
+The public entry point is [main.py](patient_digital_twin/main.py), described above.
+For lower-level segmentation/mesh examples,
 [examples/pipeline.py](examples/pipeline.py) imports anatomy, attaches matching CT
 when available, extracts topology, and writes a patient
 bundle plus a standalone USD. See the [source-specific commands](examples/README.md).
@@ -333,7 +444,8 @@ manifest = body.export_patient_twin(
 Only attached CT plus nonempty `vessel_names` produces the composite vessel mask
 and navigation centerline. Requested vessels must have enabled meshes. Their
 original scan-frame surfaces are voxelized on the CT grid, closed, reduced to the
-largest component, and skeletonized. This requires VTK in addition to SciPy and
+largest component. Stored centerlines are reused; when missing, the composite
+mask is skeletonized. This requires VTK in addition to SciPy and
 usd-core. Geometry-only bundles do not supply a fluoroscopy/navigation volume;
 check the consuming application's required artifacts before using them.
 
