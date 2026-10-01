@@ -72,7 +72,7 @@ Shared / typical prerequisites (exact versions depend on the component):
 | --- | --- |
 | OS | Linux (x86_64) recommended |
 | Python | 3.10+ for installable packages (`patient_digital_twin` and the other twin modules) |
-| GPU | Optional for TotalSegmentator / MAISI / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
+| GPU | Optional for NV-Segment / NV-Generate / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
 | Tooling | `uv` or `pip`; Isaac Sim when loading USD in simulation |
 
 Installable packages do **not** require Conda. Hospital / robot twin guides may assume Isaac Sim, Isaac Lab, or XR runtimes — see each component README.

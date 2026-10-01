@@ -3,7 +3,6 @@
 
 """Importer contracts; run pytest tests/test_importer_backends.py (no model downloads)."""
 
-import builtins
 import json
 import sys
 from pathlib import Path
@@ -18,7 +17,6 @@ from patient_digital_twin.importers import (
     NVGenerateImporter,
     NVSegmentImporter,
     SimpleImporter,
-    TotalSegmentatorImporter,
 )
 from patient_digital_twin.importers._common import image_input, segmentation_anatomy
 
@@ -47,48 +45,6 @@ def test_segmentation_filters_non_catalog_ids_and_keeps_missing_empty():
     assert set(body.structures) == set(CATALOG)
     assert not body.structures["kidney_left"].is_empty
     assert body.structures["colon"].is_empty
-
-
-def test_total_api_receives_modality_catalog_subset_and_preserves_ids(monkeypatch):
-    api, maps = (
-        ModuleType("totalsegmentator.python_api"),
-        ModuleType("totalsegmentator.map_to_binary"),
-    )
-    maps.class_map = {
-        "total": {5: "liver", 6: "unrelated"},
-        "total_mr": {9: "kidney_left"},
-    }
-    calls = []
-
-    def run(image, **options):
-        calls.append(options)
-        return nib.Nifti1Image(np.full(image.shape, 9, np.uint8), image.affine)
-
-    api.totalsegmentator = run
-    monkeypatch.setitem(sys.modules, "totalsegmentator", ModuleType("totalsegmentator"))
-    monkeypatch.setitem(sys.modules, api.__name__, api)
-    monkeypatch.setitem(sys.modules, maps.__name__, maps)
-    importer = TotalSegmentatorImporter(
-        np.zeros((3, 3, 3)), modality="MR", affine_xyz_to_imaging_m=np.eye(4)
-    )
-    with pytest.warns(UserWarning):
-        body = importer.to_anatomy_collection()
-    assert calls[0]["task"] == "total_mr" and calls[0]["roi_subset"] == ["kidney_left"]
-    assert not body.structures["kidney_left"].is_empty
-    assert "liver" in importer.report["unsupported"]
-
-
-def test_optional_total_dependency_fails_with_install_hint(monkeypatch):
-    original = builtins.__import__
-
-    def blocked(name, *args, **kwargs):
-        if name.startswith("totalsegmentator"):
-            raise ImportError(name)
-        return original(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", blocked)
-    with pytest.raises(ImportError, match="pip install TotalSegmentator"):
-        TotalSegmentatorImporter(np.zeros((2, 2, 2))).to_anatomy_collection()
 
 
 def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path):

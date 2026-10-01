@@ -104,7 +104,7 @@ uv sync --extra dev --extra patient-usd
 
 The primary input is an NV-Generate-CTMR/MAISI `*_label.nii.gz` and the
 **matching** `configs/label_dict.json` (or `label_dict_ctmr.json`). Never
-substitute a current TotalSegmentator ID map: IDs differ between workflows.
+substitute a different model's ID map: IDs differ between workflows.
 The importer consumes existing segmentations; it does not run a generation
 model or infer anatomical labels from intensity images.
 

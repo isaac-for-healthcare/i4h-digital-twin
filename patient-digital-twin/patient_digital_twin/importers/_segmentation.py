@@ -4,7 +4,7 @@
 """Import NV-Generate-CTMR/MAISI NIfTI label volumes into a AnatomyCollection.
 
 The label dictionary must match the generation configuration; numeric IDs
-cannot safely be inferred from the image or TotalSegmentator's current map.
+cannot safely be inferred from the image or another model's label map.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ SKIP_STRUCTURES = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
 
 
 def canonical_name(raw: str) -> str:
-    """Match NV-Generate names to the curated TotalSegmentator metadata."""
+    """Match NV-Generate names to the curated anatomy metadata."""
     parts = [part for part in re.split(r"[^a-z0-9]+", raw.lower()) if part]
     side = None
     for index, part in enumerate(parts):
@@ -79,7 +79,7 @@ class SegmentationImporter:
     """One 3D integer mask volume indexed (slice Z, Y, X), plus its labelmap.
 
     A file is a multi-label NIfTI from NV-Generate-CTMR. A directory is one
-    binary NIfTI per structure (TotalSegmentator); overlapping masks are
+    binary NIfTI per structure; overlapping masks are
     rejected because a single integer volume cannot represent overlaps.
     Full NIfTI affine orientation, shear, reflection and spatial units are
     preserved. Missing NIfTI units default to millimeters, as in MAISI.

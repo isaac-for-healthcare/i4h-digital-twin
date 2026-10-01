@@ -17,7 +17,6 @@ from patient_digital_twin.importers import (
     NVGenerateImporter,
     NVSegmentImporter,
     SimpleImporter,
-    TotalSegmentatorImporter,
 )
 
 SAMPLE = Path(__file__).parent / "data/nv_ct_high_resolution"
@@ -32,7 +31,6 @@ def parser():
             "segmentation",
             "nvgenerate",
             "nvsegment",
-            "totalsegmentator",
             "simple",
         ),
         default="sample",
@@ -49,7 +47,6 @@ def parser():
     cli.add_argument(
         "--python", dest="python_executable", help="NVIDIA backend interpreter"
     )
-    cli.add_argument("--device", default="gpu", help="TotalSegmentator device")
     cli.add_argument("--centerline-spacing-mm", type=float, default=1.5)
     return cli
 
@@ -91,8 +88,7 @@ def import_body(args):
         )
         ct = path
     else:
-        importer = TotalSegmentatorImporter(path, modality="CT", device=args.device)
-        ct = path
+        raise ValueError(f"Unsupported source: {source}")
     body = HumanBody(importer.to_anatomy_collection())
     if source == "sample":
         body.anatomy.configure(SAMPLE / "anatomy.yaml")

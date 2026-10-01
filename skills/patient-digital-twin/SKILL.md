@@ -23,7 +23,7 @@ when changing the API. Resolve these paths relative to this skill's directory.
   STL/OBJ must use XYZ meters; USD imports bake units and transforms. Supply
   explicit `mesh_to_body` matrices for your data. Omitted Python API placements
   use the bundled reference patient, not identity.
-- CT requiring segmentation: `NVSegmentImporter` or `TotalSegmentatorImporter`.
+- CT requiring segmentation: `NVSegmentImporter`.
   Fresh paired generation: `NVGenerateImporter`. Read the relevant adapter's
   constructor before choosing backend options; models/runtimes are separate
   dependencies. NVIDIA adapters can use a separate Python interpreter.

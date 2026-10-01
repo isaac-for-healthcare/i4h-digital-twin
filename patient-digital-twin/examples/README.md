@@ -13,7 +13,7 @@ the output assets. Failure leaves no partially exported output directory.
 | Source | Anatomy | CT attachment |
 | --- | --- | --- |
 | `nvgenerate` | Fresh generated segmentation → meshes | Matching generated CT |
-| `nvsegment` / `totalsegmentator` | Input CT → segmentation → meshes | The input CT |
+| `nvsegment` | Input CT → segmentation → meshes | The input CT |
 | `simple` | Supplied STL/OBJ/USD meshes | Skipped |
 | `sample` / `segmentation` | Existing segmentation → meshes | Matching sample CT / required `--ct` |
 
@@ -22,8 +22,7 @@ python examples/pipeline.py --source nvgenerate \
   --source-root /path/to/NV-Generate-CTMR --output /tmp/generated-patient
 python examples/pipeline.py --source nvsegment --input /path/to/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR --output /tmp/segmented-patient
-python examples/pipeline.py --source totalsegmentator --input /path/to/ct.nii.gz \
-  --output /tmp/segmented-patient
+
 python examples/pipeline.py --source simple --input /path/to/meshes.json \
   --output /tmp/mesh-patient
 python examples/pipeline.py --source sample --output /tmp/sample-patient

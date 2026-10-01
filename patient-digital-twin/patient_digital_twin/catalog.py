@@ -98,7 +98,7 @@ def _catalog(field="kind") -> dict:
         "femur": "lower_limb",
         "hip": "pelvis",
     }.items():
-        # TotalSegmentator's 'hip' label denotes the hip bone, not the joint.
+        # The source 'hip' label denotes the hip bone, not the joint.
         paired(base, K.BONE, [S.SKELETAL], regions)
     add("sacrum", K.BONE, [S.SKELETAL], "pelvis")
     add("sternum", K.BONE, [S.SKELETAL], "thorax")

@@ -25,7 +25,7 @@ def pipeline():
 
 
 @pytest.mark.parametrize(
-    "source", ["nvgenerate", "nvsegment", "totalsegmentator", "simple"]
+    "source", ["nvgenerate", "nvsegment", "simple"]
 )
 def test_input_branches_attach_only_matching_ct(
     pipeline, monkeypatch, tmp_path, source
@@ -47,7 +47,6 @@ def test_input_branches_attach_only_matching_ct(
     for name in (
         "NVGenerateImporter",
         "NVSegmentImporter",
-        "TotalSegmentatorImporter",
         "SimpleImporter",
     ):
         monkeypatch.setattr(pipeline, name, Importer)

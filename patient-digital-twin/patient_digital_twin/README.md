@@ -257,7 +257,7 @@ uv run --extra dev pytest
 ```
 
 Run the command from the repository root too to test the aggregate distribution.
-The TotalSegmentator label-loader unit test uses a controlled mapping fixture
+The segmentation label-loader unit test uses a controlled mapping fixture
 and does not run segmentation. Optional integration tests require their own
 USD, topology, or physics dependencies.
 
