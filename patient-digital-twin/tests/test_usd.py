@@ -5,10 +5,10 @@
 
 import numpy as np
 import pytest
-from patient_digital_twin import AnatomicalStructure, HumanBody, Kind
+from patient_digital_twin import AnatomicalStructure, HumanBody, Kind  # noqa: E402
 
 pytest.importorskip("pxr")
-from pxr import Gf, Usd, UsdGeom, UsdShade
+from pxr import Gf, Usd, UsdGeom, UsdShade  # noqa: E402
 
 
 def body():

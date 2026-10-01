@@ -41,7 +41,7 @@ def anatomy_from_labels(
     pending = []
     unknown = set()
     for label_id, name in items:
-        if type(label_id) is not int or label_id < 0:
+        if not isinstance(label_id, int) or isinstance(label_id, bool) or label_id < 0:
             raise ValueError(f"Invalid label ID: {label_id!r}")
         if label_id == 0:
             continue

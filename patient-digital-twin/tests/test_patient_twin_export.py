@@ -7,11 +7,11 @@ import nibabel as nib
 import numpy as np
 import pytest
 import yaml
-from patient_digital_twin import HumanBody, SegmentationImporter
+from patient_digital_twin import HumanBody, SegmentationImporter  # noqa: E402
 
 pytest.importorskip("vtk")
 pytest.importorskip("pxr")
-from pxr import Gf, Usd, UsdGeom
+from pxr import Gf, Usd, UsdGeom  # noqa: E402
 
 
 @pytest.mark.parametrize("angle", [0.0, 0.35])

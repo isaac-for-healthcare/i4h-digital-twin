@@ -47,7 +47,7 @@ class AnatomyConfiguration:
 
     def __post_init__(self):
         """Validate booleans and enum names, then copy settings into read-only mappings."""
-        if type(self.enabled) is not bool:
+        if not isinstance(self.enabled, bool):
             raise ValueError("anatomy.enabled must be a boolean")
         for name, values in (
             ("systems", self.systems),
@@ -57,7 +57,7 @@ class AnatomyConfiguration:
                 raise TypeError(f"anatomy.{name} must be a mapping")
             if any(not isinstance(key, str) or not key for key in values):
                 raise ValueError(f"anatomy.{name} keys must be non-empty names")
-            if any(type(value) is not bool for value in values.values()):
+            if any(not isinstance(value, bool) for value in values.values()):
                 raise ValueError(f"anatomy.{name} settings must be booleans")
         object.__setattr__(
             self,
