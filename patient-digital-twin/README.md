@@ -90,6 +90,38 @@ rflow-ct model, paired mask/image checkpoints, and conditioning dataset.
 `NV_SEGMENT_CTMR_ROOT` and `NV_GENERATE_ROOT` can replace the corresponding root
 arguments. Use a PyTorch build that supports the installed GPU.
 
+### Example: s0011 CT → NV-Segment aorta → navigation
+
+Use `s0011/ct.nii.gz` from the public
+[TotalSegmentator small dataset v201](https://zenodo.org/records/10047263).
+This is dataset attribution: the example runs **NV-Segment inference on the CT**
+and does not use the dataset's supplied segmentation masks.
+After downloading/unpacking the dataset and preparing the model above:
+
+```bash
+python -m patient_digital_twin.main \
+  --source nvsegment \
+  --input /path/to/Totalsegmentator_dataset_small_v201/s0011/ct.nii.gz \
+  --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
+  --python /path/to/model-env/bin/python \
+  --classes aorta --patient-id s0011 \
+  --format workflow --output /path/to/output/s0011_aorta
+```
+
+The executable [s0011 example](examples/nvsegment_s0011.sh) wraps the same command.
+The output replaces the old vasculature preprocessing workflow: it includes the
+aorta surface, automatically extracted centerline, CT attenuation, patient
+placement, and `patient_twin.yaml`. In an installed **i4h-workflows** checkout:
+
+```bash
+./run.sh endoluminal_navigation --mode validate_fluoroscopy --episodes 1 \
+  --patient-twin /path/to/output/s0011_aorta/patient_twin.yaml \
+  --record verify.hdf5
+```
+
+Use `--headless` on a machine without a display. This is the current workflow ID
+for catheter/vasculature navigation; no intermediate legacy CLI is needed.
+
 ### Isolated CT artifact component
 
 `patient_digital_twin.legacy_ct` contains the CT ingest, orientation,
