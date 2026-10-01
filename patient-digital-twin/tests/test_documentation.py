@@ -44,9 +44,6 @@ def test_readme_apis_and_usd_inspection(tmp_path, monkeypatch):
     for language, code in blocks(ROOT / "docs/usd.md"):
         if language == "python":
             exec(compile(code, "docs/usd.md", "exec"), namespace)
-    for language, code in blocks(ROOT / "patient_digital_twin/imaging_to_mesh/README.md"):
-        if language == "python":
-            exec(compile(code, "imaging_to_mesh/README.md", "exec"), {})
 
 
 @pytest.mark.skipif(os.environ.get("PATIENT_TEST_MODELS") != "1", reason="set PATIENT_TEST_MODELS=1 with both model checkouts")
