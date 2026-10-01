@@ -85,6 +85,10 @@ class NVGenerateImporter:
         self.ct_volume_zyx = ct_volume
         self.ct_voxel_to_imaging = ct_affine
         self.report = coverage(
-            body, supported.values(), backend="NV-Generate-CTMR", seed=self.seed
+            body,
+            supported.values(),
+            backend="NV-Generate-CTMR",
+            requested=names,
+            seed=self.seed,
         )
         return body

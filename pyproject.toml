@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+patient-pipeline = ["usd-core", "vtk", "scipy>=1.10"]
 patient-physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]
 patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.

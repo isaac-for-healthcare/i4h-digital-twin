@@ -129,6 +129,10 @@ class NVSegmentImporter:
             str(self.image) if isinstance(self.image, (str, Path)) else None
         )
         self.report = coverage(
-            body, supported.values(), backend="NV-Segment-CTMR", modality=self.modality
+            body,
+            supported.values(),
+            backend="NV-Segment-CTMR",
+            requested=names,
+            modality=self.modality,
         )
         return body

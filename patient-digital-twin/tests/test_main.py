@@ -62,3 +62,51 @@ def test_nvsegment_to_real_usd(monkeypatch, tmp_path):
     stage = Usd.Stage.Open(str(output))
     names = [p.GetCustomDataByKey("anatomy:name") for p in stage.Traverse()]
     assert "liver" in names and "aorta" not in names
+
+
+@pytest.mark.parametrize("stored", [False, True])
+def test_workflow_has_physical_centerlines_and_reuses_existing(
+    monkeypatch, tmp_path, stored
+):
+    pytest.importorskip("pxr")
+    pytest.importorskip("vtk")
+    import yaml
+    from patient_digital_twin import HumanBody
+
+    shape = (25, 25, 41)
+    x, y, z = np.indices(shape)
+    mask = (((x - 12) ** 2 + (y - 12) ** 2 < 25) & (z > 3) & (z < 37)).astype(np.uint8)
+    image = nib.Nifti1Image(
+        np.where(mask, 300, 40).astype(np.float32), np.diag([1.0, 1.0, 2.0, 1.0])
+    )
+    ct = tmp_path / "ct.nii.gz"
+    nib.save(image, ct)
+    anatomy = segmentation_anatomy(
+        nib.Nifti1Image(mask, image.affine), {1: "aorta"}, names=["aorta"]
+    )
+    if stored:
+        HumanBody(anatomy).extract_topology(spacing_m=0.0015)
+    previous = anatomy.structures["aorta"].centerline
+    monkeypatch.setattr(
+        main.NVSegmentImporter, "to_anatomy_collection", lambda self, **kw: anatomy
+    )
+    path = main.run_pipeline(
+        source="nvsegment",
+        input=ct,
+        classes=["aorta"],
+        output=tmp_path / "bundle",
+        format="workflow",
+    )
+    manifest = yaml.safe_load(path.read_text())
+    for relative in manifest["artifacts"].values():
+        assert (path.parent / relative).is_file()
+    graph = anatomy.structures["aorta"].centerline
+    if stored:
+        assert graph is previous
+    assert len(graph.points) > 2
+    points = np.load(path.parent / "centerline_points_mm.npy")
+    np.testing.assert_allclose(points[:, :2], -12.0, atol=2)
+    assert points[:, 2].min() > 6 and points[:, 2].max() < 74
+    assert np.load(path.parent / "centerline_radii_mm.npy").min() > 0
+    assert manifest["coordinate_frame"] == "DICOM_LPS"
+    assert "aorta" in manifest["centerlines"]

@@ -3,9 +3,7 @@
 
 """CT orientation and attenuation utilities for patient-twin bundles."""
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
 
 import nibabel as nib
 import numpy as np
@@ -73,51 +71,15 @@ def _image_to_ct(image):
     )
 
 
-INTERVENTIONAL_POINTS = (
-    (-1000.0, 0.0),
-    (-300.0, 0.0),
-    (100.0, 0.0008),
-    (300.0, 0.0028),
-    (500.0, 0.006),
-    (900.0, 0.009),
-    (1500.0, 0.012),
-    (3000.0, 0.02),
-    (8000.0, 0.044),
-)
-
-
 def hu_to_mu(hu):
-    """Interpolate the workflow's interventional curve (mm^-1), clamping tails."""
-    knots = np.asarray(INTERVENTIONAL_POINTS)
-    return np.asarray(np.interp(hu, knots[:, 0], knots[:, 1]), dtype=np.float32)
+    """Apply the navigation compatibility component's interventional curve."""
+    from ..legacy_ct import INTERVENTIONAL, hu_to_mu as convert
+
+    return convert(hu, INTERVENTIONAL)
 
 
 def save_attenuation(ct, output, *, source):
-    """Write attenuation and the existing workflow metadata contract."""
-    hu = ct.hu_zyx
-    if hu.ndim != 3 or not hu.size or not np.isfinite(hu).all():
-        raise ValueError("Expected a non-empty, finite 3D CT volume")
-    mu = hu_to_mu(hu)
-    metadata = {
-        "shape_zyx": list(hu.shape),
-        "spacing_zyx_mm": list(ct.spacing_zyx_mm),
-        "origin_xyz_mm": list(ct.origin_xyz_mm),
-        "hu_range": [float(hu.min()), float(hu.max())],
-        "mu_range": [float(mu.min()), float(mu.max())],
-        "source": str(source),
-        "hu_to_mu": {
-            "preset": "interventional",
-            "hu_min": INTERVENTIONAL_POINTS[0][0],
-            "hu_max": INTERVENTIONAL_POINTS[-1][0],
-            "mu_min": INTERVENTIONAL_POINTS[0][1],
-            "mu_max": INTERVENTIONAL_POINTS[-1][1],
-            "control_points": [list(p) for p in INTERVENTIONAL_POINTS],
-        },
-        "anatomical_frame": ct.anatomical_frame,
-        "source_orientation": ct.source_orientation,
-        "direction_row_major_3x3": list(ct.direction),
-    }
-    output = Path(output)
-    output.mkdir(parents=True, exist_ok=True)
-    np.save(output / "mu_volume.npy", mu)
-    (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    """Write CT artifacts through the isolated navigation compatibility module."""
+    from ..legacy_ct import write_artifacts
+
+    return write_artifacts(ct, output, source=source)

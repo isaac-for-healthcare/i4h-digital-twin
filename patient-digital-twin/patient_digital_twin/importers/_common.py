@@ -100,20 +100,21 @@ def segmentation_anatomy(image, labelmap, *, configuration=None, names=None):
     return importer.to_anatomy_collection(configuration=configuration)
 
 
-def coverage(body, supported, *, backend, **details):
+def coverage(body, supported, *, backend, requested=None, **details):
     """Report actual geometry separately from unsupported and absent labels."""
     present = {n for n, s in body.structures.items() if s.mesh.vertices is not None}
     supported = set(supported)
+    expected = set(CATALOG) if requested is None else set(requested)
     result = {
         "backend": backend,
         "present": sorted(present),
-        "unsupported": sorted(set(CATALOG) - supported),
+        "unsupported": sorted(expected - supported),
         "absent": sorted(supported - present),
         **details,
     }
     if result["unsupported"] or result["absent"]:
         warnings.warn(
-            f"{backend}: {len(present)}/{len(CATALOG)} catalog structures have meshes; "
+            f"{backend}: {len(present)}/{len(expected)} requested structures have meshes; "
             f"unsupported={result['unsupported']}; absent={result['absent']}",
             stacklevel=2,
         )

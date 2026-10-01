@@ -16,9 +16,10 @@ from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
 from ..structures import AnatomicalStructure, MeshGeometry
-from ..topology import extract_centerlines, voxelize_mesh
+from ..topology import voxelize_mesh
+from ..legacy_ct.artifacts import write_artifacts
 from .usd import _export_to_usd
-from .utils import attached_ct, save_attenuation
+from .utils import attached_ct
 
 
 def _largest(mask):
@@ -42,6 +43,7 @@ def export_patient_twin(
     exterior="auto",
     skin_opacity=0.15,
     physics_root=None,
+    hu_to_mu_preset="interventional",
 ):
     """Write a complete patient_twin.yaml bundle using original imaging placement.
 
@@ -108,12 +110,31 @@ def export_patient_twin(
                 vessel_mask, structure=np.ones((3, 3, 3)), iterations=2
             )
         )
-        points, faces = mask_to_mesh(
-            vessel_mask, spacing_zyx_mm=spacing, origin_xyz_mm=origin
-        )
-        graph = extract_centerlines(
-            points.astype(float) * 0.001, faces, method="skeleton", **grid
-        )
+        # Reuse stored structure graphs in original patient placement when available.
+        # Otherwise the isolated artifact writer calculates the composite mask graph.
+        centerline = None
+        if all(
+            body.anatomy.structures[name].centerline is not None
+            for name in vessel_names
+        ):
+            points, edges, radii, offset = [], [], [], 0
+            for name in vessel_names:
+                structure = body.anatomy.structures[name]
+                graph = structure.centerline
+                points.append(
+                    transform_points(
+                        graph.points, lps_from_body @ structure.local_to_body
+                    )
+                    * 1000
+                )
+                edges.append(graph.edges + offset)
+                radii.append(graph.radii * 1000)
+                offset += len(graph.points)
+            centerline = (
+                np.concatenate(points),
+                np.concatenate(edges),
+                np.concatenate(radii),
+            )
     if ct is not None:
         voxel_to_patient = np.diag([*spacing[::-1], 1.0])
         voxel_to_patient[:3, 3] = origin
@@ -168,13 +189,14 @@ def export_patient_twin(
         folder = Path(temp) / "bundle"
         folder.mkdir()
         if ct is not None:
-            save_attenuation(ct, folder, source=source_path or "numpy")
-            np.save(folder / "hu_volume.npy", ct.hu_zyx.astype(np.float32))
-        if ct is not None and vessel_names:
-            np.save(folder / "vessel_mask.npy", vessel_mask.astype(np.uint8))
-            np.save(folder / "centerline_points_mm.npy", graph.points * 1000)
-            np.save(folder / "centerline_radii_mm.npy", graph.radii * 1000)
-            np.save(folder / "centerline_edges.npy", graph.edges)
+            write_artifacts(
+                ct,
+                folder,
+                source=source_path or "numpy",
+                vessel_mask=vessel_mask if vessel_names else None,
+                centerline=centerline if vessel_names else None,
+                hu_to_mu_preset=hu_to_mu_preset,
+            )
         _export_to_usd(
             snapshot,
             folder / "patient_anatomy.usdc",
