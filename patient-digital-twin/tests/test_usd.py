@@ -108,13 +108,13 @@ def test_embedded_ct_and_hidden_centerline_roundtrip(tmp_path):
     stage = Usd.Stage.Open(str(target))
     ct = stage.GetPrimAtPath("/HumanBody/Imaging/CT")
     assert ct.GetAttribute("ct:hu").IsCustom()
-    shape = tuple(ct.GetAttribute("ct:shapeZYX").Get())
+    shape = tuple(ct.GetAttribute("ct:shape").Get())
     np.testing.assert_array_equal(
         np.array(ct.GetAttribute("ct:hu").Get()).reshape(shape), hu.transpose(2, 1, 0)
     )
-    matrix = ct.GetAttribute("ct:voxelToHuman").Get()
+    matrix = ct.GetAttribute("ct:arrayIndexToScan").Get()
     np.testing.assert_allclose(
-        matrix.Transform(Gf.Vec3d(1, 2, 3)), [0.008, 0.014, 0.042]
+        matrix.Transform(Gf.Vec3d(3, 2, 1)), [0.008, 0.014, 0.042]
     )
     hidden = next(
         p

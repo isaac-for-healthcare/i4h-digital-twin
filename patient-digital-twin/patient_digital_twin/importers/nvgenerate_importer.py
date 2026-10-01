@@ -42,6 +42,7 @@ class NVGenerateImporter:
         self.python_executable = python_executable
         self.report = None
         self.seed = None
+        self.ct_scan = None
         self.ct_volume_zyx = None
         self.ct_voxel_to_imaging = None
 
@@ -74,7 +75,8 @@ class NVGenerateImporter:
             else:
                 worker = Path(__file__).with_name("_nvgenerate_worker.py").read_text()
                 run_backend(
-                    [python, "-c", worker, str(self.seed), output, ct_output], cwd=self.root
+                    [python, "-c", worker, str(self.seed), output, ct_output],
+                    cwd=self.root,
                 )
             mask_image, ct_image = nib.load(output), nib.load(ct_output)
             mask_affine = SegmentationImporter._affine_m(mask_image)
@@ -85,6 +87,14 @@ class NVGenerateImporter:
                 raise ValueError(
                     "Generated CT and segmentation must share their physical grid"
                 )
+            from ..scan_volume import from_nifti
+
+            self.ct_scan = from_nifti(ct_output)
+            self.ct_scan.metadata["source"] = {
+                "kind": "generated",
+                "backend": "NV-Generate-CTMR",
+                "seed": self.seed,
+            }
             ct_volume = ct_image.get_fdata(dtype=np.float32).transpose(2, 1, 0).copy()
             if not np.isfinite(ct_volume).all():
                 raise ValueError("Generated CT contains non-finite intensities")

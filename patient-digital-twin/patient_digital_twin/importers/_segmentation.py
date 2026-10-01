@@ -17,8 +17,8 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from ..geometry import transform_points
 from ..anatomy import AnatomyCollection
+from ..geometry import transform_points
 
 SKIP_STRUCTURES = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
 
@@ -265,6 +265,10 @@ class SegmentationImporter:
             np.linalg.inv(self.affine_xyz_to_imaging_m) @ body_to_imaging
         )
         body.source_shape_xyz = tuple(self.masks_zyx.shape[::-1])
+        body.source_segmentation = self.masks_zyx.copy()
+        body.source_segmentation.setflags(write=False)
+        body.source_label_names = dict(self._names)
+        body.source_voxel_to_ras_m = self.affine_xyz_to_imaging_m.copy()
         body.source_path = (
             str(self.source_path) if self.source_path is not None else None
         )

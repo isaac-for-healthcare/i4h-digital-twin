@@ -24,6 +24,9 @@ class AnatomyCollection:
         # Optional acquisition bounds for identifying cropped surface geometry.
         self.body_to_voxel = None
         self.source_shape_xyz = None
+        self.source_segmentation = None
+        self.source_label_names = {}
+        self.source_voxel_to_ras_m = None
 
     @property
     def body_to_imaging(self):

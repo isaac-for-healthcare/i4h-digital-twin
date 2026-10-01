@@ -14,8 +14,9 @@ patient package, NumPy and the `usd` extra installed.
 | Both of the above | `examples/pipeline.py` | Adds `human_body.usdc` alongside the patient bundle |
 | Physics-demo assets and extended manifest | `export_physics_examples(...)` | Derived meshes/configuration for the supported external physics demos |
 
-All patient stages have default prim `/HumanBody`, `metersPerUnit=1.0`, and
-Z-up metadata. `.usda` is useful for small readable examples; `.usdc` is useful
+All patient stages have default prim `/HumanBody` and Z-up metadata.
+With CT, `metersPerUnit` matches the scan's declared spatial units; anatomy-only
+stages use meters. `.usda` is useful for small readable examples; `.usdc` is useful
 for binary assets. Embedded CT arrays can be large: inspect shapes and attribute
 names before printing values or converting a full stage to text.
 
@@ -38,12 +39,11 @@ Standalone export uses an identity root and current structure transforms.
 It preserves the live body's transforms and visibility. Do not apply a second
 axis conversion to an exported stage.
 
-Bundle anatomy is authored in the manifest's `coordinate_frame`: `DICOM_LPS`
-when a source registration exists, otherwise `body`. The manifest's
-`transforms.world_from_patient_m` is a separate downstream placement, not baked
-into `patient_anatomy.usdc`. Apply it once when placing that bundle into the
-consumer's world. It is a NumPy-style column-vector matrix in meters.
-`transforms.voxel_to_patient_mm`, when present, instead uses millimeters.
+Schema-3 bundle anatomy is authored in the scan's `RAS` or `LPS` physical frame
+and `spatial_unit`. `transforms.voxel_to_scan` maps IJK indices to scan coordinates.
+Simulator world placement is chosen downstream. An explicit optional
+`transforms.world_from_patient_m` is a column-vector placement matrix in meters;
+apply it once after converting scan units to meters.
 
 Bundle `exterior="auto"` omits an exterior. A CT envelope requires explicit
 `exterior="ct"` and attached CT. Standalone exports do not generate a CT envelope.
@@ -107,7 +107,7 @@ for prim in stage.Traverse():
 
 `XformCache` includes the root and all ancestor transforms. Do not apply the
 root again. For a bundle, these stage coordinates are still patient coordinates;
-apply the manifest's world placement separately when the consumer needs it.
+apply the consumer's world placement separately when needed.
 
 To preview visibility changes without changing the asset on disk:
 
@@ -130,43 +130,32 @@ body or bundle metadata.
 | Attribute | Meaning |
 | --- | --- |
 | `ct:hu` | Flattened float CT samples in HU |
-| `ct:shapeZYX` | Three-dimensional array shape |
-| `ct:arrayOrder` | `ZYX_C`: C-order flattening of a ZYX array |
+| `ct:shape` | Native three-dimensional array shape |
+| `ct:arrayOrder` | Native axis labels, e.g. `ijk` or `kji`; C-order flattening |
 | `ct:units` | `HU` |
-| `ct:voxelToHuman` | Gf matrix mapping XYZ voxel indices to the `/HumanBody` local frame |
-
-Continue with `stage` from the inspection example:
+| `ct:arrayIndexToScan` | Gf matrix mapping array indices to scan coordinates |
+| `ct:coordinateFrame`, `ct:spatialUnit` | Physical frame and spatial units |
 
 ```python
 ct = stage.GetPrimAtPath("/HumanBody/Imaging/CT")
 if ct:
-    shape = tuple(ct.GetAttribute("ct:shapeZYX").Get())
-    hu_zyx = np.asarray(ct.GetAttribute("ct:hu").Get()).reshape(shape, order="C")
-    voxel_to_human = np.asarray(ct.GetAttribute("ct:voxelToHuman").Get()).T
-    root_to_world = np.asarray(cache.GetLocalToWorldTransform(
-        stage.GetPrimAtPath("/HumanBody"))).T
-    voxel_to_stage = root_to_world @ voxel_to_human
-    # XYZ index (x, y, z) addresses hu_zyx[z, y, x].
-    first_voxel_m = (voxel_to_stage @ [0, 0, 0, 1])[:3] * unit
+    shape = tuple(ct.GetAttribute("ct:shape").Get())
+    hu = np.asarray(ct.GetAttribute("ct:hu").Get()).reshape(shape)
+    array_to_scan = np.asarray(ct.GetAttribute("ct:arrayIndexToScan").Get()).T
+    first_voxel_m = (array_to_scan @ [0, 0, 0, 1])[:3] * unit
 ```
 
-The attached input affine is voxel XYZ to RAS meters, with a separate rigid
-body-to-RAS registration. Export handles CT orientation conversion; do not infer
-spacing from the array shape. Only CT in HU is currently supported by imaging
-exporters. Bundle export additionally requires CT aligned to patient axes.
-A current posed skin does not imply the CT has been deformed to follow it.
+The full affine preserves oblique acquisitions; do not infer orientation from
+shape. Only CT in HU is supported. A posed skin does not imply CT deformation.
 
-A structure with an extracted centerline has `centerline:points` (local XYZ
-meters), `centerline:edges` (index pairs), `centerline:radii` (meters), and
-`centerline:coordinateFrame="structure_local_m"`. Apply the mesh's complete
-local-to-world transform to its centerline points exactly as for its vertices.
-Rigid pose transforms leave radii unchanged. These attributes are not `BasisCurves`.
+USD `centerline:points` and `centerline:radii` use local stage units, with
+`centerline:coordinateFrame="structure_local"`; transform points like mesh vertices
+and multiply radii by `metersPerUnit` to obtain meters.
 
-Bundle `centerlines` entries point to NPZ files containing `points`, `edges`, and
-`radii`, in local meters, plus a `local_to_patient` matrix in the YAML. These are
-separate from optional composite navigation arrays `centerline_points_mm.npy`
-and `centerline_radii_mm.npy`, which use patient-frame millimeters. Navigation
-arrays exist only when attached CT and `vessel_names` requested that export.
+Bundle per-structure `centerlines/*.npz` and composite navigation
+`centerline_points.npy` / `centerline_radii.npy` use the declared scan physical
+frame and units. `centerline_edges.npy` stores index pairs. Navigation arrays
+are generated when attached CT and `vessel_names` request them.
 
 ## Open in Isaac Sim
 

@@ -23,6 +23,7 @@ class ImagingVolume:
     body_to_imaging: np.ndarray
     source_path: str | None = None
     modality: str = "CT"
+    source_scan: object | None = None
 
     def __post_init__(self):
         if not isinstance(self.volume, np.ndarray):

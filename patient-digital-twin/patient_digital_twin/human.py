@@ -61,6 +61,19 @@ class HumanBody:
         self.imaging = imaging
         return imaging
 
+    def AttachScan(self, scan, *, body_to_imaging=None, source_path=None):
+        """Attach a scan artifact while retaining its native array order and units."""
+        from dataclasses import replace
+
+        image = self.AttachImaging(
+            scan.values_kji,
+            voxel_to_imaging=scan.ijk_to_ras_m,
+            body_to_imaging=body_to_imaging,
+            source_path=source_path,
+        )
+        self.imaging = replace(image, source_scan=scan)
+        return self.imaging
+
     def imaging_vertices(self, name):
         """Recover an enabled structure's original scan placement, before posing."""
         if self.imaging is None:

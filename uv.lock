@@ -595,6 +595,9 @@ dependencies = [
 dev = [
     { name = "pytest" },
 ]
+patient-dicom = [
+    { name = "simpleitk" },
+]
 patient-nvgenerate = [
     { name = "einops" },
     { name = "fire" },
@@ -668,6 +671,7 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'patient-nvsegment'", specifier = ">=1.10" },
     { name = "scipy", marker = "extra == 'patient-pipeline'", specifier = ">=1.10" },
     { name = "shapely", marker = "extra == 'patient-physics'", specifier = ">=2.0" },
+    { name = "simpleitk", marker = "extra == 'patient-dicom'", specifier = ">=2.3.0" },
     { name = "tensorboard", marker = "extra == 'patient-nvgenerate'", specifier = ">=2.14" },
     { name = "tetgen", marker = "extra == 'patient-physics'", specifier = ">=0.8" },
     { name = "torch", marker = "extra == 'patient-nvgenerate'", specifier = ">=2.4" },
@@ -681,7 +685,7 @@ requires-dist = [
     { name = "usd-core", marker = "extra == 'patient-usd'" },
     { name = "vtk", marker = "extra == 'patient-pipeline'" },
 ]
-provides-extras = ["patient-nvsegment", "patient-nvgenerate", "patient-pipeline", "patient-physics", "dev", "patient-mesh", "patient-usd"]
+provides-extras = ["patient-dicom", "patient-nvsegment", "patient-nvgenerate", "patient-pipeline", "patient-physics", "dev", "patient-mesh", "patient-usd"]
 
 [[package]]
 name = "einops"
@@ -2713,6 +2717,28 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7c/75/c24ed871c576d7e2b64b04b1fe3d075157f6eb54e59670d3f5ffb36e25c7/shapely-2.1.2-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:361b6d45030b4ac64ddd0a26046906c8202eb60d0f9f53085f5179f1d23021a0", size = 4169511, upload-time = "2025-09-24T13:51:36.297Z" },
     { url = "https://files.pythonhosted.org/packages/b1/f7/b3d1d6d18ebf55236eec1c681ce5e665742aab3c0b7b232720a7d43df7b6/shapely-2.1.2-cp314-cp314t-win32.whl", hash = "sha256:b54df60f1fbdecc8ebc2c5b11870461a6417b3d617f555e5033f1505d36e5735", size = 1602607, upload-time = "2025-09-24T13:51:37.757Z" },
     { url = "https://files.pythonhosted.org/packages/9a/f6/f09272a71976dfc138129b8faf435d064a811ae2f708cb147dccdf7aacdb/shapely-2.1.2-cp314-cp314t-win_amd64.whl", hash = "sha256:0036ac886e0923417932c2e6369b6c52e38e0ff5d9120b90eef5cd9a5fc5cae9", size = 1796682, upload-time = "2025-09-24T13:51:39.233Z" },
+]
+
+[[package]]
+name = "simpleitk"
+version = "2.5.6"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/e9/d7ad862e7b9fd8a432ee69c34794b5fe4c7504c22a25cfa3db7f5207fbf8/simpleitk-2.5.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:58d010734206efc322da6c0feff0a66e9ea183fbaff7c0ef42c0cab9f4492657", size = 42659793, upload-time = "2026-07-30T16:51:49.685Z" },
+    { url = "https://files.pythonhosted.org/packages/40/5d/9a5a9e69e5f2549ea1ecc898d09b08f96d75ccc9715b26739bc7ab8c4324/simpleitk-2.5.6-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:e4ba60dd948bd9db6adba7a654601e757b2a28013877afb108da1abc6654661e", size = 38232200, upload-time = "2026-07-30T16:51:55.376Z" },
+    { url = "https://files.pythonhosted.org/packages/93/ad/e4bd57e9a91559c07d74e6d078188c53d1315269220ec614a49d8144cb27/simpleitk-2.5.6-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b27be32b6a4993a5b6dfcde11280ab962e3df01445c89cd931b69679e18a0cdb", size = 48105138, upload-time = "2026-07-30T16:51:59.823Z" },
+    { url = "https://files.pythonhosted.org/packages/90/13/53a689b1813d9a4ba228f9177aae04af6ac27be60286e48db1866375e434/simpleitk-2.5.6-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ce740fcd9a89d70f8183dc2ee752d342d75ff629626020c01857d86aed696f51", size = 52830299, upload-time = "2026-07-30T16:52:05.051Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/0c/6a427d3ee94c051f974ff5955cba3cdad0cb008e4fa3cc274fe4ffa3ac5a/simpleitk-2.5.6-cp310-cp310-win_amd64.whl", hash = "sha256:39cdecac58e50c976d1344328f0757b84d4600bdd4c969c63c0d8f0abfae3bf0", size = 18873898, upload-time = "2026-07-30T16:52:08.73Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/30/cb0eec647afea94c1d95bed3c0014a96565404e4225dba2c0c63bbdd6b9a/simpleitk-2.5.6-cp311-abi3-macosx_10_9_x86_64.whl", hash = "sha256:36658792fe2a62814cbfedb3b236ac722ca7e00953241726bc4a3a26cc7ef5a7", size = 42685058, upload-time = "2026-07-30T16:52:12.477Z" },
+    { url = "https://files.pythonhosted.org/packages/68/e8/18d2351ef7b6a17c921f1fbac3a19dc3a27f6ea7749c2f5a5877e38202b9/simpleitk-2.5.6-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:afcda49474748548fa1b7dbb9f557c3b9feafeb0dd3c2e05d771cc935c86646e", size = 38252322, upload-time = "2026-07-30T16:52:16.719Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/c3/9025397ec8638c261ba1fe56ffed06983df707a3bc961da5ef90157e5a25/simpleitk-2.5.6-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:af7ca101b23233745b813481ea91694ecea95c3e3b6eed8dca37be39a60f6894", size = 48070098, upload-time = "2026-07-30T16:52:21.316Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/ec/301532fb2003e6557e6a12106eb1df572ed6f74c08c05c2e7a8913353383/simpleitk-2.5.6-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:99242c333ed17138134e9749f3a484518f41baebab0fc0f0fe7c657ab8090c07", size = 52798369, upload-time = "2026-07-30T16:52:25.774Z" },
+    { url = "https://files.pythonhosted.org/packages/16/d0/a746280d0987413e443c26f19fe5c559fb3034160ee0a7307ae2d85e8d59/simpleitk-2.5.6-cp311-abi3-win_amd64.whl", hash = "sha256:0002b298efb31332f99587cf26ed9f42c2c3ec006a0570f492dfc9ea27303d73", size = 18925827, upload-time = "2026-07-30T16:52:29.496Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/1d/3726ab6a73d3d46c416f369f3a37686b44ead5f3013da1a05bd976ba8b2c/simpleitk-2.5.6-cp314-cp314t-macosx_10_9_x86_64.whl", hash = "sha256:a455eb6ae0ab4ed8d50d3a2762b5e3c7e17a8ee331dc40f468ce416ba4c0840d", size = 42716633, upload-time = "2026-07-30T16:52:33.5Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/48/dd215989255c3835a85dbcf4a57a9782de5069e24add46f1883024955acb/simpleitk-2.5.6-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:454d0fd8c9323e8246c8c7b8fd9c142b211080968359684acd0f0c48b7f55d49", size = 38247497, upload-time = "2026-07-30T16:52:37.227Z" },
+    { url = "https://files.pythonhosted.org/packages/23/37/80222d4c16355664abc1d5c0105a2ee061a4f05a35dc619f983943c0766b/simpleitk-2.5.6-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:22b825c609fe5ca114c8acc149a26a94a01bd62e8c9e685f362d5f880e237269", size = 47951032, upload-time = "2026-07-30T16:52:42.151Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/22/8944f38bf222a63b74605aa9f0e2fb1c807155e5d71aee749383428b2e52/simpleitk-2.5.6-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:baf0d5731b8918efce8084e5e28e403aab116e1081b77822123bb55e0841e5e7", size = 52645744, upload-time = "2026-07-30T16:52:50.027Z" },
+    { url = "https://files.pythonhosted.org/packages/21/01/d663e669d8df9d970f3349c29796c7667337daf19c4e69ca99d5ab5518a3/simpleitk-2.5.6-cp314-cp314t-win_amd64.whl", hash = "sha256:5e731a91cd1376e5a4533395cf2b1ae9fb2a8fa1fbf7f396ab49d3223fc464fd", size = 19518293, upload-time = "2026-07-30T16:52:53.405Z" },
 ]
 
 [[package]]

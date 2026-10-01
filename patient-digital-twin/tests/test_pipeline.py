@@ -24,9 +24,7 @@ def pipeline():
     return module
 
 
-@pytest.mark.parametrize(
-    "source", ["nvgenerate", "nvsegment", "simple"]
-)
+@pytest.mark.parametrize("source", ["nvgenerate", "nvsegment", "simple"])
 def test_input_branches_attach_only_matching_ct(
     pipeline, monkeypatch, tmp_path, source
 ):
@@ -123,7 +121,7 @@ def test_pipeline_order_and_complete_exports(pipeline, monkeypatch, tmp_path, wi
     assert events == ["topology", "bundle", "usd"]
     manifest = yaml.safe_load(manifest_path.read_text())
     assert manifest["anatomy"]["exterior"] is None
-    assert manifest["coordinate_frame"] == ("DICOM_LPS" if with_ct else "body")
+    assert manifest["coordinate_frame"] == ("RAS" if with_ct else "body")
     assert ("hu_volume" in manifest["artifacts"]) == with_ct
     graph = body.anatomy.structures["aorta"].centerline
     with np.load(
@@ -206,9 +204,7 @@ def test_simple_stl_pipeline_without_imaging(pipeline, tmp_path):
     )
     manifest = yaml.safe_load(target.read_text())
     assert manifest["coordinate_frame"] == "body"
-    np.testing.assert_array_equal(
-        manifest["transforms"]["world_from_patient_m"], np.eye(4)
-    )
+    assert "world_from_patient_m" not in manifest["transforms"]
     assert manifest["anatomy"]["exterior"] is None
     assert set(manifest["artifacts"]) == {"anatomy_usd"}
     stage = Usd.Stage.Open(str(target.parent / "human_body.usdc"))

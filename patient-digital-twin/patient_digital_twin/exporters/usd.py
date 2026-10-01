@@ -20,14 +20,20 @@ def export_to_usd(body, path):
     Centerlines share their structure's local frame. Export does not change
     structure transforms or visibility.
     """
-    ct = ct_to_human = None
-    if body.imaging is not None:
-        from .utils import attached_ct
+    from .native import scan_for_body, scan_from_body_m
 
-        ct = attached_ct(body.imaging)
-        lps_from_body = np.diag([-1.0, -1.0, 1.0, 1.0]) @ body.imaging.body_to_imaging
-        ct_to_human = np.linalg.inv(lps_from_body)
-    return _export_to_usd(body, path, ct=ct, ct_to_human=ct_to_human)
+    scan = scan_for_body(body)
+    units = scan.meters_per_unit if scan is not None else 1.0
+    placement = scan_from_body_m(body, scan)
+    placement = placement.copy()
+    placement[:3, 3] /= units
+    return _export_to_usd(
+        body,
+        path,
+        native_scan=scan,
+        meters_per_unit=units,
+        root_transform=placement,
+    )
 
 
 def summarize_usd(path):
@@ -42,11 +48,11 @@ def summarize_usd(path):
     centerlines = sum(p.HasAttribute("centerline:points") for p in anatomy)
     ct = stage.GetPrimAtPath("/HumanBody/Imaging/CT")
     return (
-        f"{Path(path).name}: /HumanBody (default Xform, meters, Z-up)\n"
+        f"{Path(path).name}: /HumanBody (default Xform, Z-up, metersPerUnit={UsdGeom.GetStageMetersPerUnit(stage)})\n"
         f"  Anatomy: {len(anatomy)} meshes ({hidden} hidden), {centerlines} centerlines\n"
         f"  Looks: UsdPreviewSurface materials\n"
         + (
-            f"  Imaging/CT: custom HU voxels {tuple(ct.GetAttribute('ct:shapeZYX').Get())}, "
+            f"  Imaging/CT: custom HU voxels {tuple((ct.GetAttribute('ct:shape') or ct.GetAttribute('ct:shapeZYX')).Get())}, "
             "voxel-to-human transform\n"
             if ct
             else ""
@@ -64,10 +70,12 @@ def _export_to_usd(
     skin_name="CT",
     ct=None,
     ct_to_human=None,
+    native_scan=None,
+    meters_per_unit=1.0,
 ):
     """Write current posed geometry to USD, preserving hidden source meshes.
 
-    The stage is Z-up, meters, with a default /HumanBody prim. Meshes retain
+    The stage is Z-up, uses the requested spatial units, and has a default /HumanBody prim. Meshes retain
     their rigid transforms. An optional exterior mesh uses the same frame.
     This is a geometry snapshot, not an animated rig.
     """
@@ -83,7 +91,7 @@ def _export_to_usd(
     if not np.isfinite(skin_opacity) or not 0 <= skin_opacity <= 1:
         raise ValueError("skin_opacity must be between 0 and 1")
     stage = Usd.Stage.CreateInMemory()
-    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    UsdGeom.SetStageMetersPerUnit(stage, meters_per_unit)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     root = UsdGeom.Xform.Define(stage, "/HumanBody")
     stage.SetDefaultPrim(root.GetPrim())
@@ -104,7 +112,10 @@ def _export_to_usd(
         matrix=None,
         enabled=True,
     ):
-        vertices, faces = np.asarray(vertices, dtype=float), np.asarray(faces)
+        vertices, faces = (
+            np.asarray(vertices, dtype=float) / meters_per_unit,
+            np.asarray(faces),
+        )
         if (
             vertices.ndim != 2
             or vertices.shape[1:] != (3,)
@@ -142,7 +153,9 @@ def _export_to_usd(
         if matrix is not None:
             from ..geometry import rigid_transform
 
-            result.AddTransformOp().Set(Gf.Matrix4d(rigid_transform(matrix).T.tolist()))
+            matrix = rigid_transform(matrix).copy()
+            matrix[:3, 3] /= meters_per_unit
+            result.AddTransformOp().Set(Gf.Matrix4d(matrix.T.tolist()))
         material = UsdShade.Material.Define(
             stage, "/HumanBody/Looks/" + result.GetPrim().GetName()
         )
@@ -201,16 +214,55 @@ def _export_to_usd(
             graph = structure.centerline
             prim.CreateAttribute(
                 "centerline:points", Sdf.ValueTypeNames.Point3fArray, custom=True
-            ).Set(Vt.Vec3fArray.FromNumpy(np.asarray(graph.points, dtype=np.float32)))
+            ).Set(
+                Vt.Vec3fArray.FromNumpy(
+                    np.asarray(graph.points / meters_per_unit, dtype=np.float32)
+                )
+            )
             prim.CreateAttribute(
                 "centerline:edges", Sdf.ValueTypeNames.Int2Array, custom=True
             ).Set(Vt.Vec2iArray.FromNumpy(np.asarray(graph.edges, dtype=np.int32)))
             prim.CreateAttribute(
                 "centerline:radii", Sdf.ValueTypeNames.FloatArray, custom=True
-            ).Set(Vt.FloatArray.FromNumpy(np.asarray(graph.radii, dtype=np.float32)))
+            ).Set(
+                Vt.FloatArray.FromNumpy(
+                    np.asarray(graph.radii / meters_per_unit, dtype=np.float32)
+                )
+            )
             prim.CreateAttribute(
                 "centerline:coordinateFrame", Sdf.ValueTypeNames.Token, custom=True
-            ).Set("structure_local_m")
+            ).Set("structure_local")
+    if native_scan is not None:
+        UsdGeom.Scope.Define(stage, "/HumanBody/Imaging")
+        volume = UsdGeom.Scope.Define(stage, "/HumanBody/Imaging/CT").GetPrim()
+        hu = native_scan.values
+        volume.CreateAttribute("ct:hu", Sdf.ValueTypeNames.FloatArray, custom=True).Set(
+            Vt.FloatArray.FromNumpy(hu.ravel(order="C"))
+        )
+        volume.CreateAttribute("ct:shape", Sdf.ValueTypeNames.Int3, custom=True).Set(
+            Gf.Vec3i(*hu.shape)
+        )
+        volume.CreateAttribute(
+            "ct:arrayOrder", Sdf.ValueTypeNames.Token, custom=True
+        ).Set(native_scan.array_axes)
+        volume.CreateAttribute(
+            "ct:arrayIndexToScan", Sdf.ValueTypeNames.Matrix4d, custom=True
+        ).Set(
+            Gf.Matrix4d(
+                np.asarray(
+                    native_scan.metadata["output"]["array_index_to_world"]
+                ).T.tolist()
+            )
+        )
+        volume.CreateAttribute(
+            "ct:coordinateFrame", Sdf.ValueTypeNames.Token, custom=True
+        ).Set(native_scan.frame)
+        volume.CreateAttribute(
+            "ct:spatialUnit", Sdf.ValueTypeNames.Token, custom=True
+        ).Set(native_scan.metadata["output"]["world_unit"])
+        volume.CreateAttribute("ct:units", Sdf.ValueTypeNames.Token, custom=True).Set(
+            "HU"
+        )
     if ct is not None:
         hu = np.asarray(ct.hu_zyx, dtype=np.float32)
         if hu.ndim != 3 or not hu.size or not np.isfinite(hu).all():

@@ -9,7 +9,6 @@ import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import nibabel as nib
 import numpy as np
 from patient_digital_twin import HumanBody, SegmentationImporter
 from patient_digital_twin.catalog import CATALOG
@@ -93,16 +92,16 @@ def import_body(args):
     if source == "sample":
         body.anatomy.configure(SAMPLE / "anatomy.yaml")
     if source == "nvgenerate":
-        body.AttachImaging(
-            importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
-        )
+        if getattr(importer, "ct_scan", None) is not None:
+            body.AttachScan(importer.ct_scan)
+        else:
+            body.AttachImaging(
+                importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
+            )
     elif ct is not None:
-        image = nib.load(str(ct))
-        body.AttachImaging(
-            image.get_fdata(dtype=np.float32).transpose(2, 1, 0),
-            voxel_to_imaging=SegmentationImporter._affine_m(image),
-            source_path=ct,
-        )
+        from patient_digital_twin.scan_volume import from_nifti
+
+        body.AttachScan(from_nifti(ct), source_path=ct)
     return body
 
 

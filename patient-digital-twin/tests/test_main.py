@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import json
 
 import nibabel as nib
 import numpy as np
@@ -113,12 +112,14 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
         ]
     )
     path = main.run_pipeline(**vars(args))
-    hu = np.load(path.parent / "hu_volume.npy")
-    np.testing.assert_array_equal(np.sort(hu.ravel()), np.sort(image.get_fdata().ravel()))
+    hu = np.load(path.parent / "volume.npy")
+    np.testing.assert_array_equal(
+        np.sort(hu.ravel()), np.sort(image.get_fdata().ravel())
+    )
     assert not (path.parent / "mu_volume.npy").exists()
     manifest = yaml.safe_load(path.read_text())
     assert manifest["patient_id"] == tmp_path.name
-    assert manifest["schema_version"] == 2
+    assert manifest["schema_version"] == 3
     assert "attenuation_volume" not in manifest["artifacts"]
     for relative in manifest["artifacts"].values():
         assert (path.parent / relative).is_file()
@@ -126,27 +127,28 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     if stored:
         assert graph is previous
     assert len(graph.points) > 2
-    points = np.load(path.parent / "centerline_points_mm.npy")
-    np.testing.assert_allclose(points[:, :2], -12.0, atol=2)
+    points = np.load(path.parent / "centerline_points.npy")
+    np.testing.assert_allclose(points[:, :2], 12.0, atol=2)
     assert points[:, 2].min() > 6 and points[:, 2].max() < 74
-    assert np.load(path.parent / "centerline_radii_mm.npy").min() > 0
-    assert manifest["coordinate_frame"] == "DICOM_LPS"
+    assert np.load(path.parent / "centerline_radii.npy").min() > 0
+    assert manifest["coordinate_frame"] == "RAS"
     assert "aorta" in manifest["centerlines"]
 
     # Navigation uses the final CT-grid mask, even when local graphs exist.
     from scipy.ndimage import distance_transform_edt
 
-    metadata = json.loads((path.parent / "metadata.json").read_text())
-    spacing = np.asarray(metadata["spacing_zyx_mm"])
-    origin = np.asarray(metadata["origin_xyz_mm"])
-    voxel_xyz = (points - origin) / spacing[::-1]
+    metadata = yaml.safe_load((path.parent / "volume.yaml").read_text())["output"]
+    affine = np.asarray(metadata["array_index_to_world"])
+    spacing = np.linalg.norm(affine[:3, :3], axis=0)
+    origin = affine[:3, 3]
+    voxel_xyz = (points - origin) / spacing
     np.testing.assert_allclose(voxel_xyz, np.rint(voxel_xyz), atol=1e-6)
-    indices = np.rint(voxel_xyz).astype(int)[:, ::-1]
+    indices = np.rint(voxel_xyz).astype(int)
     final_mask = np.load(path.parent / "vessel_mask.npy")
     assert final_mask[tuple(indices.T)].all()
     distances = distance_transform_edt(final_mask, sampling=spacing)
     np.testing.assert_array_equal(
-        np.load(path.parent / "centerline_radii_mm.npy"),
+        np.load(path.parent / "centerline_radii.npy"),
         distances[tuple(indices.T)].astype(np.float32),
     )
     edges = np.load(path.parent / "centerline_edges.npy")
@@ -154,5 +156,8 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     neighbor_offsets = np.abs(indices[edges[:, 1]] - indices[edges[:, 0]])
     assert (neighbor_offsets.max(axis=1) == 1).all()
     with np.load(path.parent / manifest["centerlines"]["aorta"]["path"]) as saved:
-        for key in ("points", "edges", "radii"):
-            np.testing.assert_array_equal(saved[key], getattr(graph, key))
+        placement = anatomy.body_to_imaging @ anatomy.structures["aorta"].local_to_body
+        expected_points = (graph.points @ placement[:3, :3].T + placement[:3, 3]) * 1000
+        np.testing.assert_allclose(saved["points"], expected_points)
+        np.testing.assert_array_equal(saved["edges"], graph.edges)
+        np.testing.assert_allclose(saved["radii"], graph.radii * 1000)

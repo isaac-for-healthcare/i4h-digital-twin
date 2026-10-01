@@ -9,7 +9,7 @@ flowchart LR
     I --> M["Extract meshes"] --> B["HumanBody"]
     B --> A["NumPy vertices + faces"]
     B --> C["Optional: extract centerlines"]
-    T["Optional: matching CT"] --> V["AttachImaging"]
+    T["Optional: matching CT"] --> V["AttachScan"]
     B --> V
     B --> E["Export"]
     C --> E
@@ -70,24 +70,15 @@ Load the matching CT in Hounsfield units. It must share the segmentation's
 physical coordinate frame; the affine carries its spacing, orientation, and origin.
 
 ```python
-import nibabel as nib
-import numpy as np
+from patient_digital_twin.scan_volume import from_nifti
 
-ct = nib.load("ct.nii.gz")
-unit = ct.header.get_xyzt_units()[0]
-meters_per_unit = {"mm": 0.001, "meter": 1.0, "micron": 1e-6, "unknown": 0.001}[unit]
-affine_m = ct.affine.copy()
-affine_m[:3] *= meters_per_unit
-
-body.AttachImaging(
-    ct.get_fdata(dtype=np.float32).transpose(2, 1, 0),  # XYZ → ZYX array.
-    voxel_to_imaging=affine_m,                         # XYZ indices → RAS meters.
-    source_path="ct.nii.gz",
-)
+body.AttachScan(from_nifti("ct.nii.gz"))
 ```
 
-Unspecified NIfTI units are interpreted as millimeters. `source_path` records
-provenance; `AttachImaging` receives the volume itself.
+`AttachScan` preserves the source array axes, spacing, orientation, origin, and
+units for export, including oblique acquisitions. NIfTI uses its original IJK
+array and RAS affine; unspecified spatial units are interpreted as millimeters.
+The lower-level `AttachImaging` API still accepts KJI arrays with an IJK-to-RAS-meter affine.
 
 ## 4. Export
 
@@ -100,14 +91,13 @@ manifest = body.export_patient_twin("patient_bundle")
 ```
 
 Both include stored centerlines and attached CT when present. The bundle directory
-must be new. Bundle CT must be axis-aligned after reorientation; resample oblique
-CT before export.
+must be new. Export does not resample, reorient, or center the source scan.
 
 ```mermaid
 flowchart TD
     E["export_patient_twin"] --> A["Always: patient_twin.yaml + patient_anatomy.usdc"]
     E --> G["With stored graphs: centerlines/*.npz"]
-    E --> T["With CT: hu_volume.npy + metadata.json"]
+    E --> T["With CT: volume.npy + volume.yaml"]
     T --> V["With vessel_names: vessel_mask.npy + centerline_*.npy"]
 ```
 
@@ -119,17 +109,44 @@ manifest = body.export_patient_twin(
 )
 ```
 
-The exporter voxelizes the selected meshes on the CT grid, closes the mask,
-keeps its largest component, then calculates navigation centerlines from that
-final mask. This works without step 2. Navigation points and radii use **LPS
-millimeters**; volumes use **ZYX** order. Per-structure graphs remain separate.
-`exterior="ct"` adds a CT-derived patient envelope.
+The exporter retains the segmentation labels on the source CT grid and calculates
+navigation centerlines from that mask. If only meshes are available, it rasterizes
+them on that grid. It does not close the mask or discard components. This works
+without step 2; `exterior="ct"` adds a CT-derived patient envelope.
 
-Bundles use schema version 2 and export CT in HU with explicit ZYX order and
-spatial metadata. They do not contain `mu_volume.npy` or select an attenuation
-curve. i4h-workflows passes HU to sensor-simulation, which owns the `linear`
-(default) and `interventional` mappings. Select a curve when rendering with
-`./run.sh endoluminal_navigation ... --hu-to-mu interventional`.
+Schema-3 bundles preserve **scan array order** for CT and masks. Meshes and
+navigation points/radii use the **scan physical frame and units**, declared in
+`patient_twin.yaml`; `volume.yaml` records the full array-to-world affine and
+source provenance. Read these fields rather than assuming ZYX, LPS, or millimeters.
+Navigation centerlines support orthogonal grids, including oblique rotations;
+sheared grids require explicit downstream resampling before centerline extraction.
+Simulator placement belongs to the consuming workflow. HU → μ conversion belongs
+to sensor-simulation, with `linear` (default) and `interventional` presets.
+
+## DICOM and reproducible volume artifacts
+
+Install `./patient-digital-twin[dicom]` to read regular single-frame DICOM CT series.
+The CLI accepts a DICOM directory (and `--series-uid` when it contains multiple
+series), or an existing `volume.yaml`, in place of the NIfTI input below.
+DICOM CLI export keeps the acquisition grid in LPS millimeters and KJI array order.
+
+The small `scan_volume` helper is also shipped in sensor-simulation. Use it
+explicitly when a consumer needs a chosen frame, units, axes, or voxel spacing:
+
+```python
+from patient_digital_twin.scan_volume import Conversion, export_ct, replay
+
+recipe = export_ct("dicom/", "ct_artifact", options=Conversion(
+    world_frame="RAS", world_unit="m", origin="dicom", array_axes="kji",
+    spacing_ijk_mm=None,  # Preserve spacing; a tuple requests resampling.
+))
+replay(recipe, "dicom/", "reproduced_ct")
+```
+
+This writes `volume.npy` in HU plus one `volume.yaml` containing conversion options,
+source file hashes, affines, units, output hash, and implementation versions.
+Replay verifies those inputs and versions. Irregular slices and enhanced multi-frame
+DICOM require an explicit conversion before using this regular-grid reader.
 
 ## Start from CT or generate a patient
 
@@ -176,7 +193,7 @@ anatomy = NVSegmentImporter(
 # Alternative: generate paired anatomy and CT.
 generator = NVGenerateImporter(source_root="/path/to/NV-Generate-CTMR")
 anatomy = generator.to_anatomy_collection(names=["aorta"])
-# Matching CT: generator.ct_volume_zyx and generator.ct_voxel_to_imaging.
+# Matching source CT: generator.ct_scan (attach with body.AttachScan).
 ```
 
 An explicit `--python /model/env/bin/python` (or `python_executable=` in Python)
@@ -187,7 +204,8 @@ uses relative paths, so in-process calls temporarily change it and are serialize
 Use new output paths. Bundle patient IDs are derived automatically from the input
 folder (`geometry` for generated anatomy); no `--patient-id` option is needed.
 The CLI extracts missing vessel centerlines automatically.
-NV-Segment accepts 3D `.nii`/`.nii.gz`; `--modality MR` supports geometry-only USD.
+NV-Segment accepts 3D `.nii`/`.nii.gz`, DICOM CT, or `volume.yaml`;
+`--modality MR` supports geometry-only NIfTI USD.
 Bundle output requires CT and at least one vessel. Run
 `python -m patient_digital_twin --help` for options.
 

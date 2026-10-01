@@ -14,7 +14,7 @@ from .catalog import CATALOG
 from .human import HumanBody
 from .importers import NVGenerateImporter, NVSegmentImporter
 from .importers._common import image_input
-from .importers._segmentation import SegmentationImporter, canonical_name
+from .importers._segmentation import canonical_name
 from .structures import Kind
 
 
@@ -50,6 +50,7 @@ def run_pipeline(
     source_root=None,
     python_executable=None,
     centerline_spacing_mm=1.5,
+    series_uid=None,
 ):
     """Run an optional model backend and export only the requested meshes.
 
@@ -82,23 +83,28 @@ def run_pipeline(
     if source == "nvsegment":
         if input is None:
             raise ValueError(
-                "nvsegment requires --input pointing to a 3D medical NIfTI image"
+                "nvsegment requires --input pointing to a 3D medical NIfTI image, DICOM CT directory, or volume.yaml"
             )
         input = Path(input).expanduser().resolve()
-        if not input.is_file() or not str(input).lower().endswith((".nii", ".nii.gz")):
-            raise ValueError("input must be an existing .nii or .nii.gz image")
-        image = image_input(input)
-        if format == "bundle":
-            from .exporters.utils import _image_to_ct
+        from . import scan_volume
 
-            if not np.allclose(
-                np.asarray(_image_to_ct(image).direction).reshape(3, 3),
-                np.eye(3),
-                atol=1e-4,
-            ):
-                raise ValueError(
-                    "Resample oblique CT to patient axes before bundle export"
-                )
+        if input.is_dir():
+            scan = scan_volume.from_dicom(
+                input,
+                series_uid=series_uid,
+                conversion=scan_volume.Conversion(world_frame="LPS", world_unit="mm"),
+            )
+            image = image_input(scan.values_kji.transpose(2, 1, 0), scan.ijk_to_ras_m)
+        elif input.suffix in {".yaml", ".yml"}:
+            scan = scan_volume.load_artifact(input)
+            image = image_input(scan.values_kji.transpose(2, 1, 0), scan.ijk_to_ras_m)
+        elif input.is_file() and str(input).lower().endswith((".nii", ".nii.gz")):
+            scan = scan_volume.from_nifti(input)
+            image = image_input(input)
+        else:
+            raise ValueError(
+                "input must be a DICOM directory, .nii/.nii.gz image, or volume.yaml"
+            )
         importer = NVSegmentImporter(
             image,
             bundle_root=bundle_root,
@@ -125,16 +131,14 @@ def run_pipeline(
         )
     body = HumanBody(anatomy)
     if source == "nvsegment" and modality == "CT":
-        body.AttachImaging(
-            np.asarray(image.dataobj).transpose(2, 1, 0),
-            voxel_to_imaging=SegmentationImporter._affine_m(image),
-            source_path=str(input),
-            modality=modality,
-        )
+        body.AttachScan(scan, source_path=str(input))
     elif source == "nvgenerate":
-        body.AttachImaging(
-            importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
-        )
+        if getattr(importer, "ct_scan", None) is not None:
+            body.AttachScan(importer.ct_scan)
+        else:
+            body.AttachImaging(
+                importer.ct_volume_zyx, voxel_to_imaging=importer.ct_voxel_to_imaging
+            )
     vessel_names = tuple(
         name
         for name in names
@@ -164,7 +168,9 @@ def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--source", required=True, choices=("nvgenerate", "nvsegment"))
     result.add_argument(
-        "--input", type=Path, help="3D CT/MR NIfTI; required for nvsegment"
+        "--input",
+        type=Path,
+        help="CT/MR NIfTI, DICOM CT directory, or volume.yaml; required for nvsegment",
     )
     result.add_argument(
         "--classes",
@@ -173,6 +179,9 @@ def parser():
         help="Named anatomy classes (spaces or commas)",
     )
     result.add_argument("--output", type=Path, required=True)
+    result.add_argument(
+        "--series-uid", help="DICOM series to select when a directory contains several"
+    )
     result.add_argument("--format", choices=("usd", "bundle"), default="usd")
     result.add_argument("--modality", choices=("CT", "MR"), default="CT")
     result.add_argument(

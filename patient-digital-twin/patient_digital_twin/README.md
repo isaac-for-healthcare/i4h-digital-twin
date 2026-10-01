@@ -13,7 +13,7 @@ flowchart TD
     M --> A["AnatomyCollection: named structures + mesh placement"]
     A --> B["HumanBody: user API"]
     B --> T["extract_topology: local centerline graphs"]
-    CT["CT array + voxel affine"] --> V["AttachImaging: ImagingVolume"]
+    CT["Native ScanVolume + full affine"] --> V["AttachScan: ImagingVolume"]
     B --> V
     B --> E["exporters"]
     T --> E
@@ -27,7 +27,7 @@ flowchart TD
 - [SegmentationImporter](importers/_segmentation.py) reads labeled NIfTI,
   binary-mask directories, or NumPy masks. `to_anatomy_collection()` extracts meshes.
 - [HumanBody](human.py) owns `anatomy` and optional `imaging`, and exposes
-  `extract_topology()`, `AttachImaging()`, `export_to_usd()`, and `export_patient_twin()`.
+  `extract_topology()`, `AttachScan()`, `AttachImaging()`, `export_to_usd()`, and `export_patient_twin()`.
 - [AnatomyCollection](anatomy.py) exposes `structures[name]` and controls visibility.
   Disabling a structure preserves its mesh.
 - The optional `nvsegment` and `nvgenerate` extras enable the corresponding
@@ -35,8 +35,9 @@ flowchart TD
   checkouts and weights are separate. Inference runs in-process unless an
   explicit `python_executable` is provided.
 - [__main__.py](__main__.py) provides the NV-Segment / NV-Generate CLI.
-- [legacy_ct](legacy_ct/README.md) isolates canonical CT ingest and navigation artifact
-  generation used by the bundle exporter.
+- [scan_volume.py](scan_volume.py) reads native NIfTI/DICOM grids and saves or replays
+  NumPy + YAML artifacts. The same helper is shipped in sensor-simulation.
+- [legacy_ct](legacy_ct/README.md) isolates the temporary skeleton-centerline implementation.
 
 ## Coordinates and outputs
 
@@ -44,11 +45,11 @@ Meshes and stored structure centerlines use XYZ meters. `structure.mesh.vertices
 uses the local frame; `structure.body_vertices` includes the original body
 placement. `structure.world_vertices` includes the current display placement.
 
-`AttachImaging()` takes a ZYX volume and an XYZ-voxel-to-RAS-meter affine.
-Imported anatomy retains its source registration. Standalone USD preserves
-current placement; patient bundles use original imaging placement.
+`AttachScan()` retains native values and geometry for export; `AttachImaging()`
+remains a lower-level KJI/RAS-meter API. With CT, schema-3 USD and bundle geometry
+use the scan physical frame and units. CT and masks preserve source array order.
+Simulator world placement is applied downstream.
 
-With attached CT and explicit `vessel_names`, bundle export calculates a
-navigation graph from the final CT-grid vessel mask. These navigation arrays use
-LPS millimeters; stored per-structure graphs remain in local meters. See the
-[export steps](../README.md#4-export) and [USD guide](../docs/usd.md) for details.
+With attached CT and `vessel_names`, bundle export calculates a navigation graph
+from the retained source labels, or rasterizes meshes if labels are unavailable.
+See the [export steps](../README.md#4-export) and [USD guide](../docs/usd.md).

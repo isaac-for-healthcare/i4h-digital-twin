@@ -10,8 +10,8 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from .artifacts import write_artifacts
-from .ct.dicom_ingest import load_nifti_hu
+from ..exporters.native import native_centerline
+from ..scan_volume import from_nifti
 
 
 def main(argv=None):
@@ -24,24 +24,28 @@ def main(argv=None):
     output = args.output.expanduser().resolve()
     if output.exists():
         raise FileExistsError(f"Use a new output directory: {output}")
-    ct = load_nifti_hu(args.ct)
+    ct = from_nifti(args.ct)
     mask = None
     if args.vessel_mask:
-        labels = load_nifti_hu(args.vessel_mask)
-        if (
-            labels.hu_zyx.shape != ct.hu_zyx.shape
-            or not np.allclose(labels.spacing_zyx_mm, ct.spacing_zyx_mm)
-            or not np.allclose(labels.origin_xyz_mm, ct.origin_xyz_mm)
-            or not np.allclose(labels.direction, ct.direction)
+        labels = from_nifti(args.vessel_mask)
+        if labels.values.shape != ct.values.shape or not np.allclose(
+            labels.ijk_to_ras_m, ct.ijk_to_ras_m
         ):
             raise ValueError("Vessel mask must match the CT physical grid")
-        mask = labels.hu_zyx > 0
+        if not np.isin(labels.values, [0, 1]).all():
+            raise ValueError("Vessel mask must be binary")
+        mask = labels.values > 0
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=output.parent, prefix=".ct-artifacts-") as temp:
         folder = Path(temp) / "artifacts"
-        write_artifacts(
-            ct, folder, source=args.ct, vessel_mask=mask
-        )
+        ct.save(folder)
+        if mask is not None:
+            np.save(folder / "vessel_mask.npy", mask.astype(np.uint8))
+            for name, values in zip(
+                ("centerline_points", "centerline_edges", "centerline_radii"),
+                native_centerline(mask, ct),
+            ):
+                np.save(folder / f"{name}.npy", values)
         shutil.move(str(folder), output)
     print(output)
     return 0
