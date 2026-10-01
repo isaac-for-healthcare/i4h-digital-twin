@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -122,7 +123,15 @@ def coverage(body, supported, *, backend, requested=None, **details):
 
 
 def runtime(python_executable, modules, install):
-    """Fail before inference with a pip-install hint in the chosen interpreter."""
+    """Check lazy dependencies; None selects inference in the current process."""
+    if python_executable is None:
+        missing = [name for name in modules if importlib.util.find_spec(name) is None]
+        if missing:
+            raise ImportError(
+                f"Missing optional dependencies: {', '.join(missing)}. "
+                f"Run: {sys.executable} -m pip install '{install}'"
+            )
+        return None
     python = str(python_executable or sys.executable)
     check = subprocess.run(
         [
@@ -141,7 +150,7 @@ def runtime(python_executable, modules, install):
     missing = json.loads(check.stdout)
     if missing:
         raise ImportError(
-            f"Missing optional dependencies: {', '.join(missing)}. Run: {python} -m pip install {install}"
+            f"Missing optional dependencies: {', '.join(missing)}. Run: {python} -m pip install '{install}'"
         )
     return python
 

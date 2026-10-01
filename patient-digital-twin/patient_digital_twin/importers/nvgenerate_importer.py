@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 import nibabel as nib
 import numpy as np
 
+from ._backend_context import backend_context
 from ._common import (
     coverage,
     run_backend,
@@ -27,8 +28,9 @@ from ._segmentation import SegmentationImporter
 class NVGenerateImporter:
     """Generate paired CT and anatomy using upstream rflow-ct inference.
 
-    Requires the upstream checkout, mask/image checkpoints and conditioning
-    dataset. All generated labels survive the upstream output filtering step.
+    Install patient-digital-twin[nvgenerate] and provide the upstream checkout,
+    mask/image checkpoints and conditioning dataset. Inference uses imports in
+    the current process; python_executable opts into a separate environment. All generated labels survive the upstream output filtering step.
     After import, ct_volume_zyx and ct_voxel_to_imaging provide the matching CT
     as a NumPy array and an XYZ-voxel-to-RAS-meter affine for AttachImaging().
     """
@@ -47,7 +49,9 @@ class NVGenerateImporter:
         """Return meshes and retain the matching CT array/affine on this importer."""
         self.ct_volume_zyx = self.ct_voxel_to_imaging = None
         python = runtime(
-            self.python_executable, ["torch", "monai", "einops"], "torch monai einops"
+            self.python_executable,
+            ["torch", "monai", "einops", "huggingface_hub", "matplotlib"],
+            "patient-digital-twin[nvgenerate]",
         )
         if not (self.root / "scripts/inference.py").is_file():
             raise ImportError(
@@ -59,13 +63,19 @@ class NVGenerateImporter:
         previous = self.seed
         while self.seed is None or self.seed == previous:
             self.seed = secrets.randbits(32)
-        worker = Path(__file__).with_name("_nvgenerate_worker.py").read_text()
         with TemporaryDirectory(prefix="patient-nvgenerate-") as temp:
             output = Path(temp) / "mask.nii.gz"
             ct_output = Path(temp) / "ct.nii.gz"
-            run_backend(
-                [python, "-c", worker, str(self.seed), output, ct_output], cwd=self.root
-            )
+            if python is None:
+                from ._nvgenerate_worker import generate
+
+                with backend_context(self.root):
+                    generate(self.seed, output, ct_output)
+            else:
+                worker = Path(__file__).with_name("_nvgenerate_worker.py").read_text()
+                run_backend(
+                    [python, "-c", worker, str(self.seed), output, ct_output], cwd=self.root
+                )
             mask_image, ct_image = nib.load(output), nib.load(ct_output)
             mask_affine = SegmentationImporter._affine_m(mask_image)
             ct_affine = SegmentationImporter._affine_m(ct_image)

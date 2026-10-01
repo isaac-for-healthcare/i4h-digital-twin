@@ -131,8 +131,17 @@ outside that range. Use `hu_to_mu_preset="interventional"` for the alternative.
 ## Start from CT or generate a patient
 
 The CLI runs **NV-Segment** on an input image or **NV-Generate** to produce paired
-CT and labels. Model runtimes and weights must be installed separately;
-`--python` selects their interpreter. See the upstream
+CT and labels. Both are optional; install only the backend you use:
+
+```bash
+pip install -e './patient-digital-twin[pipeline,nvsegment]'
+# Or:
+pip install -e './patient-digital-twin[pipeline,nvgenerate]'
+```
+
+These extras install inference dependencies, not model source or weights. Provide
+an upstream checkout and its model assets; use a CUDA-compatible PyTorch build.
+Inference runs through Python imports in the current process by default. See the upstream
 [NV-Segment](https://github.com/NVIDIA-Medtech/NV-Segment-CTMR) and
 [NV-Generate](https://github.com/NVIDIA-Medtech/NV-Generate-CTMR) setup guides.
 
@@ -144,15 +153,33 @@ NV-Segment rather than the supplied masks:
 python -m patient_digital_twin.main \
   --source nvsegment --input /path/to/s0011/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
-  --python /path/to/model-env/bin/python \
   --classes aorta --patient-id s0011 \
   --format workflow --output ./output/s0011_aorta
 
 python -m patient_digital_twin.main \
   --source nvgenerate --source-root /path/to/NV-Generate-CTMR \
-  --python /path/to/model-env/bin/python \
   --classes aorta liver --format usd --output ./output/generated.usdc
 ```
+
+The import API uses the same backends:
+
+```python
+from patient_digital_twin import NVSegmentImporter, NVGenerateImporter
+
+anatomy = NVSegmentImporter(
+    "ct.nii.gz", bundle_root="/path/to/NV-Segment-CTMR/NV-Segment-CTMR"
+).to_anatomy_collection(names=["aorta"])
+
+# Alternative: generate paired anatomy and CT.
+generator = NVGenerateImporter(source_root="/path/to/NV-Generate-CTMR")
+anatomy = generator.to_anatomy_collection(names=["aorta"])
+# Matching CT: generator.ct_volume_zyx and generator.ct_voxel_to_imaging.
+```
+
+An explicit `--python /model/env/bin/python` (or `python_executable=` in Python)
+opts into a separate process. Use it when dependencies need a different environment
+or other application threads depend on the working directory: upstream inference
+uses relative paths, so in-process calls temporarily change it and are serialized.
 
 Use new output paths. The CLI extracts missing vessel centerlines automatically.
 NV-Segment accepts 3D `.nii`/`.nii.gz`; `--modality MR` supports geometry-only USD.

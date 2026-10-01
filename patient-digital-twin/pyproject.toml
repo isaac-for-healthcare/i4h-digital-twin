@@ -12,6 +12,8 @@ authors = [{ name = "i4h" }]
 dependencies = ["numpy>=1.24", "nibabel>=5.0", "PyYAML>=6.0", "scikit-image>=0.22"]
 
 [project.optional-dependencies]
+nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
+nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
 pipeline = ["usd-core", "vtk", "scipy>=1.10"]
 physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]

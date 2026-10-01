@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 import nibabel as nib
 import numpy as np
 
+from ._backend_context import backend_context
 from ._common import (
     coverage,
     image_input,
@@ -25,11 +26,12 @@ from ._segmentation import SegmentationImporter
 
 
 class NVSegmentImporter:
-    """Run the upstream bundle in its own working directory and Python runtime.
+    """Run the upstream MONAI bundle through Python imports by default.
 
     NV-Segment-CTMR is a source bundle, not a standalone PyPI distribution.
-    Supply its inner NV-Segment-CTMR directory and pip-install the upstream
-    runtime requirements in python_executable (the current Python by default).
+    Install patient-digital-twin[nvsegment] and supply the inner bundle directory
+    with its configuration, scripts and weights. An explicit python_executable
+    opts into a separate process/environment.
     """
 
     def __init__(
@@ -56,8 +58,8 @@ class NVSegmentImporter:
         """Request supported catalog prompts, invert preprocessing, and mesh output."""
         python = runtime(
             self.python_executable,
-            ["torch", "monai", "ignite", "fire", "einops"],
-            "monai pytorch-ignite fire einops huggingface_hub",
+            ["torch", "monai", "ignite", "fire", "einops", "huggingface_hub"],
+            "patient-digital-twin[nvsegment]",
         )
         config = self.root / "configs/inference.json"
         if not config.is_file():
@@ -93,19 +95,28 @@ class NVSegmentImporter:
             )
             config_path = temp / "inference.json"
             config_path.write_text(json.dumps(overrides))
-            run_backend(
-                [
-                    python,
-                    "-m",
-                    "monai.bundle",
-                    "run",
-                    "--config_file",
-                    config_path,
-                    "--meta_file",
-                    self.root / "configs/metadata.json",
-                ],
-                cwd=self.root,
-            )
+            if python is None:
+                with backend_context(self.root):
+                    from monai.bundle import run
+
+                    run(
+                        config_file=str(config_path),
+                        meta_file=str(self.root / "configs/metadata.json"),
+                    )
+            else:
+                run_backend(
+                    [
+                        python,
+                        "-m",
+                        "monai.bundle",
+                        "run",
+                        "--config_file",
+                        config_path,
+                        "--meta_file",
+                        self.root / "configs/metadata.json",
+                    ],
+                    cwd=self.root,
+                )
             outputs = list((temp / "masks").rglob("*.nii.gz"))
             if len(outputs) != 1:
                 raise RuntimeError(

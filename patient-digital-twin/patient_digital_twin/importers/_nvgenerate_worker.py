@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run upstream paired CT/mask inference in its own installed environment."""
+"""Call upstream paired CT/mask inference; also usable by the process fallback."""
 
 
-def main():
+def generate(seed, mask_output, ct_output):
     import json
     import shutil
     import sys
@@ -12,7 +12,6 @@ def main():
 
     from scripts import inference, sample
 
-    seed, mask_output, ct_output = sys.argv[1:]
     folder = Path(mask_output).parent
     environment = json.loads(Path("configs/environment_rflow-ct.json").read_text())
     config = json.loads(Path("configs/config_infer.json").read_text())
@@ -33,6 +32,8 @@ def main():
     config_path.write_text(json.dumps(config))
     # Upstream normally keeps only the conditioning organ in its saved mask.
     # Preserve the complete generated segmentation for anatomy import.
+    original_filter = sample.filter_mask_with_organs
+    original_argv = sys.argv
     sample.filter_mask_with_organs = lambda labels, organs: labels
     sys.argv = [
         "inference",
@@ -43,11 +44,15 @@ def main():
         "-i",
         str(config_path),
         "--random-seed",
-        seed,
+        str(seed),
         "--version",
         "rflow-ct",
     ]
-    inference.main()
+    try:
+        inference.main()
+    finally:
+        sample.filter_mask_with_organs = original_filter
+        sys.argv = original_argv
     images = list((folder / "generated").glob("*_image.nii.gz"))
     if len(images) != 1:
         raise RuntimeError(f"Expected one generated CT, found {len(images)}")
@@ -59,4 +64,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    generate(*sys.argv[1:])

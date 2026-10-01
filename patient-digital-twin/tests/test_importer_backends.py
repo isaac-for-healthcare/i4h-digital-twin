@@ -47,14 +47,15 @@ def test_segmentation_filters_non_catalog_ids_and_keeps_missing_empty():
     assert body.structures["colon"].is_empty
 
 
-def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path):
+@pytest.mark.parametrize("in_process", [True, False])
+def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path, in_process):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "configs").mkdir()
     (tmp_path / "scripts/inference.py").write_text("")
     (tmp_path / "configs/label_dict.json").write_text(json.dumps({"colon": 62}))
     import patient_digital_twin.importers.nvgenerate_importer as module
 
-    monkeypatch.setattr(module, "runtime", lambda *args: sys.executable)
+    monkeypatch.setattr(module, "runtime", lambda *args: None if in_process else sys.executable)
     seeds = iter([12, 12, 13])
     monkeypatch.setattr(module.secrets, "randbits", lambda bits: next(seeds))
 
@@ -69,6 +70,13 @@ def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(module, "run_backend", run)
+    from patient_digital_twin.importers import _nvgenerate_worker
+
+    def generate(seed, output, ct_output):
+        assert Path.cwd() == tmp_path
+        run([seed, output, ct_output])
+
+    monkeypatch.setattr(_nvgenerate_worker, "generate", generate)
     importer = NVGenerateImporter(source_root=tmp_path)
     with pytest.warns(UserWarning):
         first = importer.to_anatomy_collection()
@@ -80,8 +88,9 @@ def test_generation_fresh_seed_and_catalog_import(monkeypatch, tmp_path):
     assert importer.ct_voxel_to_imaging.shape == (4, 4)
 
 
+@pytest.mark.parametrize("in_process", [True, False])
 def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, in_process
 ):
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs/inference.json").write_text("{}")
@@ -96,7 +105,7 @@ def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
     )
     import patient_digital_twin.importers.nvsegment_importer as module
 
-    monkeypatch.setattr(module, "runtime", lambda *args: sys.executable)
+    monkeypatch.setattr(module, "runtime", lambda *args: None if in_process else sys.executable)
 
     def run(command, **kwargs):
         config = json.loads(
@@ -113,6 +122,15 @@ def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
         )
 
     monkeypatch.setattr(module, "run_backend", run)
+    bundle = ModuleType("monai.bundle")
+
+    def bundle_run(*, config_file, meta_file):
+        assert Path.cwd() == tmp_path
+        assert meta_file == str(tmp_path / "configs/metadata.json")
+        run(["--config_file", config_file])
+
+    bundle.run = bundle_run
+    monkeypatch.setitem(sys.modules, "monai.bundle", bundle)
     importer = NVSegmentImporter(
         np.zeros((3, 3, 3)),
         bundle_root=tmp_path,
@@ -170,7 +188,8 @@ def test_usd_units_authored_transform_and_winding(tmp_path):
     )
 
 
-def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path):
+@pytest.mark.parametrize("fail", [False, True])
+def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail):
     import runpy
 
     root = tmp_path / "upstream"
@@ -185,6 +204,10 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
     scripts = ModuleType("scripts")
     scripts.sample = ModuleType("scripts.sample")
     scripts.inference = ModuleType("scripts.inference")
+    def original_filter(labels, organs):
+        return labels[:1]
+
+    scripts.sample.filter_mask_with_organs = original_filter
 
     def infer():
         environment = json.loads(Path(sys.argv[sys.argv.index("-e") + 1]).read_text())
@@ -195,6 +218,8 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         np.testing.assert_array_equal(
             scripts.sample.filter_mask_with_organs(labels, [1]), labels
         )
+        if fail:
+            raise RuntimeError("generation failed")
         output = Path(environment["output_dir"])
         output.mkdir()
         nib.save(
@@ -215,6 +240,16 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         Path(__file__).resolve().parents[1]
         / "patient_digital_twin/importers/_nvgenerate_worker.py"
     )
-    runpy.run_path(str(worker), run_name="__main__")
+    original_argv = sys.argv
+    if fail:
+        with pytest.raises(RuntimeError, match="generation failed"):
+            runpy.run_path(str(worker), run_name="__main__")
+    else:
+        runpy.run_path(str(worker), run_name="__main__")
+    assert sys.argv is original_argv
+    assert scripts.sample.filter_mask_with_organs is original_filter
+    if fail:
+        assert not mask.exists() and not ct.exists()
+        return
     assert nib.load(mask).shape == nib.load(ct).shape == (3, 4, 5)
     assert np.all(nib.load(ct).get_fdata() == 100)

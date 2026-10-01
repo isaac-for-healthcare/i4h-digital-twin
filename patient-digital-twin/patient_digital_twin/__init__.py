@@ -8,7 +8,7 @@ from .configuration import AnatomyConfiguration
 from .geometry import Similarity
 from .human import HumanBody
 from .imaging import ImagingVolume
-from .importers import SegmentationImporter
+from .importers import NVGenerateImporter, NVSegmentImporter, SegmentationImporter
 from .structures import (
     AnatomicalStructure,
     Kind,
@@ -27,6 +27,8 @@ __all__ = [
     "ImagingVolume",
     "Kind",
     "MeshGeometry",
+    "NVGenerateImporter",
+    "NVSegmentImporter",
     "SegmentationImporter",
     "Similarity",
     "System",

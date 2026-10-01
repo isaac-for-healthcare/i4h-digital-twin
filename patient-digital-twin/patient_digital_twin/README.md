@@ -30,6 +30,10 @@ flowchart TD
   `extract_topology()`, `AttachImaging()`, `export_to_usd()`, and `export_patient_twin()`.
 - [AnatomyCollection](anatomy.py) exposes `structures[name]` and controls visibility.
   Disabling a structure preserves its mesh.
+- The optional `nvsegment` and `nvgenerate` extras enable the corresponding
+  importers. Model dependencies load only when inference is requested; source
+  checkouts and weights are separate. Inference runs in-process unless an
+  explicit `python_executable` is provided.
 - [main.py](main.py) provides the NV-Segment / NV-Generate CLI.
 - [legacy_ct](legacy_ct/README.md) isolates CT attenuation and navigation artifact
   generation used by the bundle exporter.

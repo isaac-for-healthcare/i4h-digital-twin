@@ -2,8 +2,10 @@
 
 Run from `patient-digital-twin/`. Install `.[usd]` and the mesh/topology dependencies
 (`scipy`, `vtk`; add `trimesh` for STL/OBJ import).
-Inference backends require their own models and dependencies; NVIDIA backends can
-run in a separate interpreter using `--python`.
+For optional inference, install `.[pipeline,nvsegment]` or
+`.[pipeline,nvgenerate]` and provide the upstream source and model assets.
+Both adapters use Python imports in the current process by default.
+`--python` explicitly selects a separate interpreter when needed.
 
 The pipeline imports anatomy, constructs `HumanBody`, attaches matching CT when
 available, extracts vessel/airway topology, then calls
