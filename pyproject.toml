@@ -36,6 +36,8 @@ packages = [
   "patient_digital_twin.exporters",
   "patient_digital_twin.imaging_to_mesh",
   "patient_digital_twin.importers",
+  "patient_digital_twin.legacy_ct",
+  "patient_digital_twin.legacy_ct.ct",
   "robot_digital_twin",
   "sim_ready_assets",
 ]
