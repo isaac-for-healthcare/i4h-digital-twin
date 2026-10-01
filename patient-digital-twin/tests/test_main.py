@@ -6,7 +6,7 @@ import json
 import nibabel as nib
 import numpy as np
 import pytest
-from patient_digital_twin import main
+from patient_digital_twin import __main__ as main
 from patient_digital_twin.importers._common import segmentation_anatomy, selected_labels
 
 

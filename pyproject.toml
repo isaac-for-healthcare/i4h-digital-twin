@@ -29,7 +29,7 @@ patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.
 patient-usd = ["usd-core"]
 
 [project.scripts]
-patient-digital-twin = "patient_digital_twin.main:main"
+patient-digital-twin = "patient_digital_twin.__main__:main"
 i4h-asset-retrieve = "i4h_asset_helper.cli:retrieve_main"
 
 [tool.setuptools]

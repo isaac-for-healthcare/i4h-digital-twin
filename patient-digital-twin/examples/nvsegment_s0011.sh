@@ -11,6 +11,6 @@ ct="$1"
 bundle="$2"
 output="$3"
 shift 3
-exec python -m patient_digital_twin.main \
+exec python -m patient_digital_twin \
   --source nvsegment --input "$ct" --bundle-root "$bundle" \
   --classes aorta --format workflow --patient-id s0011 --output "$output" "$@"

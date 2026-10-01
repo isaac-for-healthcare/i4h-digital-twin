@@ -21,7 +21,7 @@ mesh = []  # Compatibility alias: meshing is now included in the base install.
 usd = ["usd-core"]
 
 [project.scripts]
-patient-digital-twin = "patient_digital_twin.main:main"
+patient-digital-twin = "patient_digital_twin.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
