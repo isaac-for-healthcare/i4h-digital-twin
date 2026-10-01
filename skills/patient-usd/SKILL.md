@@ -35,9 +35,7 @@ text parsing of binary `.usdc` files.
 - Use `UsdGeom.XformCache` for complete local-to-world transforms, including
   `/HumanBody`. Transpose Gf matrices when using the package's NumPy column-vector
   convention. Respect `metersPerUnit`; do not apply a second axis conversion.
-- Standalone export defaults to `pose="scan"`, a supine arms-down presentation
-  when SOMA is attached. `pose="current"` selects the displayed pose. Without
-  SOMA, the root is identity and current structure placements are retained.
+- Standalone export uses an identity root and retains current structure placements.
 - Bundle anatomy is in `coordinate_frame` (`DICOM_LPS` or `body`). Apply manifest
   `world_from_patient_m` once for consumer world placement; it is not baked into
   the bundle USD. Do not apply that matrix to the standalone presentation file.
@@ -47,7 +45,7 @@ text parsing of binary `.usdc` files.
   persist requested edits to a deliberate output and maintain bundle references.
 
 The exporter authors static meshes and materials. It does not author animated
-SOMA rigs, collisions, dynamics, or a CT volume renderer. Posing the Python body
+rigs, collisions, dynamics, or a CT volume renderer. Changing the Python body
 after export does not update the saved stage.
 
 ## CT and topology
@@ -56,7 +54,7 @@ Standalone `/HumanBody/Imaging/CT` stores `ct:hu`, `ct:shapeZYX`,
 `ct:arrayOrder="ZYX_C"`, `ct:units="HU"`, and `ct:voxelToHuman`.
 Reshape HU in C order to ZYX. Transform XYZ voxel indices with `ct:voxelToHuman`
 then the HumanBody root transform. Do not assume an identity root, infer voxel
-spacing from shape, or treat a posed skin as a deformed CT.
+spacing from shape, or infer imaging placement from an exterior mesh.
 
 Mesh `centerline:points` and `centerline:radii` use local meters;
 `centerline:edges` indexes the points. Apply the mesh's complete transform to
@@ -84,7 +82,7 @@ not this viewer. Do not install a simulator just to inspect metadata.
 
 Do not feed an entire patient USD to `SimpleImporter` expecting a round trip:
 it merges all meshes, including hidden ones, into a single named structure per
-input file and loses patient-level CT, SOMA, topology and policy state. For
+input file and loses patient-level CT, topology and policy state. For
 per-structure import, use triangulated assets and explicit `mesh_to_body` placement.
 
 For physics requests, read the guide's physics section before calling

@@ -63,7 +63,7 @@ def test_input_branches_attach_only_matching_ct(
     if source != "nvgenerate":
         options += ["--input", str(input_path)]
     body = pipeline.import_body(pipeline.parser().parse_args(options))
-    assert body.anatomy is anatomy and body.soma is None
+    assert body.anatomy is anatomy
     if source == "simple":
         assert body.imaging is None
         np.testing.assert_array_equal(calls[0][1]["mesh_to_body"]["liver"], np.eye(4))
@@ -75,12 +75,8 @@ def test_input_branches_attach_only_matching_ct(
         )
 
 
-@pytest.mark.parametrize(
-    "with_ct,with_soma", [(False, False), (True, False), (True, True)]
-)
-def test_pipeline_order_and_complete_exports(
-    pipeline, monkeypatch, tmp_path, with_ct, with_soma
-):
+@pytest.mark.parametrize("with_ct", [False, True])
+def test_pipeline_order_and_complete_exports(pipeline, monkeypatch, tmp_path, with_ct):
     trimesh = pytest.importorskip("trimesh")
     pytest.importorskip("pxr")
     from pxr import Usd
@@ -99,14 +95,6 @@ def test_pipeline_order_and_complete_exports(
         def extract_topology(self, **options):
             events.append("topology")
             return super().extract_topology(**options)
-
-        def AttachExternalBody(self, **options):
-            from test_soma import ArticulatedLayer
-
-            events.append("soma")
-            return super().AttachExternalBody(
-                ArticulatedLayer(), body_to_soma=np.eye(4)
-            )
 
         def export_patient_twin(self, *args, **kwargs):
             events.append("bundle")
@@ -132,12 +120,10 @@ def test_pipeline_order_and_complete_exports(
     ]
     if not with_ct:
         options += ["--input", "meshes.json"]
-    if with_soma:
-        options += ["--soma"]
     manifest_path = pipeline.run(pipeline.parser().parse_args(options))
-    assert events == ["topology"] + (["soma"] if with_soma else []) + ["bundle", "usd"]
+    assert events == ["topology", "bundle", "usd"]
     manifest = yaml.safe_load(manifest_path.read_text())
-    assert (manifest["anatomy"]["exterior"] is not None) == with_soma
+    assert manifest["anatomy"]["exterior"] is None
     assert manifest["coordinate_frame"] == ("DICOM_LPS" if with_ct else "body")
     assert ("hu_volume" in manifest["artifacts"]) == with_ct
     graph = body.anatomy.structures["aorta"].centerline
@@ -151,7 +137,7 @@ def test_pipeline_order_and_complete_exports(
         np.testing.assert_allclose(
             prim.GetAttribute("centerline:points").Get(), graph.points, atol=1e-7
         )
-        assert bool(stage.GetPrimAtPath("/HumanBody/Exterior/SOMA")) == with_soma
+        assert not stage.GetPrimAtPath("/HumanBody/Exterior")
 
 
 def test_pipeline_failure_leaves_no_partial_bundle(pipeline, monkeypatch, tmp_path):
@@ -181,9 +167,7 @@ def test_pipeline_failure_leaves_no_partial_bundle(pipeline, monkeypatch, tmp_pa
     "options",
     [
         ["--anatomy", "typo"],
-        ["--source", "simple", "--input", "meshes.json", "--soma"],
         ["--source", "simple", "--input", "meshes.json", "--ct", "ct.nii"],
-        ["--parameters", "params.json"],
         ["--source", "nvsegment"],
     ],
 )
@@ -199,7 +183,7 @@ def test_invalid_options_fail_before_inference(
         )
 
 
-def test_simple_stl_pipeline_without_imaging_or_soma(pipeline, tmp_path):
+def test_simple_stl_pipeline_without_imaging(pipeline, tmp_path):
     trimesh = pytest.importorskip("trimesh")
     pytest.importorskip("pxr")
     from pxr import Usd, UsdGeom

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Mesh policy tests require no SOMA, viewer, or imaging mesher."""
+"""Mesh policy tests require no imaging mesher."""
 
 import numpy as np
 import pytest
@@ -15,7 +15,9 @@ from patient_digital_twin.importers._labels import anatomy_from_labels
 
 @pytest.fixture
 def body():
-    result = HumanBody(anatomy_from_labels(["liver", "pancreas", "femur_left", "heart", "spleen"]))
+    result = HumanBody(
+        anatomy_from_labels(["liver", "pancreas", "femur_left", "heart", "spleen"])
+    )
     for structure in list(result.anatomy.structures.values())[:-1]:
         structure.vertices = np.array(
             [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
@@ -39,8 +41,12 @@ def test_master_switch_preserves_mesh_and_metadata(body):
     assert liver.mesh.vertices is vertices
     body.anatomy.set_enabled(True)
     assert liver.vertices is vertices and liver.faces is faces
-    assert body.anatomy.structures["pancreas"].is_empty  # Earlier system policy survives.
-    assert body.anatomy.structures["spleen"].is_empty  # Enabling never invents geometry.
+    assert body.anatomy.structures[
+        "pancreas"
+    ].is_empty  # Earlier system policy survives.
+    assert body.anatomy.structures[
+        "spleen"
+    ].is_empty  # Enabling never invents geometry.
 
 
 def test_system_view_multisystem_rules_and_structure_override(body):

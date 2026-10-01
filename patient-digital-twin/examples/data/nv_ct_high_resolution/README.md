@@ -1,11 +1,10 @@
 # Shared sample dataset
 
-This is the single dataset for `examples/pipeline.py` and `examples/viewer.py`.
+This is the single dataset for `examples/pipeline.py` and `examples/isaac_sim.py`.
 
 - `ct.nii.gz`: generated CT, local large file excluded from Git.
 - `segmentation.nii.gz`: corresponding 512 × 512 × 768 anatomical mask.
 - `labels.json`: source mask label names and IDs.
-- `viewer_parameters.json`: fitted SOMA registration and arms-down scan pose.
 - `anatomy.yaml`: excludes the sample's misplaced skull mesh.
 - `provenance.json`: source, generation command, grid, and file hashes.
 

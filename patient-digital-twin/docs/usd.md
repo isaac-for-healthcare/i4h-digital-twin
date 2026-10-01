@@ -9,7 +9,7 @@ patient package, NumPy and the `usd` extra installed.
 
 | Output | Produced by | Coordinates and contents |
 | --- | --- | --- |
-| Standalone `.usd`, `.usda`, `.usdc` | `body.export_to_usd(path, pose="scan")` | Presentation stage; anatomy, optional SOMA, stored centerlines and embedded attached CT |
+| Standalone `.usd`, `.usda`, `.usdc` | `body.export_to_usd(path)` | Presentation stage; anatomy, stored centerlines and embedded attached CT |
 | `patient_anatomy.usdc` plus `patient_twin.yaml` | `body.export_patient_twin(new_directory)` | Patient-frame anatomy and stored centerlines; CT/attenuation are separate bundle files |
 | Both of the above | `examples/pipeline.py` | Adds `human_body.usdc` alongside the patient bundle |
 | Physics-demo assets and extended manifest | `export_physics_examples(...)` | Derived meshes/configuration for the supported external physics demos |
@@ -24,24 +24,19 @@ collision setup, rigid-body dynamics or tissue solver. CT and centerline custom
 attributes are data for consumers, not volume or curve rendering primitives.
 Exporting a stage does not validate anatomical accuracy or anonymize source data.
 
-## Export and pose
+## Export and placement
 
 ```python
 body.export_to_usd("human_body.usdc")
-body.export_to_usd("current_pose.usdc", pose="current", skin_opacity=0.15)
 manifest = body.export_patient_twin("new_patient_bundle")
 ```
 
-`body` is a `HumanBody` constructed from imported anatomy. Neither CT nor SOMA
-is required. Attach CT with `AttachImaging()` and SOMA with `AttachExternalBody()`
-when those are needed; see the [package usage guide](../README.md).
+`body` is a `HumanBody` constructed from imported anatomy. CT is optional;
+attach it with `AttachImaging()` when needed. See the [package usage guide](../README.md).
 
-With SOMA, standalone `pose="scan"` evaluates the arms-down presentation and
-places the body supine, with head along +X and anterior along +Z. `pose="current"`
-uses the displayed pose and the upright axis conversion. Without SOMA, the root
-is identity and the structure transforms are used directly. Both exports
-preserve the live body's pose and visibility. Do not apply a second axis
-conversion to an exported stage.
+Standalone export uses an identity root and current structure transforms.
+It preserves the live body's transforms and visibility. Do not apply a second
+axis conversion to an exported stage.
 
 Bundle anatomy is authored in the manifest's `coordinate_frame`: `DICOM_LPS`
 when a source registration exists, otherwise `body`. The manifest's
@@ -50,11 +45,8 @@ into `patient_anatomy.usdc`. Apply it once when placing that bundle into the
 consumer's world. It is a NumPy-style column-vector matrix in meters.
 `transforms.voxel_to_patient_mm`, when present, instead uses millimeters.
 
-Bundle `soma_pose="scan"` uses the arms-down presentation;
-`soma_pose="imaging"` uses the original registration pose. Neither poses the
-CT. `exterior="auto"` uses attached SOMA or no exterior. A CT envelope requires
-explicit `exterior="ct"` and attached CT. Standalone exports do not generate a
-CT envelope.
+Bundle `exterior="auto"` omits an exterior. A CT envelope requires explicit
+`exterior="ct"` and attached CT. Standalone exports do not generate a CT envelope.
 
 A standalone USD replaces an existing file only after constructing the new
 layer. Bundle and physics exporters require new output directories and publish
@@ -65,8 +57,7 @@ their completed output together. Keep all bundle artifacts with their manifest.
 ```text
 /HumanBody                         default Xform
   /Anatomy/<identifier>            one Mesh per retained anatomical structure
-  /Exterior/SOMA                  optional attached skin
-  /Exterior/CT                    alternative, explicitly requested bundle envelope
+  /Exterior/CT                    explicitly requested bundle envelope
   /Looks/<identifier>/Surface     bound UsdPreviewSurface materials
   /Imaging/CT                     optional custom data, standalone export only
 ```
@@ -74,7 +65,7 @@ their completed output together. Keep all bundle artifacts with their manifest.
 The exterior and imaging branches are optional. Prim identifiers are sanitized
 and may get numeric suffixes; discover anatomy through custom data
 `anatomy:name`, not by assuming an exact path from a source label. Other custom
-data includes `anatomy:kind` and, where authored, `anatomy:anchor_joint`.
+data includes `anatomy:kind`.
 Bundle manifests also map canonical names to `anatomy.structures[name].prim_path`.
 
 Disabled anatomy retains its mesh with `visibility="invisible"`. Absent anatomy
@@ -191,15 +182,15 @@ renders until closed and does not save the lighting or camera to the asset.
 `usd-core` alone does not provide this application runtime.
 
 For generation from your own inputs, use the [pipeline commands](../examples/README.md).
-The separate `isaac_sim.py export` command uses the bundled sample and always
-attaches SOMA; it requires that sample's data and SOMA assets.
+The separate `isaac_sim.py export` command exports anatomy from the bundled
+sample segmentation; it requires that sample's mask and label dictionary.
 
 ## Reimporting mesh files
 
 `SimpleImporter` can read triangulated USD files, flatten authored transforms,
 convert stage units to meters, and convert Y-up to the package's reference axis.
 However, it merges every mesh in each supplied USD into one named structure,
-including hidden meshes. It does not reconstruct the patient hierarchy, SOMA,
+including hidden meshes. It does not reconstruct the patient hierarchy,
 CT, centerlines, or visibility policy. A whole patient USD is therefore not a
 round-trip patient serialization format for `SimpleImporter`.
 

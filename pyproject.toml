@@ -23,15 +23,6 @@ dependencies = [
 patient-physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]
 patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.
-# 0.3.0's default model loader imports a missing soma.body.assets module.
-patient-soma = [
-    "py-soma-x==0.2.1",
-    "scipy>=1.10",
-    "trimesh>=4.0",
-    "rtree>=1.0",
-    "embreex>=4.4.0",
-]
-patient-viewer = ["viser>=1.1.1"]
 patient-usd = ["usd-core"]
 
 [project.scripts]
@@ -45,7 +36,6 @@ packages = [
   "patient_digital_twin.exporters",
   "patient_digital_twin.imaging_to_mesh",
   "patient_digital_twin.importers",
-  "patient_digital_twin.soma_body",
   "robot_digital_twin",
   "sim_ready_assets",
 ]

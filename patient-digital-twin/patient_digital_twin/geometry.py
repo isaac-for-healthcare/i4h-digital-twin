@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Coordinate transforms and landmark registration, independent of SOMA."""
+"""Coordinate transforms and landmark registration."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def rigid_transform(value) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Similarity:
-    """Uniform-scale landmark fit adapted from align_segmentation_to_soma.py."""
+    """Uniform-scale landmark fit with rotation and translation."""
 
     rotation: np.ndarray
     scale: float

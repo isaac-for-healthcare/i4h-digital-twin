@@ -21,7 +21,7 @@ vertices, faces = mask_to_mesh(np.ones((3, 3, 3)))
 assert len(vertices) and len(faces)
 body = SegmentationImporter.from_array(np.ones((3, 3, 3)), {1: "liver"}).to_anatomy_collection()
 assert not body.structures["liver"].is_empty
-assert not {"imaging_to_mesh", "pxr", "trimesh", "soma"} & sys.modules.keys()
+assert not {"imaging_to_mesh", "pxr", "trimesh"} & sys.modules.keys()
 print("installed patient mesher OK")
 """
     result = subprocess.run(
@@ -34,8 +34,8 @@ print("installed patient mesher OK")
     assert "installed patient mesher OK" in result.stdout
 
 
-def test_viewer_help_uses_installed_package(tmp_path):
-    example = Path(__file__).resolve().parents[1] / "examples" / "viewer.py"
+def test_pipeline_help_uses_installed_package(tmp_path):
+    example = Path(__file__).resolve().parents[1] / "examples" / "pipeline.py"
     result = subprocess.run(
         [sys.executable, "-I", str(example), "--help"],
         cwd=tmp_path,
@@ -43,4 +43,4 @@ def test_viewer_help_uses_installed_package(tmp_path):
         text=True,
         check=True,
     )
-    assert "--segmentation" in result.stdout and "--labels" in result.stdout
+    assert "--source" in result.stdout and "--labels" in result.stdout

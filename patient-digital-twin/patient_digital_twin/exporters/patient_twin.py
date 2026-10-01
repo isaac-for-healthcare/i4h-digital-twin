@@ -15,8 +15,7 @@ import yaml
 from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
-from ..soma_body import PosedBody
-from ..structures import AnatomicalStructure
+from ..structures import AnatomicalStructure, MeshGeometry
 from ..topology import extract_centerlines, voxelize_mesh
 from .usd import _export_to_usd
 from .utils import attached_ct, save_attenuation
@@ -43,18 +42,14 @@ def export_patient_twin(
     exterior="auto",
     skin_opacity=0.15,
     physics_root=None,
-    soma_pose="scan",
 ):
     """Write a complete patient_twin.yaml bundle using original imaging placement.
 
     Source registration selects DICOM LPS; otherwise use the body frame.
-    CT and SOMA are optional. An empty vessel_names
-    tuple omits the composite navigation mask and centerline.
-    CT and navigation artifacts retain original imaging placement. SOMA and
-    rigid attached anatomy default to arms-down presentation; soma_pose="imaging"
-    explicitly exports their original registration pose instead.
-    CT supplies attenuation; the torso registration is unchanged by arm posing. Use exterior="ct" to request a CT envelope. Set exterior="soma"
-    to require SOMA. All retained anatomy meshes are included, even hidden ones.
+    CT is optional. An empty vessel_names tuple omits the composite navigation
+    mask and centerline. CT and anatomy retain original imaging placement.
+    Use exterior="ct" to request a CT envelope; exterior="auto" omits it.
+    All retained anatomy meshes are included, even hidden ones.
     Output must be a new directory to avoid stale bundles. Pass physics_root
     to also export OmniEndo/OmniSurg inputs from the retained patient anatomy.
     """
@@ -69,17 +64,8 @@ def export_patient_twin(
     if output.exists():
         raise FileExistsError(f"Use a new patient-twin output directory: {output}")
     registered = body_to_imaging is not None
-    if soma_pose not in {"scan", "imaging"}:
-        raise ValueError("soma_pose must be scan or imaging")
-    if exterior not in {"auto", "soma", "ct"}:
-        raise ValueError("exterior must be auto, soma or ct")
-    use_soma = exterior == "soma" or (
-        exterior == "auto"
-        and body.soma is not None
-        and body.soma.soma_layer is not None
-    )
-    if use_soma and (body.soma is None or body.soma.soma_layer is None):
-        raise ValueError("Attach SOMA before requesting its scan-frame exterior")
+    if exterior not in {"auto", "ct"}:
+        raise ValueError("exterior must be auto or ct")
     vessel_names = tuple(vessel_names)
     for name in vessel_names:
         if (
@@ -144,26 +130,8 @@ def export_patient_twin(
         world[:3, 3] = [0, 0, 0.85] - world[:3, :3] @ (center * 0.001)
     else:
         world = rigid_transform(world_from_patient_m)
-    if use_soma:
-        import torch
-
-        # Bindings retain imaging placement, while presentation defaults to arms
-        # down. Evaluate without the synchronization hook or mutating the body.
-        parameters = body.soma.soma_parameters
-        if soma_pose == "scan":
-            reference = parameters["poses"]
-            parameters["poses"] = torch.as_tensor(
-                body.soma.scan_pose, dtype=reference.dtype, device=reference.device
-            )
-        with torch.no_grad():
-            scan_skin = PosedBody.from_output(
-                body.soma.soma_layer, body.soma.soma_layer.forward(**parameters)
-            )
-        skin_points = transform_points(
-            scan_skin.vertices, lps_from_body @ np.linalg.inv(body.soma.body_to_soma)
-        )
-        skin_faces, skin_name = scan_skin.faces, "SOMA"
-    elif ct is not None and exterior == "ct":
+    exterior_mesh = None
+    if ct is not None and exterior == "ct":
         envelope = _largest(
             ndimage.binary_closing(ct.hu_zyx[::3, ::3, ::3] > -300, iterations=2)
         )
@@ -172,18 +140,12 @@ def export_patient_twin(
             envelope, spacing_zyx_mm=spacing * 3, origin_xyz_mm=origin
         )
         skin_points = skin_points.astype(float) * 0.001
+        exterior_mesh = MeshGeometry(skin_points, skin_faces)
         skin_name = "CT"
     else:
         skin_name = None
 
     def structure_transform(structure):
-        if use_soma and soma_pose == "scan" and structure.local_to_anchor is not None:
-            return (
-                lps_from_body
-                @ np.linalg.inv(body.soma.body_to_soma)
-                @ scan_skin.transforms[structure.anchor_joint]
-                @ structure.local_to_anchor
-            )
         return lps_from_body @ structure.local_to_body
 
     snapshot = HumanBody(
@@ -201,11 +163,6 @@ def export_patient_twin(
             if structure.mesh.vertices is not None
         }
     )
-    from ..soma_body import SomaRepresentation
-
-    if skin_name is not None:
-        snapshot.soma = SomaRepresentation(snapshot.anatomy)
-        snapshot.soma.soma_body = PosedBody(skin_points, skin_faces, {}, {})
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=output.parent, prefix=".patient-twin-") as temp:
         folder = Path(temp) / "bundle"
@@ -222,7 +179,8 @@ def export_patient_twin(
             snapshot,
             folder / "patient_anatomy.usdc",
             root_transform=np.eye(4),
-            skin_name=skin_name or "SOMA",
+            exterior_mesh=exterior_mesh,
+            skin_name=skin_name or "CT",
             skin_opacity=skin_opacity,
         )
         from pxr import Usd, UsdGeom
@@ -245,7 +203,7 @@ def export_patient_twin(
             "anatomy": {
                 "exterior": {
                     "source": skin_name,
-                    "pose": soma_pose if use_soma else "imaging",
+                    "pose": "imaging",
                     "prim_path": f"/HumanBody/Exterior/{skin_name}",
                 }
                 if skin_name is not None

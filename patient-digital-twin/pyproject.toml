@@ -15,9 +15,6 @@ dependencies = ["numpy>=1.24", "nibabel>=5.0", "PyYAML>=6.0", "scikit-image>=0.2
 physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]
 mesh = []  # Compatibility alias: meshing is now included in the base install.
-# 0.3.0's default model loader imports a missing soma.body.assets module.
-soma = ["py-soma-x==0.2.1", "scipy>=1.10", "trimesh>=4.0", "rtree>=1.0"]
-viewer = ["viser>=1.1.1"]
 usd = ["usd-core"]
 
 [tool.setuptools.packages.find]

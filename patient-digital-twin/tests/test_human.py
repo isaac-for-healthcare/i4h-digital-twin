@@ -14,7 +14,6 @@ def test_human_body_owns_anatomy_without_an_external_body():
     anatomy = AnatomyCollection()
     body = HumanBody(anatomy)
     assert body.anatomy is anatomy
-    assert body.soma is None
     assert body.imaging is None
     assert not hasattr(body, "source_path")
     assert not hasattr(body, "body_to_imaging")
@@ -24,9 +23,6 @@ def test_human_body_owns_anatomy_without_an_external_body():
         HumanBody(body_to_imaging=np.eye(4))
     with pytest.raises(TypeError):
         HumanBody(landmarks={})
-    with pytest.raises(ValueError, match="shoulder/hip"):
-        body.AttachExternalBody()
-    assert body.soma is None
 
 
 def test_human_body_and_catalog():
@@ -39,7 +35,6 @@ def test_human_body_and_catalog():
         "kidney_left"
     ]
     assert body.anatomy.structures["liver"].vertices is None
-    assert body.soma is None
 
 
 def test_strict_label_import_is_atomic():
@@ -115,7 +110,6 @@ def test_attach_imaging_owns_volume_and_metadata_without_loading_provenance():
     )
     assert result is body.imaging
     assert result.source_path == "not-a-file.nii"
-    assert body.soma is None
     volume[:] = -1
     affine[0, 0] = 99
     np.testing.assert_array_equal(result.volume.ravel(), np.arange(24))

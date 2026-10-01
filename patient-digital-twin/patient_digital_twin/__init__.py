@@ -9,7 +9,6 @@ from .geometry import Similarity
 from .human import HumanBody
 from .imaging import ImagingVolume
 from .importers import SegmentationImporter
-from .soma_body import PosedBody, SomaRepresentation
 from .structures import (
     AnatomicalStructure,
     Kind,
@@ -28,9 +27,7 @@ __all__ = [
     "ImagingVolume",
     "Kind",
     "MeshGeometry",
-    "PosedBody",
     "SegmentationImporter",
     "Similarity",
-    "SomaRepresentation",
     "System",
 ]

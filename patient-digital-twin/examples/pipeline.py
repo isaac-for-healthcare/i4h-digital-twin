@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Import anatomy, attach matching CT, extract topology, optionally attach SOMA, export."""
+"""Import anatomy, attach matching CT, extract topology, and export."""
 
 import argparse
 import json
@@ -11,7 +11,6 @@ from tempfile import TemporaryDirectory
 
 import nibabel as nib
 import numpy as np
-
 from patient_digital_twin import HumanBody, SegmentationImporter
 from patient_digital_twin.catalog import CATALOG
 from patient_digital_twin.importers import (
@@ -45,16 +44,6 @@ def parser():
     cli.add_argument("--ct", type=Path, help="Matching CT for --source segmentation")
     cli.add_argument("--output", type=Path, required=True, help="New bundle directory")
     cli.add_argument("--anatomy", nargs="*", default=[], help="Optional anatomy subset")
-    cli.add_argument(
-        "--soma",
-        action="store_true",
-        help="Attach SOMA after topology extraction (not for simple input)",
-    )
-    cli.add_argument(
-        "--parameters",
-        type=Path,
-        help="Optional SOMA registration JSON; requires --soma",
-    )
     cli.add_argument("--source-root", type=Path, help="NVGenerate checkout")
     cli.add_argument("--bundle-root", type=Path, help="NVSegment bundle")
     cli.add_argument(
@@ -143,11 +132,6 @@ def run(args):
         raise ValueError("--ct is only supported for segmentation inputs")
     if args.source == "segmentation" and args.ct is None:
         raise ValueError("Segmentation input requires its matching --ct")
-    if args.source == "simple" and (args.soma or args.parameters):
-        raise ValueError("Simple input skips CT and SOMA attachment")
-    if args.parameters and not args.soma:
-        raise ValueError("--parameters requires --soma")
-
     print(f"Importing {args.source}", flush=True)
     body = import_body(args)
     requested = selected or set(body.anatomy.structures)
@@ -161,13 +145,6 @@ def run(args):
         raise ValueError("No meshes for the requested anatomy")
     print("Extracting topology", flush=True)
     body.extract_topology(names=available, spacing_m=args.centerline_spacing_mm / 1000)
-    if args.soma:
-        parameters = args.parameters or (
-            SAMPLE / "viewer_parameters.json" if args.source == "sample" else None
-        )
-        options = json.loads(parameters.expanduser().read_text()) if parameters else {}
-        body.AttachExternalBody(**options)
-    # Keep all bones available for matching before applying the export subset.
     for name in list(body.anatomy.structures):
         if name not in requested:
             del body.anatomy.structures[name]

@@ -29,9 +29,7 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 ```bash
 # Patient anatomy and bundled meshing
 cd patient-digital-twin
-uv sync --extra dev --extra soma --extra viewer
-uv run python examples/viewer.py --segmentation /path/to/patient_label.nii.gz \
-  --labels /path/to/matching/label_dict.json
+uv sync --extra dev --extra usd
 ```
 
 Python API example (segmentation → patient anatomy meshes):
@@ -41,7 +39,6 @@ from patient_digital_twin import HumanBody, SegmentationImporter
 
 anatomy = SegmentationImporter("patient_label.nii.gz", "label_dict.json").to_anatomy_collection()
 body = HumanBody(anatomy)
-body.AttachExternalBody()  # Optional SOMA matching and attachment.
 for structure in body.anatomy.select(include_empty=False):
     print(structure.name, structure.world_vertices.shape, structure.faces.shape)
 ```
@@ -100,18 +97,11 @@ uv pip install ./robot-digital-twin
 
 The corresponding Python imports are `patient_digital_twin`, `hospital_digital_twin`, `sim_ready_assets`, and `robot_digital_twin`.
 
-To use the patient viewer from the repository's own `.venv`, run from this root:
+To install patient USD support in the repository's own `.venv`, run from this root:
 
 ```bash
-uv sync --extra dev --extra patient-soma --extra patient-viewer
-.venv/bin/python patient-digital-twin/examples/viewer.py --help
+uv sync --extra dev --extra patient-usd
 ```
-
-SOMA-X is installed from PyPI as `py-soma-x==0.2.1`; no sibling SOMA-X checkout or
-external virtual environment is required. Model assets must be cached or
-downloaded by SOMA-X separately from its Python runtime.
-The runtime is pinned because 0.3.0 fails default model loading with a missing
-`soma.body.assets` import.
 
 ## Development / CI
 

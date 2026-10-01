@@ -1,6 +1,6 @@
 ---
 name: patient-digital-twin
-description: Import anatomy, attach imaging or SOMA, configure and pose HumanBody, extract topology, and export patient bundles with this repository's patient_digital_twin package. Use for patient package workflows and API migration; use patient-usd for inspecting or consuming exported USD assets.
+description: Import anatomy, attach imaging, configure HumanBody, extract topology, and export patient bundles with this repository's patient_digital_twin package. Use for patient package workflows and API migration; use patient-usd for inspecting or consuming exported USD assets.
 ---
 
 # Patient Digital Twin
@@ -11,7 +11,7 @@ a command explicitly changes directory. Shared skills live in `skills/`;
 `.codex/skills` and `.claude/skills` point there.
 
 Read [the usage guide](../../patient-digital-twin/README.md) for installation,
-coordinates and SOMA options. Read [the pipeline commands](../../patient-digital-twin/examples/README.md)
+coordinates and imaging options. Read [the pipeline commands](../../patient-digital-twin/examples/README.md)
 when generating an end-to-end output, and [the architecture guide](../../patient-digital-twin/patient_digital_twin/README.md)
 when changing the API. Resolve these paths relative to this skill's directory.
 
@@ -30,11 +30,10 @@ when changing the API. Resolve these paths relative to this skill's directory.
 
 Install only integrations required for the task: from the root,
 `uv pip install './patient-digital-twin[usd]'` enables USD. Patient extras are
-`soma`, `viewer`, `usd`, `physics`, and `dev`; root extras prefix the integration
+`usd`, `physics`, and `dev`; root extras prefix the integration
 names with `patient-`. Skeleton topology also needs `vtk` and `scipy`.
-SOMA needs real model assets, not Git LFS pointer files. `usd-core` does not
-install Isaac Sim. Use the caller's provided input paths; sample data is not a
-substitute for the requested patient.
+`usd-core` does not install Isaac Sim. Use the caller's provided input paths;
+sample data is not a substitute for the requested patient.
 
 ## Build and use the body
 
@@ -47,30 +46,20 @@ body.anatomy.set_structure_enabled("liver", True)
 body.export_to_usd("patient.usdc")
 ```
 
-Importers return `AnatomyCollection`; they do not attach SOMA. `body.soma` and
-`body.imaging` start as `None`. Use `body.anatomy` for configuration, systems and
-selection. Disabled geometry remains in `structure.mesh`, while public geometry
+Importers return `AnatomyCollection`; `body.imaging` starts as `None`.
+Use `body.anatomy` for configuration, systems and selection. Disabled geometry remains in `structure.mesh`, while public geometry
 properties return `None`; export keeps it invisible. To omit structures entirely,
-use the pipeline's `--anatomy` selection. Keep bones available until SOMA matching
-is complete.
+use the pipeline's `--anatomy` selection.
 
 All geometry and rigid transforms use XYZ meters. Image arrays use ZYX indexing;
 voxel affines take XYZ indices. `body.anatomy.body_to_imaging` preserves import
 registration; `local_to_body` is the original mesh placement and `local_to_world`
-is the current pose. Do not transform `world_vertices` a second time.
+is the current placement. Do not transform `world_vertices` a second time.
 
 Attach matching CT using `body.AttachImaging(volume_zyx,
 voxel_to_imaging=voxel_to_ras_m)`, with an explicit `body_to_imaging` when the
 image uses another frame. CT must already be HU. `source_path` is provenance,
 not a file loader. Exporters do not accept the old `ct_path` argument.
-
-For articulation, call `body.AttachExternalBody(...)`, then use `body.soma.pose`,
-`fit_soma_shape`, `fit_bone_anchors`, and `check_containment`. Automatic attachment
-requires at least three non-collinear shoulder/hip matches; partial scans may
-need measured body-frame landmarks or explicit `body_to_soma` registration.
-Do not fabricate registration or resize internal anatomy to hide a failed fit.
-Save/reload attachment options through `body.soma.soma_configuration`; this does
-not save the anatomy meshes. Assess containment for the patient's required poses.
 
 ## Topology and export
 
@@ -89,14 +78,11 @@ uv run --extra usd --with scipy --with vtk python examples/pipeline.py \
   --output /tmp/new_patient
 ```
 
-This writes both a bundle and `human_body.usdc`. Add `--soma` only when requested
-and installed; `--parameters` requires `--soma`. Simple pipeline input skips CT
-and SOMA. The segmentation pipeline requires matching CT; use the Python API for
-segmentation-only geometry exports. Output directories must be new.
+This writes both a bundle and `human_body.usdc`. Simple pipeline input skips CT.
+The segmentation pipeline requires matching CT; use the Python API for segmentation-only geometry exports. Output directories must be new.
 
-`export_to_usd` defaults to scan presentation; request `pose="current"` for a
-posed snapshot. `export_patient_twin` allows anatomy-only bundles. Navigation
-artifacts require attached CT and explicit `vessel_names`; `exterior="auto"`
+`export_to_usd` preserves current structure transforms with an identity root.
+`export_patient_twin` allows anatomy-only bundles. Navigation artifacts require attached CT and explicit `vessel_names`; `exterior="auto"`
 does not create a CT envelope. Read [the USD guide](../../patient-digital-twin/docs/usd.md)
 for coordinate frames, optional artifacts and physics-demo exports.
 

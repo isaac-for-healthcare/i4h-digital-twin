@@ -13,22 +13,16 @@ For a minimal generate → USD → Isaac Sim workflow, see
 [example commands](examples/README.md#isaac-sim-viewer).
 
 All importers return an `AnatomyCollection` through `to_anatomy_collection()`.
-Import performs no SOMA loading, joint matching, or landmark extraction:
+Wrap imported anatomy with `HumanBody` to attach imaging or export assets:
 
 ```python
 from patient_digital_twin import HumanBody, SegmentationImporter
 
 anatomy = SegmentationImporter("segmentation.nii.gz", "labels.json").to_anatomy_collection()
 body = HumanBody(anatomy)
-assert body.soma is None
-# Optional, with SOMA installed: body.AttachExternalBody()
 body.export_to_usd("human_body.usdc")
 ```
 
-`HumanBody` does not accept landmarks in its constructor. The optional attachment
-step estimates landmarks from retained bone meshes, including hidden anatomy.
-For partial scans, pass a saved `body_to_soma` registration or measured landmarks
-to `AttachExternalBody(...)`. Failed first attachment leaves `body.soma` as `None`.
 Acquisition coordinates and scan bounds remain on the imported collection;
 `HumanBody.imaging` remains `None` until imaging is explicitly attached.
 
@@ -52,7 +46,7 @@ registration; provide an explicit registration for a different image frame.
 The voxel affine is required because NumPy does not encode spacing, orientation,
 or origin. Arrays and transforms are copied and made read-only. Failed validation
 preserves any previous attachment. `body.imaging_vertices(name)` maps the original
-anatomy into the attached image's physical frame, independently of SOMA posing.
+anatomy into the attached image's physical frame, independently of display transforms.
 
 Other modalities can be attached with their modality name; the existing imaging
 exporters support CT in HU and reject other modalities rather than treating their
@@ -81,8 +75,6 @@ extras for the operation you need:
 | Operation | Patient-package dependencies | Repository-root extra |
 | --- | --- | --- |
 | USD read/write | `usd` | `patient-usd` |
-| SOMA attachment and fitting | `soma`, plus model assets | `patient-soma` |
-| Browser pose viewer | `soma,viewer` | `patient-soma,patient-viewer` |
 | Physics-demo export | `physics`, plus the physics demo source checkout | `patient-physics` |
 | Pipeline / skeleton topology | `usd`, plus `scipy` and `vtk` | `patient-usd`, plus `scipy` and `vtk` |
 
@@ -90,16 +82,11 @@ STL/OBJ import additionally uses `trimesh`. Inference adapters require their
 backend runtime and model files; installing this package alone does not install
 those backends. Isaac Sim viewing uses Isaac Sim's own Python runtime.
 
-From this directory, install the optional SOMA/viewer integrations:
+From this directory, install USD support for export:
 
 ```bash
-uv sync --extra dev --extra soma --extra viewer
-```
-
-For pip, install the patient package directly (editable for development):
-
-```bash
-pip install -e '.[soma,viewer]'
+uv sync --extra dev --extra usd
+# Or: pip install -e '.[usd]'
 ```
 
 Meshing is bundled as `patient_digital_twin.imaging_to_mesh` and installed by
@@ -111,17 +98,9 @@ To use the repository-root virtual environment instead, run from
 the repository root:
 
 ```bash
-uv sync --extra dev --extra patient-soma --extra patient-viewer
-.venv/bin/python patient-digital-twin/examples/viewer.py --help
+uv sync --extra dev --extra patient-usd
+.venv/bin/python patient-digital-twin/examples/pipeline.py --help
 ```
-
-This installs SOMA-X from PyPI into `i4h-digital-twin/.venv`.
-`py-soma-x==0.2.1` is pinned: release 0.3.0 has a broken default asset-loader
-import. No sibling SOMA-X source checkout or its virtual environment is used.
-
-SOMA-X requires its model assets (the repository's Git LFS pointer files are
-not the assets). Pass a populated asset directory as `data_root`, or let
-SOMALayer use its standard Hugging Face cache/download mechanism.
 
 The primary input is an NV-Generate-CTMR/MAISI `*_label.nii.gz` and the
 **matching** `configs/label_dict.json` (or `label_dict_ctmr.json`). Never
@@ -150,11 +129,8 @@ Background, body envelopes and dummy labels are not internal anatomy meshes.
 ### Simple API and module organization
 
 `HumanBody` is a small facade: `body.anatomy` owns anatomical systems and
-mesh availability; `body.soma` is initially `None`. Call `body.AttachExternalBody()` to create
-the representation, match anatomy joints, and align SOMA. It then owns fitting
-and articulation.
-Access these APIs directly through their owning components; HumanBody retains
-exports, topology extraction, and imaging-frame conversion.
+mesh availability, while `body.imaging` holds optional attached imaging.
+HumanBody provides exports, topology extraction, and imaging-frame conversion.
 
 | Module | Responsibility |
 | --- | --- |
@@ -163,7 +139,6 @@ exports, topology extraction, and imaging-frame conversion.
 | `structures.py` | Kinds, rigid structures and retained mesh storage |
 | `catalog.py` | Curated kinds, name-based system membership and label imports |
 | `configuration.py` | Validated YAML mesh policy |
-| `soma_body/` | SOMA representation, output decoding, joint assignment, and fitting |
 | `geometry.py` | Shared coordinate transforms and landmark registration |
 | `imaging.py` | Validated NumPy volume, modality and spatial metadata |
 | `exporters/` | USD snapshots, patient bundles, CT utilities and physics-demo exports |
@@ -180,7 +155,7 @@ Save a policy like [examples/data/nv_ct_high_resolution/anatomy.yaml](examples/d
 
 ```yaml
 anatomy:
-  enabled: true       # Set false to empty ALL imported anatomy, not the SOMA skin.
+  enabled: true       # Set false to empty all imported anatomy.
   systems:
     skeletal: true
     digestive: false
@@ -217,12 +192,8 @@ rejected before changing the body. Structure names use canonical imported names;
 load structure-specific policies after importing those labels.
 
 Disabling is reversible, **not a memory-release or import-skipping operation**.
-`structure.mesh` retains source geometry, and SOMA fitting and rigid anchor updates continue to include that storage. Re-enabling therefore
-restores the current pose even after direct `soma_layer(...)` calls while empty.
-Containment checks and the viewer exclude disabled meshes. No bone is deformed
-by toggling availability, and the external SOMA skin is independent of this policy.
-After changing configuration on a running viewer, call `viewer.refresh()`.
-The viewer CLI accepts `--anatomy-config examples/data/nv_ct_high_resolution/anatomy.yaml`.
+`structure.mesh` retains source geometry. Re-enabling restores the current
+placement, and toggling availability never changes the stored vertices or faces.
 
 ### Coordinate contract
 
@@ -247,131 +218,21 @@ function, without writing intermediate OBJ/USD files.
 The importer's file reader is intentionally separate from the converter's
 spacing/origin-only loader so the full affine is not lost.
 
-### SOMA alignment and articulation
-
-```python
-body.AttachExternalBody(device="cpu", lod="low")
-parameters = body.soma.soma_parameters
-parameters["poses"][0, list(body.soma.soma_layer.public_joint_names).index("LeftArm") - 1] = 0
-body.soma.pose(parameters["poses"])
-report = body.soma.check_containment()
-```
-
-Landmark extraction, joint matching, alignment, and limb refinement live in
-`SomaRepresentation` and run only when `body.AttachExternalBody()` is called.
-Landmarks are estimated from imported humerus/femur surface meshes using their
-principal axes. Automatic fitting needs at least three non-collinear shoulder/hip matches. Truncated
-bone ends are excluded. A partial scan must supply measured landmarks in
-body-frame meters or an explicit rigid `body_to_soma` matrix. A failed
-landmark fit is not replaced with an arbitrary bounding-box registration.
-
-Unlike the reference's anatomy rescaling, uniform size fitting changes
-SOMA's `global_scale`; the imaging meshes retain their original dimensions.
-Pass `identity_coeffs`, `scale_params`, `global_scale` and/or the scan
-`poses` to choose a patient-specific SOMA parameterization. Automatic limb
-direction/length refinement runs only when no explicit scan pose is supplied.
-The residuals in `alignment_errors_m` expose the fit's accuracy.
-
-Anatomy binds to named public SOMA world joint frames. For each structure:
-
-```text
-local_to_anchor = inverse(scan_joint_world) @ body_to_soma @ local_to_body
-local_to_world  = posed_joint_world @ local_to_anchor
-```
-
-These are rigid transforms; the original local vertices are unchanged.
-Bones use their corresponding limb joint and central tissues use torso
-joints. Override a structure with `anchors={"liver": "Spine2"}` during
-attachment. SOMA's public transform array includes its virtual Root, whereas
-the pose array excludes it; the implementation maps by joint name.
-
-`body.soma.pose(...)` and direct `body.soma.soma_layer(...)` forward calls synchronize
-all meshes. With SOMA's two-phase API, explicitly call
-`body.soma.update_from_soma(body.soma.soma_layer.pose(...))`. A HumanBody represents
-one patient, so batch sizes other than one are rejected. Reattach when an
-identity change requires recalculating the mesh-to-joint offsets.
-
-For a scan that does not fit the mean SOMA identity, call
-`body.soma.fit_soma_shape(required_pose_arrays)`. All anatomy is constrained rigidly
-in each requested pose.
-This fits bounded PCA identity coefficients across the requested poses.
-`body.soma.fit_bone_anchors(required_pose_arrays)` then fits fixed rigid bone
-offsets, bounded by default to 30 mm per translation axis and 25 degrees of
-rotation. It never resizes bones. Both fitting reports expose the adjustments.
-
-All anatomical structures move rigidly. Matching uses temporary name-based
-regions and laterality to select joints; these hints are not stored on the
-structures. Measured bone landmarks are cleared after successful attachment.
-Only the resulting `anchor_joint` and `local_to_anchor` binding are needed to
-follow subsequent joint motion. System visibility is looked up by canonical
-name in the catalog; custom names can use per-structure visibility settings.
-
-Serialize `body.soma.soma_configuration` to reuse identity, scale, pose, alignment
-and the fitted joint offsets. Pass it back as `body.AttachExternalBody(**config)`.
-
-### Viewer and validation
-
-```bash
-uv run --extra soma --extra viewer python examples/viewer.py \
-  --segmentation sample_label.nii.gz \
-  --labels /path/to/NV-Generate-CTMR/configs/label_dict.json \
-  --fit-shape --save-parameters patient.json
-```
-
-Open `http://127.0.0.1:8080`. Controls select scan/arms-out/seated/bent-torso
-poses, change a joint's axis-angle rotation, adjust skin opacity, isolate a
-structure and run containment checks. `--parameters patient.json` accepts
-JSON arrays for the attachment arguments described above. All numbers use
-meters and radians. A subsequent run can use `--parameters patient.json` without rerunning the fit. The server binds to localhost by default. For access from another machine, add
-`--host 0.0.0.0` and open `http://<server-ip>:8080` from that machine.
-
-Run the same pose sweep without a browser:
-
-```bash
-uv run --extra soma --extra viewer python examples/viewer.py \
-  --segmentation sample_label.nii.gz --labels /path/to/configs/label_dict.json \
-  --fit-shape --validate-only --report containment.json
-```
-
-The validator tests **every mesh vertex and every triangle center**, reports
-outside-point counts and maximum protrusion in meters, and exits nonzero
-on any failed structure. It requires watertight, consistently wound SOMA
-skin. Finite surface-point testing does not prove the absence of every
-possible triangle/skin intersection. Installing `embreex` optionally
-accelerates the ray queries; it is not required for correctness.
-
-**Validate each new patient and required pose.** Rigid attachment alone does
-not guarantee containment. Shape fitting can fail for anatomy outside the
-model's representational range, and arbitrary extreme poses are not covered
-by four pose tests. Failures are reported without bending or shrinking bones.
-
-The reports under [validation/](validation/README.md) are historical results
-from the previous coordinate/deformation API. They are not validation of this
-rigid-only implementation. Regenerate fitted parameters and containment reports
-for the current API and your patient data.
-
 ### Tests
 
 ```bash
 uv run --extra dev pytest
-# Full integration coverage requires the optional dependencies and real assets:
-PATIENT_TWIN_TEST_SOMA=1 uv run --extra dev --extra soma --extra viewer pytest
 ```
 
-Fast tests cover kinds, shared body origins, scan-coordinate recovery, units, oblique/reflected/
-sheared affines, closed boundary meshes, invalid masks and truncated
-landmarks. Integration tests exercise rigid transforms, direct layer updates,
-viewer scene changes and the actual SOMA model over four poses using small
-synthetic interior geometry fixtures. Those fixtures validate coordinate
-and anchoring behavior; they are not a substitute for full-scan containment.
-The integration suite also checks rigid organs, rigid bone fitting and
-configuration reload.
-
+Tests cover kinds, shared body origins, scan-coordinate recovery, units,
+oblique/reflected/sheared affines, closed boundary meshes, invalid masks,
+configuration, and rigid transforms. Optional integration tests exercise USD,
+CT, topology, and physics-demo exports when their dependencies are installed.
 
 ## Import and export pipeline
 
 [examples/pipeline.py](examples/pipeline.py) imports anatomy, attaches matching CT
-when available, extracts topology, optionally attaches SOMA, and writes a patient
+when available, extracts topology, and writes a patient
 bundle plus a standalone USD. See the [source-specific commands](examples/README.md).
 The pipeline does not anonymize input data or establish anatomical accuracy.
 
@@ -380,7 +241,6 @@ flowchart LR
     A[Segmentation or mesh files] --> B[AnatomyCollection]
     B --> C[HumanBody]
     D[Optional matching CT] --> C
-    E[Optional SOMA attachment] --> C
     C --> F[USD snapshot]
     C --> G[Patient bundle]
     G --> H[Optional physics-demo export]
@@ -430,23 +290,18 @@ this selects skeleton extraction and is the pipeline's default approach. See
 
 ## Export to Isaac Sim / OpenUSD
 
-With the `usd` extra installed, export geometry without requiring CT or SOMA:
+With the `usd` extra installed, export geometry with optional attached CT:
 
 ```python
-body.export_to_usd("patient.usdc")                 # Default scan presentation.
-body.export_to_usd("posed.usdc", pose="current")   # Current SOMA pose, if attached.
+body.export_to_usd("patient.usdc")
 ```
 
-Both produce static, meter-scale, Z-up stages. With SOMA attached, the default
-`pose="scan"` exports the arms-down scan presentation, supine; `"current"` retains
-the displayed pose with the upright axis conversion. Without SOMA, both use the
-body's current structure transforms with an identity root. Export does not change
-the live body's pose or visibility.
+This produces a static, meter-scale, Z-up stage using current structure transforms
+and an identity root. Export does not change the live body's transforms or visibility.
 
 Retained meshes remain separately selectable under `/HumanBody/Anatomy`.
-Disabled meshes are invisible; absent meshes are omitted. SOMA adds an optional
-`/HumanBody/Exterior/SOMA`; attached CT and extracted centerlines become custom
-attributes. These attributes do not render a volume or create physics.
+Disabled meshes are invisible; absent meshes are omitted. Attached CT and
+extracted centerlines become custom attributes. These attributes do not render a volume or create physics.
 See the [USD guide](docs/usd.md) for inspection code, transforms and Isaac Sim use.
 
 ## Export a patient bundle
@@ -457,18 +312,14 @@ manifest = body.export_patient_twin("new_patient_bundle", patient_id="patient_00
 
 The output directory must be new. `patient_twin.yaml` indexes the anatomy USD,
 missing meshes, optional CT/attenuation arrays and already-extracted per-structure
-centerlines. CT and SOMA are optional. Registered anatomy uses `DICOM_LPS`;
+centerlines. CT is optional. Registered anatomy uses `DICOM_LPS`;
 unregistered mesh-only anatomy uses `body`. Resolve artifact paths relative to
 the manifest, and use its `world_from_patient_m` transform for downstream world
 placement. The anatomy USD itself remains in the manifest's patient frame.
 
-`exterior="auto"` includes SOMA only when attached; it does not fabricate a CT
-exterior. Use `exterior="soma"` to require SOMA, or `exterior="ct"` to explicitly
-request an envelope from attached CT. `skin_opacity` defaults to 0.15.
-SOMA defaults to the arms-down presentation (`soma_pose="scan"`); use
-`soma_pose="imaging"` for its original registration pose. CT is never posed or
-resampled by arm motion. Bundle export rejects oblique CT: resample the matching
-inputs onto patient axes before export.
+`exterior="auto"` omits an exterior. Use `exterior="ct"` to explicitly request
+an envelope from attached CT. `skin_opacity` defaults to 0.15. Bundle export
+rejects oblique CT: resample the matching inputs onto patient axes before export.
 
 For a navigation bundle, attach matching CT and explicitly request vessels:
 

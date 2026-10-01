@@ -53,8 +53,6 @@
     "all_label_ids_mapped": true,
     "present_label_values": 114,
     "reconstructed_meshes": 112,
-    "soma_attachment": "passed with refine_limbs=false",
-    "pose_containment": "not validated",
     "clinical_quality": "not validated"
   }
 }

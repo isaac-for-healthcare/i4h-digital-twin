@@ -1,16 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Read/write legacy browser-viewer caches; independent of the export pipeline."""
+"""Read/write anatomy and imaging caches, independent of the export pipeline."""
 
 import json
 from pathlib import Path
+
 import numpy as np
 from patient_digital_twin import AnatomicalStructure, HumanBody, Kind
 
 
 def save_body(body, folder):
-    """Store numeric geometry and JSON registration for viewer reload, without pickle."""
+    """Store numeric geometry and JSON registration without pickle."""
     arrays, structures = {}, {}
     for name, s in body.anatomy.structures.items():
         if s.mesh.vertices is None:
@@ -38,13 +39,12 @@ def save_body(body, folder):
         "body_to_imaging": body.anatomy.body_to_imaging.tolist()
         if body.anatomy.body_to_imaging is not None
         else None,
-        "soma": body.soma.soma_configuration if body.soma is not None else None,
     }
     (folder / "body.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
-def load_body(folder, *, attach=True, **soma_options):
-    """Reload a pipeline output for the interactive viewer."""
+def load_body(folder):
+    """Reload cached anatomy and attached imaging."""
     folder = Path(folder)
     metadata = json.loads((folder / "body.json").read_text())
     with np.load(folder / "body.npz", allow_pickle=False) as arrays:
@@ -66,6 +66,4 @@ def load_body(folder, *, attach=True, **soma_options):
     body.anatomy.body_to_imaging = metadata["body_to_imaging"]
     if volume is not None:
         body.AttachImaging(volume, **metadata["imaging"])
-    if attach and metadata["soma"] is not None:
-        body.AttachExternalBody(**{**metadata["soma"], **soma_options})
     return body

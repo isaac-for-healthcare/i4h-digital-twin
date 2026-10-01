@@ -62,7 +62,7 @@ class MeshGeometry:
 
 @dataclass(init=False)
 class AnatomicalStructure:
-    """One anatomy item with source geometry and optional articulation.
+    """One anatomy item with source geometry and rigid placement.
 
     Normally created by an importer. For manual construction supply local XYZ
     vertices in meters, triangle indices, and local_to_body. Use the public
@@ -79,8 +79,6 @@ class AnatomicalStructure:
     enabled: bool
     local_to_body: np.ndarray = field(repr=False)
     local_to_world: np.ndarray = field(repr=False)
-    anchor_joint: str | None
-    local_to_anchor: np.ndarray | None = field(repr=False)
 
     def __init__(
         self,
@@ -90,8 +88,6 @@ class AnatomicalStructure:
         faces=None,
         local_to_body=None,
         local_to_world=None,
-        anchor_joint=None,
-        local_to_anchor=None,
         *,
         enabled=True,
         centerline=None,
@@ -110,8 +106,6 @@ class AnatomicalStructure:
         self.local_to_world = (
             self.local_to_body.copy() if local_to_world is None else local_to_world
         )
-        self.anchor_joint = anchor_joint
-        self.local_to_anchor = local_to_anchor
 
     @property
     def is_empty(self) -> bool:
@@ -125,7 +119,7 @@ class AnatomicalStructure:
 
     @vertices.setter
     def vertices(self, value):
-        """Replace source vertices; rebind SOMA afterwards if needed."""
+        """Replace source vertices and clear the cached centerline."""
         self.mesh.vertices = value
         self.centerline = None
 

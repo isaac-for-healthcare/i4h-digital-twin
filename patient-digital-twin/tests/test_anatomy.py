@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Direct collection/view tests independent of SOMA."""
+"""Direct collection and system-view tests."""
 
 import numpy as np
 import pytest

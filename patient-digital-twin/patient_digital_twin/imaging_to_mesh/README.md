@@ -5,8 +5,8 @@ configuration is needed:
 
 ```bash
 pip install ./patient-digital-twin
-# For an editable viewer installation:
-pip install -e './patient-digital-twin[soma,viewer]'
+# For an editable installation:
+pip install -e './patient-digital-twin'
 ```
 
 ```python

@@ -1,22 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Small application-facing API for a patient's anatomy and external body."""
+"""Small application-facing API for a patient's anatomy and imaging."""
 
 from __future__ import annotations
 
 from .anatomy import AnatomyCollection
 from .geometry import transform_points
 from .imaging import ImagingVolume
-from .soma_body import SomaRepresentation
 from .structures import Kind
 
 
 class HumanBody:
-    """A patient has anatomy and an optional SOMA representation.
+    """A patient has anatomy and optional attached imaging.
 
     Use body.anatomy to configure mesh availability and access system views.
-    Call AttachExternalBody() to initialize body.soma for fitting and posing.
     """
 
     def __init__(
@@ -25,30 +23,15 @@ class HumanBody:
         *,
         configuration=None,
     ):
-        """Wrap imported anatomy (or a structure dictionary), without loading SOMA."""
+        """Wrap imported anatomy (or a structure dictionary)."""
         self.anatomy = (
             anatomy
             if isinstance(anatomy, AnatomyCollection)
             else AnatomyCollection(anatomy)
         )
-        self.soma: SomaRepresentation | None = None
         self.imaging: ImagingVolume | None = None
         if configuration is not None:
             self.anatomy.configure(configuration)
-
-    def AttachExternalBody(self, layer=None, **options):
-        """Optionally match anatomy joints and attach SOMA skin and rigid anchors.
-
-        Matching and alignment live in SomaRepresentation. Without an explicit
-        body_to_soma registration, at least three non-collinear shoulder/hip
-        matches are required. A failed first attachment leaves soma as None.
-        """
-        representation = (
-            self.soma if self.soma is not None else SomaRepresentation(self.anatomy)
-        )
-        result = representation.attach_soma(layer, **options)
-        self.soma = representation
-        return result
 
     def AttachImaging(
         self,
@@ -89,24 +72,24 @@ class HumanBody:
             else transform_points(points, self.imaging.body_to_imaging)
         )
 
-    def export_to_usd(self, path, *, skin_opacity=0.15, pose="scan"):
-        """Export retained anatomy, centerlines, and optional CT and SOMA skin.
+    def export_to_usd(self, path):
+        """Export retained anatomy, centerlines, and optional CT to USD.
 
-        Requires usd-core; SOMA is needed only for attached skin. Hidden meshes remain.
+        Requires usd-core. Hidden meshes retain their geometry and visibility.
         Stored centerlines and attached CT voxels become custom attributes.
-        Use pose="current" for the current pose instead of scanner presentation.
-        Returns the written Path; hide /HumanBody/Exterior to inspect organs.
+        Structure transforms are preserved in a meter-scale, Z-up stage.
+        Returns the written Path.
         """
         from .exporters.usd import export_to_usd
 
-        return export_to_usd(self, path, skin_opacity=skin_opacity, pose=pose)
+        return export_to_usd(self, path)
 
     def export_patient_twin(self, output, **options):
         """Export the original scan-frame bundle consumed by i4h-workflows.
 
         Includes retained meshes, centerline assets, and optional imaging/skin.
-        Without a source registration, uses the body frame. Without CT or SOMA,
-        exports anatomy alone. Output must be a new directory.
+        Without a source registration, uses the body frame. Without CT, exports
+        anatomy alone. Output must be a new directory.
         """
         from .exporters.patient_twin import export_patient_twin
 
@@ -122,8 +105,9 @@ class HumanBody:
         committed only after every extraction succeeds; failures identify the
         offending anatomy. Optional names limits extraction to selected items.
         """
-        from .topology import extract_centerlines
         import numpy as np
+
+        from .topology import extract_centerlines
 
         if spacing_m is not None and (not np.isfinite(spacing_m) or spacing_m <= 0):
             raise ValueError("spacing_m must be positive and finite")

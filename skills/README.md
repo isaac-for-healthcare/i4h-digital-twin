@@ -5,7 +5,7 @@ both reference this shared directory.
 
 | Skill | Use when |
 | --- | --- |
-| [patient-digital-twin](patient-digital-twin/SKILL.md) | Importing anatomy, attaching CT/SOMA, configuring or posing a body, extracting topology, and generating patient bundles |
+| [patient-digital-twin](patient-digital-twin/SKILL.md) | Importing anatomy, attaching CT, configuring anatomy, extracting topology, and generating patient bundles |
 | [patient-usd](patient-usd/SKILL.md) | Inspecting or consuming patient USD, handling transforms/CT/centerlines, viewing in Isaac Sim, or preparing physics-demo exports |
 
 The skills link to the maintained package documentation and checked-in examples.

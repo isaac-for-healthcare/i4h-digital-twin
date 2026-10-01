@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from patient_digital_twin import HumanBody, SomaRepresentation
 import nibabel as nib
 import numpy as np
 import pytest
-from patient_digital_twin import Kind, SegmentationImporter
+from patient_digital_twin import HumanBody, Kind, SegmentationImporter
 from patient_digital_twin.geometry import transform_points
 from patient_digital_twin.importers._segmentation import (
     canonical_name,
@@ -121,18 +120,6 @@ def test_directory_grid_and_overlap_rejected(tmp_path):
         SegmentationImporter(tmp_path)
 
 
-def test_truncated_bone_end_not_a_joint():
-    labels = np.zeros((40, 30, 30), dtype=np.uint8)
-    labels[0:25, 10:14, 3:7] = 87
-    labels[27:35, 10:14, 13:17] = 33
-    importer = SegmentationImporter.from_array(
-        labels, {"left humerus": 87, "vertebrae L5": 33}
-    )
-    landmarks = SomaRepresentation(importer.to_anatomy_collection()).extract_landmarks()
-    assert "left_shoulder" in landmarks
-    assert "left_elbow" not in landmarks
-
-
 def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibility():
     masks = np.zeros((12, 14, 16), dtype=np.uint8)
     masks[1:4, 2:5, 3:6] = 1
@@ -185,37 +172,3 @@ def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibilit
         assert not hasattr(structure, "local_to_imaging")
         assert not hasattr(structure, "classification")
         assert not hasattr(structure, "labels")
-
-
-def test_landmarks_are_extracted_lazily_in_the_body_frame():
-    labels = np.zeros((40, 30, 30), dtype=np.uint8)
-    labels[0:25, 10:14, 3:7] = 1
-    labels[27:35, 10:14, 13:17] = 2
-    importer = SegmentationImporter.from_array(
-        labels, {1: "humerus_left", 2: "vertebrae_L5"}
-    )
-    anatomy = importer.to_anatomy_collection()
-    body = HumanBody(anatomy)
-    assert body.soma is None
-    assert not hasattr(importer, "extract_landmarks")
-    assert not hasattr(anatomy, "landmarks")
-    measured = SomaRepresentation(anatomy).extract_landmarks()
-    assert "left_shoulder" in measured
-    anatomy.set_enabled(False)
-    hidden = SomaRepresentation(anatomy).extract_landmarks()
-    np.testing.assert_allclose(measured["left_shoulder"], hidden["left_shoulder"])
-
-
-def test_oblique_bone_cut_on_nonprincipal_scan_face_is_not_an_elbow():
-    z, y, x = np.indices((24, 30, 50))
-    mask = np.zeros(z.shape, dtype=np.uint8)
-    mask[
-        (x >= 5) & (x < 40) & (y >= 6) & (y < 10) & (np.abs(z - (5 + 0.5 * x)) < 2)
-    ] = 1
-    mask[3:6, 12:15, 3:6] = 2
-    importer = SegmentationImporter.from_array(
-        mask, {1: "humerus_left", 2: "vertebrae_L5"}
-    )
-    landmarks = SomaRepresentation(importer.to_anatomy_collection()).extract_landmarks()
-    assert "left_shoulder" in landmarks
-    assert "left_elbow" not in landmarks

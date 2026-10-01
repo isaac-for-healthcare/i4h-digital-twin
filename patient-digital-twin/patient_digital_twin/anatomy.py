@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Anatomy collection and system views; no SOMA implementation dependencies."""
+"""Anatomy collection and shared system views."""
 
 from __future__ import annotations
 

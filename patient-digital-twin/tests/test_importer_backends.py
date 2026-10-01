@@ -173,14 +173,14 @@ def test_simple_default_colon_and_explicit_placement(tmp_path):
     path = tmp_path / "cube.obj"
     trimesh.creation.box(extents=[0.1, 0.2, 0.3]).export(path)
     default = SimpleImporter({"colon": path}).to_anatomy_collection()
-    assert default.body_to_imaging is not None and not hasattr(default, "soma")
+    assert default.body_to_imaging is not None
     assert set(default.structures) == {"colon"}
     matrix = np.eye(4)
     matrix[:3, 3] = [0.2, 0.3, 0.4]
     explicit = SimpleImporter(
         {"liver": path}, mesh_to_body={"liver": matrix}
     ).to_anatomy_collection()
-    assert explicit.body_to_imaging is None and not hasattr(explicit, "soma")
+    assert explicit.body_to_imaging is None
     np.testing.assert_allclose(
         explicit.structures["liver"].world_vertices.mean(0), matrix[:3, 3]
     )

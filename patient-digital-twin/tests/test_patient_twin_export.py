@@ -3,22 +3,20 @@
 
 """CT and anatomy share the exported workflow coordinate chain."""
 
-from patient_digital_twin import HumanBody
 import json
 
 import nibabel as nib
 import numpy as np
 import pytest
 import yaml
-from patient_digital_twin import SegmentationImporter
+from patient_digital_twin import HumanBody, SegmentationImporter
 
 pytest.importorskip("vtk")
 pytest.importorskip("pxr")
 from pxr import Gf, Usd, UsdGeom
 
 
-@pytest.mark.parametrize("with_soma", [False, True])
-def test_bundle_uses_original_geometry_and_consistent_lps(tmp_path, with_soma):
+def test_bundle_uses_original_geometry_and_consistent_lps(tmp_path):
     shape = (30, 24, 24)
     mask = np.zeros(shape, dtype=np.uint8)
     mask[3:27, 9:14, 9:14] = 1
@@ -38,20 +36,13 @@ def test_bundle_uses_original_geometry_and_consistent_lps(tmp_path, with_soma):
         ).to_anatomy_collection()
     )
     body.AttachImaging(hu, voxel_to_imaging=affine_m, source_path=ct_path)
-    if with_soma:
-        from test_soma import ArticulatedLayer
-
-        registration = np.eye(4)
-        registration[:3, 3] = [0.3, 0.2, 0.1]
-        body.AttachExternalBody(ArticulatedLayer(), body_to_soma=registration)
-        scan_skin = body.soma.soma_body.vertices.copy()
-        body.soma.pose(transl=[[10, 20, 30]])
-        displayed_skin = body.soma.soma_body.vertices.copy()
     body.anatomy.structures["aorta"].local_to_world[:3, 3] += (
         10  # display pose must not move source CT anatomy
     )
     original = body.anatomy.structures["aorta"].local_to_world.copy()
-    target = body.export_patient_twin(tmp_path / "bundle", vessel_names=["aorta"], exterior="auto" if with_soma else "ct")
+    target = body.export_patient_twin(
+        tmp_path / "bundle", vessel_names=["aorta"], exterior="ct"
+    )
     manifest = yaml.safe_load(target.read_text())
     assert manifest["coordinate_frame"] == "DICOM_LPS"
     for value in manifest["artifacts"].values():
@@ -78,21 +69,11 @@ def test_bundle_uses_original_geometry_and_consistent_lps(tmp_path, with_soma):
     assert manifest["anatomy"]["structures"]["aorta"]["prim_path"] == str(
         prim.GetPath()
     )
-    if with_soma:
-        from patient_digital_twin.geometry import transform_points
-
-        skin = UsdGeom.Mesh(stage.GetPrimAtPath("/HumanBody/Exterior/SOMA"))
-        expected = transform_points(
-            scan_skin,
-            np.diag([-1, -1, 1, 1])
-            @ body.imaging.body_to_imaging
-            @ np.linalg.inv(registration),
-        )
-        np.testing.assert_allclose(skin.GetPointsAttr().Get(), expected, atol=1e-7)
-        np.testing.assert_array_equal(body.soma.soma_body.vertices, displayed_skin)
-        assert manifest["anatomy"]["exterior"]["source"] == "SOMA"
-        assert not stage.GetPrimAtPath("/HumanBody/Exterior/CT")
-    else:
-        assert stage.GetPrimAtPath("/HumanBody/Exterior/CT")
+    skin = UsdGeom.Mesh(stage.GetPrimAtPath("/HumanBody/Exterior/CT"))
+    assert skin and len(skin.GetPointsAttr().Get())
+    assert skin.GetDisplayOpacityAttr().Get()[0] == pytest.approx(0.15)
+    assert manifest["anatomy"]["exterior"]["source"] == "CT"
+    assert manifest["anatomy"]["exterior"]["pose"] == "imaging"
+    assert not stage.GetRootLayer().GetExternalReferences()
     with pytest.raises(FileExistsError):
         body.export_patient_twin(target.parent, vessel_names=["aorta"])
