@@ -154,7 +154,7 @@ python -m patient_digital_twin \
   --source nvsegment --input /path/to/s0011/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
   --classes aorta --patient-id s0011 \
-  --format workflow --output ./output/s0011_aorta
+  --format bundle --output ./output/s0011_aorta
 
 python -m patient_digital_twin \
   --source nvgenerate --source-root /path/to/NV-Generate-CTMR \
@@ -183,7 +183,7 @@ uses relative paths, so in-process calls temporarily change it and are serialize
 
 Use new output paths. The CLI extracts missing vessel centerlines automatically.
 NV-Segment accepts 3D `.nii`/`.nii.gz`; `--modality MR` supports geometry-only USD.
-Workflow output requires CT and at least one vessel. Run
+Bundle output requires CT and at least one vessel. Run
 `python -m patient_digital_twin --help` for options.
 
 In an installed i4h-workflows checkout:

@@ -73,7 +73,7 @@ def test_nvsegment_to_real_usd(monkeypatch, tmp_path, modality):
 
 
 @pytest.mark.parametrize("stored", [False, True])
-def test_workflow_centerline_uses_ct_grid_and_preserves_structure_graph(
+def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     monkeypatch, tmp_path, stored
 ):
     pytest.importorskip("pxr")
@@ -109,7 +109,7 @@ def test_workflow_centerline_uses_ct_grid_and_preserves_structure_graph(
             "--output",
             str(tmp_path / "bundle"),
             "--format",
-            "workflow",
+            "bundle",
         ]
     )
     path = main.run_pipeline(**vars(args))

@@ -66,19 +66,19 @@ def run_pipeline(
     modality = modality.upper()
     if modality not in {"CT", "MR"}:
         raise ValueError("modality must be CT or MR")
-    if format not in {"usd", "workflow"}:
-        raise ValueError("format must be usd or workflow")
+    if format not in {"usd", "bundle"}:
+        raise ValueError("format must be usd or bundle")
     if hu_to_mu_preset not in PRESETS:
         raise ValueError(f"Unknown HU-to-mu preset: {hu_to_mu_preset}")
     if not np.isfinite(centerline_spacing_mm) or centerline_spacing_mm <= 0:
         raise ValueError("centerline_spacing_mm must be finite and positive")
-    if format == "workflow" and modality != "CT":
-        raise ValueError("workflow output requires CT in Hounsfield units")
-    if format == "workflow" and not any(
+    if format == "bundle" and modality != "CT":
+        raise ValueError("bundle output requires CT in Hounsfield units")
+    if format == "bundle" and not any(
         CATALOG[name] == Kind.VESSEL or name == "portal_vein_and_splenic_vein"
         for name in names
     ):
-        raise ValueError("workflow output requires at least one vessel class")
+        raise ValueError("bundle output requires at least one vessel class")
     output = Path(output).expanduser().resolve()
     if format == "usd" and output.suffix.lower() not in {".usd", ".usda", ".usdc"}:
         raise ValueError("USD output must end with .usd, .usda or .usdc")
@@ -93,7 +93,7 @@ def run_pipeline(
         if not input.is_file() or not str(input).lower().endswith((".nii", ".nii.gz")):
             raise ValueError("input must be an existing .nii or .nii.gz image")
         image = image_input(input)
-        if format == "workflow":
+        if format == "bundle":
             from .exporters.utils import _image_to_ct
 
             if not np.allclose(
@@ -102,7 +102,7 @@ def run_pipeline(
                 atol=1e-4,
             ):
                 raise ValueError(
-                    "Resample oblique CT to patient axes before workflow export"
+                    "Resample oblique CT to patient axes before bundle export"
                 )
         importer = NVSegmentImporter(
             image,
@@ -146,8 +146,8 @@ def run_pipeline(
         if body.anatomy.structures[name].kind == Kind.VESSEL
         or name == "portal_vein_and_splenic_vein"
     )
-    if format == "workflow" and not vessel_names:
-        raise ValueError("workflow output requires at least one vessel class")
+    if format == "bundle" and not vessel_names:
+        raise ValueError("bundle output requires at least one vessel class")
     missing = [
         name
         for name in vessel_names
@@ -155,7 +155,7 @@ def run_pipeline(
     ]
     if missing:
         body.extract_topology(names=missing, spacing_m=centerline_spacing_mm * 0.001)
-    if format == "workflow":
+    if format == "bundle":
         return body.export_patient_twin(
             output,
             patient_id=patient_id,
@@ -180,7 +180,7 @@ def parser():
         help="Named anatomy classes (spaces or commas)",
     )
     result.add_argument("--output", type=Path, required=True)
-    result.add_argument("--format", choices=("usd", "workflow"), default="usd")
+    result.add_argument("--format", choices=("usd", "bundle"), default="usd")
     result.add_argument("--modality", choices=("CT", "MR"), default="CT")
     result.add_argument(
         "--bundle-root", type=Path, help="Inner NV-Segment-CTMR bundle directory"
@@ -191,7 +191,7 @@ def parser():
         dest="python_executable",
         help="Python interpreter for model inference",
     )
-    result.add_argument("--patient-id", help="Identifier stored in a workflow bundle")
+    result.add_argument("--patient-id", help="Identifier stored in a bundle bundle")
     result.add_argument(
         "--hu-to-mu",
         dest="hu_to_mu_preset",
