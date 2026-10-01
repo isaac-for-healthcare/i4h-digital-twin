@@ -24,7 +24,6 @@ patient-dicom = ["SimpleITK>=2.3.0"]
 patient-nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
 patient-nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
 patient-pipeline = ["usd-core", "vtk", "scipy>=1.10"]
-patient-physics = ["usd-core", "trimesh>=4.0", "fast-simplification>=0.1", "shapely>=2.0", "tetgen>=0.8", "pymeshfix>=0.18"]
 dev = ["pytest>=8.0"]
 patient-mesh = []  # Compatibility alias: bundled with patient_digital_twin.
 patient-usd = ["usd-core"]
@@ -41,8 +40,6 @@ packages = [
   "patient_digital_twin.exporters",
   "patient_digital_twin.imaging_to_mesh",
   "patient_digital_twin.importers",
-  "patient_digital_twin.legacy_ct",
-  "patient_digital_twin.legacy_ct.ct",
   "robot_digital_twin",
   "sim_ready_assets",
 ]
@@ -51,7 +48,6 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 i4h_asset_helper = ["*.json"]
-"patient_digital_twin.importers" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["patient-digital-twin/tests"]

@@ -15,8 +15,8 @@ import sys
 import numpy as np
 from patient_digital_twin import SegmentationImporter
 from patient_digital_twin.imaging_to_mesh import mask_to_mesh
-from patient_digital_twin.exporters import export_to_usd, export_patient_twin, export_physics_examples
-assert all(callable(f) for f in (export_to_usd, export_patient_twin, export_physics_examples))
+from patient_digital_twin.exporters import export_to_usd, export_patient_twin
+assert all(callable(f) for f in (export_to_usd, export_patient_twin))
 vertices, faces = mask_to_mesh(np.ones((3, 3, 3)))
 assert len(vertices) and len(faces)
 body = SegmentationImporter.from_array(np.ones((3, 3, 3)), {1: "liver"}).to_anatomy_collection()

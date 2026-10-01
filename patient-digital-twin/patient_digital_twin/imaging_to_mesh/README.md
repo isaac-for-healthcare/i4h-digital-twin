@@ -1,7 +1,7 @@
 # Bundled imaging-to-mesh subpackage
 
 Install the patient package; no separate meshing distribution or source-path
-configuration is needed:
+configuration is needed. Run these install commands from the repository root:
 
 ```bash
 pip install ./patient-digital-twin
@@ -27,9 +27,3 @@ Vertices are XYZ float32 coordinates and faces are int32 triangle indices.
 For NIfTI labels, use `SegmentationImporter.to_anatomy_collection()`: it applies the
 full imaging affine and converts to meters, rather than using only spacing
 and origin. See the [patient API guide](../README.md).
-
-The former standalone `imaging-to-mesh` distribution, CLI, NRRD reader,
-hard-coded label groups, OBJ/USD exporters, export result classes, and
-vasculature export example have been retired. They are not required by the
-patient workflow. OpenUSD and vasculature dependencies are no longer pulled
-in by meshing. The old `mesh` extra remains an empty installation alias.

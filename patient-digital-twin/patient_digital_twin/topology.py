@@ -226,37 +226,87 @@ def voxelize_mesh(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
 
 
 def _skeleton_centerlines(vertices, faces, *, shape_zyx, spacing_zyx_m, origin_xyz_m):
-    """Voxel thinning and EDT radii, matching i4h-workflows' 26-neighbor graph."""
-    from itertools import product
+    mask = voxelize_mesh(vertices, faces, shape_zyx=shape_zyx,
+                         spacing_zyx_m=spacing_zyx_m, origin_xyz_m=origin_xyz_m)
+    points, edges, radii = centerline_from_mask(mask, spacing_zyx_m, origin_xyz_m)
+    return CenterlineGraph(points, radii, edges)
 
-    from scipy.ndimage import distance_transform_edt
-    from skimage.morphology import skeletonize
 
-    mask = voxelize_mesh(
-        vertices,
-        faces,
-        shape_zyx=shape_zyx,
-        spacing_zyx_m=spacing_zyx_m,
-        origin_xyz_m=origin_xyz_m,
-    )
-    coordinates = np.argwhere(skeletonize(mask))
-    if len(coordinates) < 2:
-        raise ValueError("Mesh skeleton has fewer than two points")
-    distance = distance_transform_edt(mask, sampling=spacing_zyx_m)
-    index = {tuple(c): i for i, c in enumerate(coordinates)}
-    edges = []
-    offsets = [np.array(o) for o in product((-1, 0, 1), repeat=3) if any(o)]
-    for i, coordinate in enumerate(coordinates):
-        for offset in offsets:
-            j = index.get(tuple(coordinate + offset))
+def centerline_from_mask(
+    mask_zyx: np.ndarray,
+    spacing_zyx: tuple[float, float, float],
+    origin_xyz: tuple[float, float, float],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Skeleton points, edges, and EDT radii in the spacing/origin's spatial units.
+
+    Integer indices locate voxel centers. The mask is never closed, resampled,
+    reduced to its largest component, or subsampled.
+    """
+    mask_zyx = np.asarray(mask_zyx)
+    spacing = np.asarray(spacing_zyx, float)
+    origin = np.asarray(origin_xyz, float)
+    if (mask_zyx.ndim != 3 or not mask_zyx.size or not np.isin(mask_zyx, [0, 1]).all()
+            or not mask_zyx.any()):
+        raise ValueError("Expected a nonempty binary 3D mask")
+    if (spacing.shape != (3,) or not np.isfinite(spacing).all() or np.any(spacing <= 0)
+            or origin.shape != (3,) or not np.isfinite(origin).all()):
+        raise ValueError("Expected positive finite spacing and a finite XYZ origin")
+    from scipy import ndimage
+
+    try:
+        from skimage.morphology import skeletonize
+
+        skel = skeletonize(mask_zyx.astype(bool))
+    except TypeError:
+        from skimage.morphology import skeletonize_3d
+
+        skel = skeletonize_3d(mask_zyx.astype(bool)) > 0
+
+    sz, sy, sx = (float(v) for v in spacing_zyx)
+    ox, oy, oz = (float(v) for v in origin_xyz)
+
+    edt = ndimage.distance_transform_edt(mask_zyx.astype(bool), sampling=(sz, sy, sx))
+    coords = np.argwhere(skel)
+    if coords.shape[0] < 2:
+        raise ValueError(f"Skeleton has too few nodes ({coords.shape[0]}).")
+
+    index_of = {(int(z), int(y), int(x)): i for i, (z, y, x) in enumerate(coords)}
+    pts = np.empty((coords.shape[0], 3), dtype=np.float64)
+    pts[:, 0] = ox + coords[:, 2] * sx
+    pts[:, 1] = oy + coords[:, 1] * sy
+    pts[:, 2] = oz + coords[:, 0] * sz
+    radii = edt[coords[:, 0], coords[:, 1], coords[:, 2]]
+
+    neighbors = [
+        (dz, dy, dx)
+        for dz in (-1, 0, 1)
+        for dy in (-1, 0, 1)
+        for dx in (-1, 0, 1)
+        if not (dz == 0 and dy == 0 and dx == 0)
+    ]
+    edges: list[tuple[int, int]] = []
+    for i, (z, y, x) in enumerate(coords):
+        for dz, dy, dx in neighbors:
+            j = index_of.get((int(z + dz), int(y + dy), int(x + dx)))
             if j is not None and j > i:
                 edges.append((i, j))
-    if not edges:
-        raise ValueError("Mesh skeleton has no edges")
-    points = (
-        np.asarray(origin_xyz_m)
-        + coordinates[:, ::-1] * np.asarray(spacing_zyx_m)[::-1]
+    edges_arr = (
+        np.asarray(edges, dtype=np.int64) if edges else np.zeros((0, 2), dtype=np.int64)
     )
-    return CenterlineGraph(
-        points, distance[tuple(coordinates.T)], np.asarray(edges, dtype=np.int64)
-    )
+    if edges_arr.shape[0] < 1:
+        raise ValueError("Skeleton produced no edges.")
+    return pts, edges_arr, radii
+
+def native_centerline(mask, scan):
+    """Extract on the native mask; map voxel centres and radii into scan units."""
+    a = scan.ijk_to_world
+    spacing = np.linalg.norm(a[:3, :3], axis=0)
+    direction = a[:3, :3] / spacing
+    if not np.allclose(direction.T @ direction, np.eye(3), atol=1e-5):
+        raise ValueError(
+            "Centerline radii require orthogonal voxel axes; explicitly reconstruct sheared grids"
+        )
+    kji = mask.transpose([scan.array_axes.index(c) for c in "kji"])
+    points, edges, radii = centerline_from_mask(kji, spacing[::-1], (0.0, 0.0, 0.0))
+    points = points.astype(np.float32).astype(float) @ direction.T + a[:3, 3]
+    return points, edges, radii.astype(np.float32)

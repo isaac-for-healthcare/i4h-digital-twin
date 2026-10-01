@@ -14,9 +14,9 @@ import numpy as np
 
 
 def export_to_usd(body, path):
-    """Export anatomy in its current placement to a meter-scale, Z-up stage.
+    """Export anatomy in its current placement using scan units and Z-up metadata.
 
-    CT is optional, stored as HU in ZYX order with a voxel-to-human matrix.
+    CT is optional, stored as native HU with its full array-to-scan affine.
     Centerlines share their structure's local frame. Export does not change
     structure transforms or visibility.
     """
@@ -52,8 +52,8 @@ def summarize_usd(path):
         f"  Anatomy: {len(anatomy)} meshes ({hidden} hidden), {centerlines} centerlines\n"
         f"  Looks: UsdPreviewSurface materials\n"
         + (
-            f"  Imaging/CT: custom HU voxels {tuple((ct.GetAttribute('ct:shape') or ct.GetAttribute('ct:shapeZYX')).Get())}, "
-            "voxel-to-human transform\n"
+            f"  Imaging/CT: custom HU voxels {tuple(ct.GetAttribute('ct:shape').Get())}, "
+            "array-to-scan transform\n"
             if ct
             else ""
         )
@@ -68,8 +68,6 @@ def _export_to_usd(
     root_transform=None,
     exterior_mesh=None,
     skin_name="CT",
-    ct=None,
-    ct_to_human=None,
     native_scan=None,
     meters_per_unit=1.0,
 ):
@@ -260,32 +258,6 @@ def _export_to_usd(
         volume.CreateAttribute(
             "ct:spatialUnit", Sdf.ValueTypeNames.Token, custom=True
         ).Set(native_scan.metadata["output"]["world_unit"])
-        volume.CreateAttribute("ct:units", Sdf.ValueTypeNames.Token, custom=True).Set(
-            "HU"
-        )
-    if ct is not None:
-        hu = np.asarray(ct.hu_zyx, dtype=np.float32)
-        if hu.ndim != 3 or not hu.size or not np.isfinite(hu).all():
-            raise ValueError("Expected a non-empty, finite 3D CT volume")
-        voxel_to_lps = np.eye(4)
-        voxel_to_lps[:3, :3] = np.asarray(ct.direction).reshape(3, 3) @ np.diag(
-            np.asarray(ct.spacing_zyx_mm)[::-1] * 0.001
-        )
-        voxel_to_lps[:3, 3] = np.asarray(ct.origin_xyz_mm) * 0.001
-        UsdGeom.Scope.Define(stage, "/HumanBody/Imaging")
-        volume = UsdGeom.Scope.Define(stage, "/HumanBody/Imaging/CT").GetPrim()
-        volume.CreateAttribute("ct:hu", Sdf.ValueTypeNames.FloatArray, custom=True).Set(
-            Vt.FloatArray.FromNumpy(hu.ravel(order="C"))
-        )
-        volume.CreateAttribute("ct:shapeZYX", Sdf.ValueTypeNames.Int3, custom=True).Set(
-            Gf.Vec3i(*hu.shape)
-        )
-        volume.CreateAttribute(
-            "ct:voxelToHuman", Sdf.ValueTypeNames.Matrix4d, custom=True
-        ).Set(Gf.Matrix4d((ct_to_human @ voxel_to_lps).T.tolist()))
-        volume.CreateAttribute(
-            "ct:arrayOrder", Sdf.ValueTypeNames.Token, custom=True
-        ).Set("ZYX_C")
         volume.CreateAttribute("ct:units", Sdf.ValueTypeNames.Token, custom=True).Set(
             "HU"
         )

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -82,24 +81,18 @@ class SimpleImporter:
 
     STL/OBJ vertices must be XYZ meters. USD authored units/transforms are baked
     into its vertices. `mesh_to_body` maps each file's coordinates to the shared
-    body frame. An omitted entry uses that anatomy's bundled reference placement
-    (intended for centered local meshes); unknown reference placements require
-    an explicit transform. No fitting, recentering, or resizing is hidden here.
+    body frame. Omitted placements are identity; provide explicit transforms for
+    centered local meshes. No fitting, recentering, or resizing is hidden here.
     """
 
     def __init__(
-        self, meshes, *, mesh_to_body=None, body_to_imaging=None, reference=None
+        self, meshes, *, mesh_to_body=None, body_to_imaging=None
     ):
         if not meshes:
             raise ValueError("Provide at least one anatomy name and mesh path")
         self.meshes = dict(meshes)
         self.transforms = dict(mesh_to_body or {})
         self.body_to_imaging = body_to_imaging
-        self.reference = (
-            Path(reference)
-            if reference
-            else Path(__file__).with_name("reference_body.json")
-        )
         self.report = None
 
     def to_anatomy_collection(self, *, configuration=None):
@@ -112,22 +105,10 @@ class SimpleImporter:
         }
         if set(transforms) - set(names.values()):
             raise ValueError("Transform supplied for an anatomy not in meshes")
-        use_reference = any(name not in transforms for name in names.values())
-        reference = json.loads(self.reference.read_text()) if use_reference else {}
         body = anatomy_from_labels(names.values())
-        body.body_to_imaging = (
-            self.body_to_imaging
-            if self.body_to_imaging is not None
-            else reference.get("body_to_imaging")
-        )
+        body.body_to_imaging = self.body_to_imaging
         for raw, name in names.items():
-            placement = transforms.get(
-                name, reference.get("mesh_to_body", {}).get(name)
-            )
-            if placement is None:
-                raise ValueError(
-                    f"No sample placement for {name}; supply mesh_to_body[{name!r}]"
-                )
+            placement = transforms.get(name, np.eye(4))
             vertices, faces = _load_mesh(self.meshes[raw])
             if (
                 vertices.ndim != 2

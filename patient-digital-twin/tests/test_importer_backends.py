@@ -147,7 +147,8 @@ def test_simple_default_colon_and_explicit_placement(tmp_path):
     path = tmp_path / "cube.obj"
     trimesh.creation.box(extents=[0.1, 0.2, 0.3]).export(path)
     default = SimpleImporter({"colon": path}).to_anatomy_collection()
-    assert default.body_to_imaging is not None
+    assert default.body_to_imaging is None
+    np.testing.assert_array_equal(default.structures["colon"].local_to_body, np.eye(4))
     assert set(default.structures) == {"colon"}
     matrix = np.eye(4)
     matrix[:3, 3] = [0.2, 0.3, 0.4]

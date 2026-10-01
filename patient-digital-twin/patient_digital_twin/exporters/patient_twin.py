@@ -9,11 +9,13 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import yaml
 
+from ..artifacts import write_centerline
 from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
 from ..structures import AnatomicalStructure, MeshGeometry
-from .native import mask_on_scan, native_centerline, scan_for_body, scan_from_body_m
+from ..topology import native_centerline
+from .native import mask_on_scan, scan_for_body, scan_from_body_m
 from .usd import _export_to_usd
 
 
@@ -26,7 +28,6 @@ def export_patient_twin(
     world_from_patient_m=None,
     exterior="auto",
     skin_opacity=0.15,
-    physics_root=None,
 ):
     """Write schema 3: native arrays, full affine, source-frame geometry and units.
 
@@ -100,13 +101,7 @@ def export_patient_twin(
         if mask is not None:
             np.save(folder / "vessel_mask.npy", mask.astype(np.uint8))
             points, edges, radii = native_centerline(mask, scan)
-            for name, values in [
-                ("centerline_points", points),
-                ("centerline_edges", edges),
-                ("centerline_radii", radii),
-            ]:
-                np.save(folder / f"{name}.npy", values)
-                artifacts[name] = f"{name}.npy"
+            artifacts.update(write_centerline(folder, points, edges, radii))
             artifacts["vessel_mask"] = "vessel_mask.npy"
         root_scale = np.eye(4)
         _export_to_usd(
@@ -186,22 +181,5 @@ def export_patient_twin(
         (folder / "patient_twin.yaml").write_text(
             yaml.safe_dump(manifest, sort_keys=False)
         )
-        if physics_root is not None:
-            from .physics_export import export_physics_examples
-
-            physics_manifest = export_physics_examples(
-                folder / "patient_twin.yaml",
-                folder / "simulation",
-                physics_root=physics_root,
-            )
-            manifest["physics_examples"] = yaml.safe_load(physics_manifest.read_text())[
-                "physics_examples"
-            ]
-            manifest["physics_examples"]["source_patient_twin"] = "patient_twin.yaml"
-            for demo in manifest["physics_examples"]["demos"].values():
-                demo["config"] = "simulation/" + demo["config"]
-            (folder / "patient_twin.yaml").write_text(
-                yaml.safe_dump(manifest, sort_keys=False)
-            )
         shutil.move(str(folder), str(output))
     return output / "patient_twin.yaml"

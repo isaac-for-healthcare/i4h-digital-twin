@@ -37,7 +37,8 @@ flowchart TD
 - [__main__.py](__main__.py) provides the NV-Segment / NV-Generate CLI.
 - [scan_volume.py](scan_volume.py) reads native NIfTI/DICOM grids and saves or replays
   NumPy + YAML artifacts. The same helper is shipped in sensor-simulation.
-- [legacy_ct](legacy_ct/README.md) isolates the temporary skeleton-centerline implementation.
+- [topology.py](topology.py) calculates mesh and mask centerlines;
+  [artifacts.py](artifacts.py) writes native volume/mask/graph arrays.
 
 ## Coordinates and outputs
 

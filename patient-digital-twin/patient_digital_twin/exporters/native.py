@@ -75,20 +75,3 @@ def mask_on_scan(body, scan, names):
     if not mask.any():
         raise ValueError("Selected vessels have no foreground in the scan")
     return mask.transpose(["kji".index(c) for c in scan.array_axes])
-
-
-def native_centerline(mask, scan):
-    """Extract on the native mask; map voxel centres and radii into scan units."""
-    from ..legacy_ct.centerline import centerline_from_mask
-
-    a = scan.ijk_to_world
-    spacing = np.linalg.norm(a[:3, :3], axis=0)
-    direction = a[:3, :3] / spacing
-    if not np.allclose(direction.T @ direction, np.eye(3), atol=1e-5):
-        raise ValueError(
-            "Centerline radii require orthogonal voxel axes; explicitly reconstruct sheared grids"
-        )
-    kji = mask.transpose([scan.array_axes.index(c) for c in "kji"])
-    points, edges, radii = centerline_from_mask(kji, spacing[::-1], (0.0, 0.0, 0.0))
-    points = points.astype(float) @ direction.T + a[:3, 3]
-    return points, edges, radii
