@@ -10,7 +10,7 @@ patient package, NumPy and the `usd` extra installed.
 | Output | Produced by | Coordinates and contents |
 | --- | --- | --- |
 | Standalone `.usd`, `.usda`, `.usdc` | `body.export_to_usd(path)` | Presentation stage; anatomy, stored centerlines and embedded attached CT |
-| `patient_anatomy.usdc` plus `patient_twin.yaml` | `body.export_patient_twin(new_directory)` | Patient-frame anatomy and stored centerlines; CT/attenuation are separate bundle files |
+| `patient_anatomy.usdc` plus `patient_twin.yaml` | `body.export_patient_twin(new_directory)` | Patient-frame anatomy and stored centerlines; HU CT and spatial metadata are separate bundle files |
 | Both of the above | `examples/pipeline.py` | Adds `human_body.usdc` alongside the patient bundle |
 | Physics-demo assets and extended manifest | `export_physics_examples(...)` | Derived meshes/configuration for the supported external physics demos |
 

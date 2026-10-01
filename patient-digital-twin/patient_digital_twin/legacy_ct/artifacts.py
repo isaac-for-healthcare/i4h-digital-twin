@@ -3,30 +3,12 @@
 
 """Isolated compatibility writer for the navigation volume and graph artifacts."""
 
+import json
 from pathlib import Path
 
 import numpy as np
 
 from .centerline import centerline_from_mask
-from .config import HuToMuMapping, PreprocessingSettings
-from .preprocessor import VolumePreprocessor
-
-INTERVENTIONAL = HuToMuMapping(
-    control_points=(
-        (-1000.0, 0.0),
-        (-300.0, 0.0),
-        (100.0, 0.0008),
-        (300.0, 0.0028),
-        (500.0, 0.006),
-        (900.0, 0.009),
-        (1500.0, 0.012),
-        (3000.0, 0.02),
-        (8000.0, 0.044),
-    )
-)
-LINEAR = HuToMuMapping()
-PRESETS = {"interventional": INTERVENTIONAL, "linear": LINEAR}
-DEFAULT_PRESET = "linear"
 
 
 def write_artifacts(
@@ -36,9 +18,8 @@ def write_artifacts(
     source="numpy",
     vessel_mask=None,
     centerline=None,
-    hu_to_mu_preset=DEFAULT_PRESET,
 ):
-    """Write HU, attenuation, metadata, and optional mask/graph in LPS millimeters.
+    """Write HU, spatial metadata, and optional mask/graph in LPS millimeters.
 
     ``ct`` supplies HU in ZYX order plus spacing, origin, and direction. The
     optional ``centerline`` is (points_mm, edges, radii_mm); a missing graph is
@@ -59,8 +40,6 @@ def write_artifacts(
         raise ValueError(
             "Navigation artifacts require axis-aligned LPS CT; resample oblique inputs first"
         )
-    if hu_to_mu_preset not in PRESETS:
-        raise ValueError(f"Unknown HU-to-mu preset: {hu_to_mu_preset}")
     if centerline is not None and vessel_mask is None:
         raise ValueError("A centerline requires its vessel mask")
     if vessel_mask is not None:
@@ -96,20 +75,21 @@ def write_artifacts(
             or edges.max() >= len(points)
         ):
             raise ValueError("Invalid physical centerline graph")
-    mapping = PRESETS[hu_to_mu_preset]
-    volume = VolumePreprocessor(
-        hu_volume=hu,
-        spacing_zyx_mm=tuple(spacing),
-        origin_xyz_mm=tuple(origin),
-        source=str(source),
-        settings=PreprocessingSettings(hu_to_mu=mapping, clip_hu=False),
-        anatomical_frame="LPS",
-        source_orientation=ct.source_orientation,
-        direction=tuple(ct.direction),
-    ).preprocess()
-    volume.metadata.hu_to_mu = {"preset": hu_to_mu_preset, **mapping.to_dict()}
     output = Path(output)
-    volume.save(output)
+    output.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "shape_zyx": list(hu.shape),
+        "spacing_zyx_mm": spacing.tolist(),
+        "origin_xyz_mm": origin.tolist(),
+        "direction_row_major_3x3": list(ct.direction),
+        "anatomical_frame": "LPS",
+        "source_orientation": ct.source_orientation,
+        "source": str(source),
+        "array_order": "ZYX",
+        "intensity_units": "HU",
+        "hu_range": [float(hu.min()), float(hu.max())],
+    }
+    (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     np.save(output / "hu_volume.npy", hu.astype(np.float32))
     if vessel_mask is not None:
         np.save(output / "vessel_mask.npy", mask.astype(np.uint8))

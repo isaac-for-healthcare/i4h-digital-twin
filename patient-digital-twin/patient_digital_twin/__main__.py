@@ -15,7 +15,6 @@ from .human import HumanBody
 from .importers import NVGenerateImporter, NVSegmentImporter
 from .importers._common import image_input
 from .importers._segmentation import SegmentationImporter, canonical_name
-from .legacy_ct.artifacts import DEFAULT_PRESET, PRESETS
 from .structures import Kind
 
 
@@ -50,7 +49,6 @@ def run_pipeline(
     bundle_root=None,
     source_root=None,
     python_executable=None,
-    hu_to_mu_preset=DEFAULT_PRESET,
     centerline_spacing_mm=1.5,
 ):
     """Run an optional model backend and export only the requested meshes.
@@ -67,8 +65,6 @@ def run_pipeline(
         raise ValueError("modality must be CT or MR")
     if format not in {"usd", "bundle"}:
         raise ValueError("format must be usd or bundle")
-    if hu_to_mu_preset not in PRESETS:
-        raise ValueError(f"Unknown HU-to-mu preset: {hu_to_mu_preset}")
     if not np.isfinite(centerline_spacing_mm) or centerline_spacing_mm <= 0:
         raise ValueError("centerline_spacing_mm must be finite and positive")
     if format == "bundle" and modality != "CT":
@@ -159,7 +155,6 @@ def run_pipeline(
             output,
             vessel_names=vessel_names,
             exterior="ct",
-            hu_to_mu_preset=hu_to_mu_preset,
         )
     output.parent.mkdir(parents=True, exist_ok=True)
     return body.export_to_usd(output)
@@ -188,12 +183,6 @@ def parser():
         "--python",
         dest="python_executable",
         help="Python interpreter for model inference",
-    )
-    result.add_argument(
-        "--hu-to-mu",
-        dest="hu_to_mu_preset",
-        choices=tuple(PRESETS),
-        default=DEFAULT_PRESET,
     )
     result.add_argument("--centerline-spacing-mm", type=float, default=1.5)
     return result

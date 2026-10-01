@@ -69,18 +69,3 @@ def _image_to_ct(image):
         direction=tuple(float(v) for v in (lps_affine[:3, :3] / spacing).ravel()),
         source_orientation="".join(nib.aff2axcodes(affine)[::-1]),
     )
-
-
-def hu_to_mu(hu):
-    """Apply the navigation compatibility component's default linear curve."""
-    from ..legacy_ct import hu_to_mu as convert
-    from ..legacy_ct.artifacts import DEFAULT_PRESET, PRESETS
-
-    return convert(hu, PRESETS[DEFAULT_PRESET])
-
-
-def save_attenuation(ct, output, *, source):
-    """Write CT artifacts through the isolated navigation compatibility module."""
-    from ..legacy_ct import write_artifacts
-
-    return write_artifacts(ct, output, source=source)

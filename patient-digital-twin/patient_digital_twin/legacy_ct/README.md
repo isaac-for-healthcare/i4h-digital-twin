@@ -1,13 +1,9 @@
-# Isolated CT artifact compatibility component
+# Isolated CT imaging and navigation component
 
-This temporary module contains the CT ingest, LPS orientation, HU-to-mu mapping,
-and volume-cache components from repository main at
-`d32b35170ea5ed3a9c3e521929469d9d98be2244`, plus the mask-to-centerline routine
-from its vessel artifact CLI. It does not include a segmentation backend or
-simulation code. Its imports stay within this module, NumPy, and optional IO or
-morphology dependencies so it can be removed or replaced independently.
-
-Run the component without the patient inference pipeline:
+This temporary component retains canonical LPS CT ingest, spatial metadata, and
+mask-to-centerline processing from the legacy patient implementation. X-ray
+attenuation conversion and presets now belong to `xray_simulator` in
+**i4h-sensor-simulation**; this module has no dependency on that renderer.
 
 ```bash
 python -m patient_digital_twin.legacy_ct \
@@ -15,16 +11,14 @@ python -m patient_digital_twin.legacy_ct \
   --output /tmp/new-ct-artifacts
 ```
 
-The mask must share the CT's physical grid. CT-only use omits `--vessel-mask`.
-The output includes `mu_volume.npy`, `metadata.json`, and `hu_volume.npy`.
-With a vessel mask it also includes `vessel_mask.npy`, `centerline_points_mm.npy`,
-`centerline_edges.npy`, and `centerline_radii_mm.npy`. Graph positions and radii
-use patient LPS millimeters; arrays use ZYX order. Oblique grids are rejected.
+The mask must share the CT's physical grid. Omit it for CT-only export.
+The output contains `hu_volume.npy` and `metadata.json` with array order, HU units,
+spacing, origin, direction and source orientation. With a mask, it also includes
+`vessel_mask.npy`, `centerline_points_mm.npy`, `centerline_edges.npy`, and
+`centerline_radii_mm.npy`. Volumes use ZYX order; points/radii use LPS millimeters.
+Oblique grids are rejected; no intensity clipping or HU-to-μ conversion occurs.
 
-Python callers can use `write_artifacts(ct, output, vessel_mask=mask)` or the
-ported `VolumePreprocessor` and `HuToMuMapping` APIs. `write_artifacts` accepts an
-existing `(points_mm, edges, radii_mm)` graph; otherwise it skeletonizes the mask.
-The default `linear` attenuation preset matches main: -1000 to 3000 HU maps
-to 0–0.02 mm⁻¹, clamped outside that range. Select `--hu-to-mu interventional`
-explicitly for the alternative curve. This component does not write a patient manifest or USD;
-those remain owned by the patient exporter.
+Python callers use `write_artifacts(ct, output, vessel_mask=mask)`. An optional
+`centerline=(points_mm, edges, radii_mm)` supplies an existing graph; otherwise the
+mask is skeletonized. This standalone component writes neither USD nor a patient
+manifest; the patient exporter adds those.

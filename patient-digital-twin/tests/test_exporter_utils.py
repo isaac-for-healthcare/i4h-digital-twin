@@ -11,10 +11,9 @@ import numpy as np
 import pytest
 from patient_digital_twin.exporters.utils import (
     CtVolume,
-    hu_to_mu,
     load_nifti_hu,
-    save_attenuation,
 )
+from patient_digital_twin.legacy_ct import write_artifacts
 
 
 @pytest.mark.parametrize("axes", list(itertools.permutations(range(3))))
@@ -59,26 +58,22 @@ def test_ct_preserves_obliquity_and_applies_intensity_scaling_once(tmp_path):
     np.testing.assert_array_equal(ct.hu_zyx, -1022)
 
 
-def test_attenuation_curve_and_metadata_contract(tmp_path):
+def test_hu_volume_and_metadata_contract(tmp_path):
     hu = np.array([-1500, -1000, -300, 100, 200, 300, 8000, 9000], dtype=np.float32)
-    expected = np.array(
-        [0, 0, 0.0035, 0.0055, 0.006, 0.0065, 0.02, 0.02], dtype=np.float32
-    )
-    np.testing.assert_array_equal(hu_to_mu(hu), expected)
     ct = CtVolume(
         hu.reshape(2, 2, 2), (3, 2, 1), (10, 20, 30), tuple(np.eye(3).ravel()), "SAR"
     )
-    save_attenuation(ct, tmp_path, source="ct.nii.gz")
-    np.testing.assert_array_equal(np.load(tmp_path / "mu_volume.npy").ravel(), expected)
+    write_artifacts(ct, tmp_path, source="ct.nii.gz")
+    np.testing.assert_array_equal(np.load(tmp_path / "hu_volume.npy").ravel(), hu)
     meta = json.loads((tmp_path / "metadata.json").read_text())
     assert set(meta) == {
         "shape_zyx",
         "spacing_zyx_mm",
         "origin_xyz_mm",
         "hu_range",
-        "mu_range",
         "source",
-        "hu_to_mu",
+        "array_order",
+        "intensity_units",
         "anatomical_frame",
         "source_orientation",
         "direction_row_major_3x3",
@@ -89,4 +84,5 @@ def test_attenuation_curve_and_metadata_contract(tmp_path):
     assert meta["hu_range"] == [-1500, 9000]
     assert meta["anatomical_frame"] == "LPS"
     assert meta["source_orientation"] == "SAR"
-    assert meta["hu_to_mu"]["preset"] == "linear"
+    assert meta["array_order"] == "ZYX"
+    assert meta["intensity_units"] == "HU"

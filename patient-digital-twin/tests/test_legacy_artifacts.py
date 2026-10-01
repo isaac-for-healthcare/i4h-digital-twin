@@ -38,7 +38,9 @@ def test_navigation_artifacts_have_physical_centerlines(tmp_path):
     assert np.all(np.load(tmp_path / "centerline_radii_mm.npy") > 0)
     metadata = json.loads((tmp_path / "metadata.json").read_text())
     assert metadata["anatomical_frame"] == "LPS"
-    assert metadata["hu_to_mu"]["preset"] == "linear"
+    assert metadata["intensity_units"] == "HU"
+    assert "hu_to_mu" not in metadata
+    assert not (tmp_path / "mu_volume.npy").exists()
     np.testing.assert_array_equal(np.load(tmp_path / "vessel_mask.npy"), mask)
     np.testing.assert_array_equal(np.load(tmp_path / "hu_volume.npy"), ct.hu_zyx)
 
@@ -70,15 +72,9 @@ def test_invalid_mask_leaves_no_artifacts(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
-def test_explicit_interventional_preserves_high_hu_curve(tmp_path):
-    hu = np.array(
-        [-1500, -300, 100, 300, 900, 3000, 6000, 9000], dtype=np.float32
-    ).reshape(2, 2, 2)
+def test_high_hu_values_are_exported_without_clipping(tmp_path):
+    hu = np.array([-1500, -300, 100, 300, 900, 3000, 6000, 9000], dtype=np.float32).reshape(2, 2, 2)
     ct = CtVolume(hu, (1, 1, 1), (0, 0, 0), tuple(np.eye(3).ravel()), "LPS", "SPL")
-    write_artifacts(ct, tmp_path, hu_to_mu_preset="interventional")
-    expected = np.array(
-        [0, 0, 0.0008, 0.0028, 0.009, 0.02, 0.0344, 0.044], dtype=np.float32
-    )
-    np.testing.assert_array_equal(np.load(tmp_path / "mu_volume.npy").ravel(), expected)
-    metadata = json.loads((tmp_path / "metadata.json").read_text())
-    assert metadata["hu_to_mu"]["preset"] == "interventional"
+    write_artifacts(ct, tmp_path)
+    np.testing.assert_array_equal(np.load(tmp_path / "hu_volume.npy"), hu)
+    assert not (tmp_path / "mu_volume.npy").exists()

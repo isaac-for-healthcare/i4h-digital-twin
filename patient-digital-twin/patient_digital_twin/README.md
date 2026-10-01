@@ -19,7 +19,7 @@ flowchart TD
     T --> E
     V --> E
     E --> U["USD: anatomy + optional graphs and CT"]
-    E --> P["Patient bundle: manifest + USD + optional arrays"]
+    E --> P["Patient bundle: manifest + USD + optional HU and anatomy arrays"]
 ```
 
 ## Main entry points
@@ -35,7 +35,7 @@ flowchart TD
   checkouts and weights are separate. Inference runs in-process unless an
   explicit `python_executable` is provided.
 - [__main__.py](__main__.py) provides the NV-Segment / NV-Generate CLI.
-- [legacy_ct](legacy_ct/README.md) isolates CT attenuation and navigation artifact
+- [legacy_ct](legacy_ct/README.md) isolates canonical CT ingest and navigation artifact
   generation used by the bundle exporter.
 
 ## Coordinates and outputs

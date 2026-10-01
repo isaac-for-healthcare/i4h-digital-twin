@@ -15,7 +15,7 @@ import yaml
 from ..geometry import rigid_transform, transform_points
 from ..human import HumanBody
 from ..imaging_to_mesh import mask_to_mesh
-from ..legacy_ct.artifacts import DEFAULT_PRESET, write_artifacts
+from ..legacy_ct.artifacts import write_artifacts
 from ..structures import AnatomicalStructure, MeshGeometry
 from ..topology import voxelize_mesh
 from .usd import _export_to_usd
@@ -43,7 +43,6 @@ def export_patient_twin(
     exterior="auto",
     skin_opacity=0.15,
     physics_root=None,
-    hu_to_mu_preset=DEFAULT_PRESET,
 ):
     """Write a complete patient_twin.yaml bundle using original imaging placement.
 
@@ -171,7 +170,6 @@ def export_patient_twin(
                 folder,
                 source=source_path or "numpy",
                 vessel_mask=vessel_mask if vessel_names else None,
-                hu_to_mu_preset=hu_to_mu_preset,
             )
         _export_to_usd(
             snapshot,
@@ -194,7 +192,7 @@ def export_patient_twin(
             if prim.GetCustomDataByKey("anatomy:name") is not None
         }
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "patient_id": patient_id
             or (Path(source_path).parent.name if source_path else "geometry"),
             "coordinate_frame": "DICOM_LPS" if registered else "body",
@@ -224,7 +222,6 @@ def export_patient_twin(
             "artifacts": {
                 **(
                     {
-                        "attenuation_volume": "mu_volume.npy",
                         "volume_metadata": "metadata.json",
                         "hu_volume": "hu_volume.npy",
                     }

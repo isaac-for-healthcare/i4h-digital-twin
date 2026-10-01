@@ -59,7 +59,7 @@ The output directory must be new and contains:
 | `patient_twin.yaml` | Bundle inventory, coordinates, mesh paths, and centerline asset paths |
 | `patient_anatomy.usdc` | Bundle anatomy, embedded centerlines; CT is stored in external arrays |
 | `centerlines/*.npz` | Local-meter points, edges and radii; transforms recorded in the manifest |
-| `hu_volume.npy`, `mu_volume.npy`, `metadata.json` | Attached CT and attenuation, when CT exists |
+| `hu_volume.npy`, `metadata.json` | Attached CT in HU and spatial metadata, when CT exists |
 
 With no source registration, a mesh-only bundle explicitly uses the `body` frame.
 Registered bundles use DICOM LPS. The pipeline omits an exterior.

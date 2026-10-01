@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 from pathlib import Path
 
 import numpy as np
@@ -351,22 +352,19 @@ class TestLoaderIntegration:
         assert ct.anatomical_frame is None
 
     def test_metadata_carries_the_frame_downstream(self, tmp_path: Path, canonical_hu):
-        from patient_digital_twin.legacy_ct import (
-            PreprocessedVolume,
-            VolumePreprocessor,
-        )
+        from patient_digital_twin.legacy_ct import write_artifacts
+        from patient_digital_twin.legacy_ct.ct.dicom_ingest import load_nifti_hu
 
         path = tmp_path / "ct.nii.gz"
         self._write_nifti(path, canonical_hu)
-        cache = tmp_path / "ct_cache"
+        cache = write_artifacts(load_nifti_hu(path), tmp_path / "ct_cache")
+        metadata = json.loads((cache / "metadata.json").read_text())
 
-        VolumePreprocessor.from_nifti(path).preprocess(output_dir=cache)
-        metadata = PreprocessedVolume.load(cache).metadata
-
-        assert metadata.anatomical_frame == CANONICAL_FRAME
-        assert metadata.source_orientation == "SAR"
+        assert metadata["anatomical_frame"] == CANONICAL_FRAME
+        assert metadata["source_orientation"] == "SAR"
+        np.testing.assert_allclose(np.load(cache / "hu_volume.npy"), canonical_hu)
         np.testing.assert_allclose(
-            np.asarray(metadata.direction).reshape(3, 3), np.eye(3), atol=1e-12
+            np.asarray(metadata["direction_row_major_3x3"]).reshape(3, 3), np.eye(3), atol=1e-12
         )
 
     def test_oblique_acquisition_warns(self, tmp_path: Path, canonical_hu):
@@ -385,8 +383,10 @@ class TestLoaderIntegration:
         with pytest.warns(UserWarning, match="oblique acquisition"):
             load_nifti_hu(path)
 
-    def test_bare_numpy_volume_has_no_frame(self, canonical_hu):
-        from patient_digital_twin.legacy_ct import VolumePreprocessor
+    def test_artifact_export_requires_explicit_frame(self, tmp_path, canonical_hu):
+        from patient_digital_twin.legacy_ct import write_artifacts
+        from patient_digital_twin.legacy_ct.ct.dicom_ingest import CtVolume
 
-        metadata = VolumePreprocessor.from_numpy(canonical_hu).preprocess().metadata
-        assert metadata.anatomical_frame is None
+        ct = CtVolume(canonical_hu, SPACING_ZYX_MM, ORIGIN_XYZ_MM)
+        with pytest.raises(ValueError, match="axis-aligned LPS"):
+            write_artifacts(ct, tmp_path / "ct_cache")

@@ -107,7 +107,7 @@ CT before export.
 flowchart TD
     E["export_patient_twin"] --> A["Always: patient_twin.yaml + patient_anatomy.usdc"]
     E --> G["With stored graphs: centerlines/*.npz"]
-    E --> T["With CT: hu_volume.npy + mu_volume.npy + metadata.json"]
+    E --> T["With CT: hu_volume.npy + metadata.json"]
     T --> V["With vessel_names: vessel_mask.npy + centerline_*.npy"]
 ```
 
@@ -125,8 +125,11 @@ final mask. This works without step 2. Navigation points and radii use **LPS
 millimeters**; volumes use **ZYX** order. Per-structure graphs remain separate.
 `exterior="ct"` adds a CT-derived patient envelope.
 
-CT attenuation defaults to `linear`: −1000–3000 HU maps to 0–0.02 mm⁻¹, clamped
-outside that range. Use `hu_to_mu_preset="interventional"` for the alternative.
+Bundles use schema version 2 and export CT in HU with explicit ZYX order and
+spatial metadata. They do not contain `mu_volume.npy` or select an attenuation
+curve. i4h-workflows passes HU to sensor-simulation, which owns the `linear`
+(default) and `interventional` mappings. Select a curve when rendering with
+`./run.sh endoluminal_navigation ... --hu-to-mu interventional`.
 
 ## Start from CT or generate a patient
 
