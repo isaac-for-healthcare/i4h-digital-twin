@@ -153,7 +153,7 @@ NV-Segment rather than the supplied masks:
 python -m patient_digital_twin \
   --source nvsegment --input /path/to/s0011/ct.nii.gz \
   --bundle-root /path/to/NV-Segment-CTMR/NV-Segment-CTMR \
-  --classes aorta --patient-id s0011 \
+  --classes aorta \
   --format bundle --output ./output/s0011_aorta
 
 python -m patient_digital_twin \
@@ -181,7 +181,9 @@ opts into a separate process. Use it when dependencies need a different environm
 or other application threads depend on the working directory: upstream inference
 uses relative paths, so in-process calls temporarily change it and are serialized.
 
-Use new output paths. The CLI extracts missing vessel centerlines automatically.
+Use new output paths. Bundle patient IDs are derived automatically from the input
+folder (`geometry` for generated anatomy); no `--patient-id` option is needed.
+The CLI extracts missing vessel centerlines automatically.
 NV-Segment accepts 3D `.nii`/`.nii.gz`; `--modality MR` supports geometry-only USD.
 Bundle output requires CT and at least one vessel. Run
 `python -m patient_digital_twin --help` for options.

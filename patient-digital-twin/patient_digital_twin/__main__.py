@@ -50,7 +50,6 @@ def run_pipeline(
     bundle_root=None,
     source_root=None,
     python_executable=None,
-    patient_id=None,
     hu_to_mu_preset=DEFAULT_PRESET,
     centerline_spacing_mm=1.5,
 ):
@@ -158,7 +157,6 @@ def run_pipeline(
     if format == "bundle":
         return body.export_patient_twin(
             output,
-            patient_id=patient_id,
             vessel_names=vessel_names,
             exterior="ct",
             hu_to_mu_preset=hu_to_mu_preset,
@@ -191,7 +189,6 @@ def parser():
         dest="python_executable",
         help="Python interpreter for model inference",
     )
-    result.add_argument("--patient-id", help="Identifier stored in a bundle bundle")
     result.add_argument(
         "--hu-to-mu",
         dest="hu_to_mu_preset",

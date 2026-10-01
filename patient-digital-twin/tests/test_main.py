@@ -117,6 +117,7 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     expected_mu = np.interp(hu, [-1000, 3000], [0, 0.02]).astype(np.float32)
     np.testing.assert_array_equal(np.load(path.parent / "mu_volume.npy"), expected_mu)
     manifest = yaml.safe_load(path.read_text())
+    assert manifest["patient_id"] == tmp_path.name
     for relative in manifest["artifacts"].values():
         assert (path.parent / relative).is_file()
     graph = anatomy.structures["aorta"].centerline
