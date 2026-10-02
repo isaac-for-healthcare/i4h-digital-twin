@@ -20,7 +20,7 @@ when changing the API. Resolve these paths relative to this skill's directory.
 - Existing label image: `SegmentationImporter(path, matching_label_dictionary)`.
   Numeric label IDs are workflow-specific; do not substitute another backend's map.
 - Existing named meshes: `SimpleImporter` from `patient_digital_twin.importers`.
-  STL/OBJ must use XYZ meters; USD imports bake units and transforms. Supply
+  STL/OBJ only (requires `trimesh`), in XYZ meters. Supply
   explicit `mesh_to_body` matrices for your data. Omitted Python API placements
   are identity; no sample-based placement is inferred.
 - CT requiring segmentation: `NVSegmentImporter`.

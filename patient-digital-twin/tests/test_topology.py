@@ -1,18 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Topology selection, local-frame storage, and VTK skeleton contracts."""
+"""HumanBody.extract_topology selection, local-frame storage, and atomic commits."""
 
 import numpy as np
 import pytest
-from patient_digital_twin import (
-    AnatomicalStructure,
-    CenterlineGraph,
-    HumanBody,
-    Kind,
-    topology,
-)
-from patient_digital_twin.catalog import CATALOG
+from patient_digital_twin import AnatomicalStructure, CenterlineGraph, HumanBody, Kind
+from patient_digital_twin import body as body_module
+from patient_digital_twin.body import CATALOG
 
 
 def graph():
@@ -27,7 +22,7 @@ def test_body_extracts_tubular_anatomy_including_disabled_and_composite(monkeypa
     vertices = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])
     names = {
         "aorta": Kind.VESSEL,
-        "trachea": CATALOG["trachea"],
+        "trachea": CATALOG["trachea"][0],
         "bronchus": Kind.AIRWAY,
         "portal_vein_and_splenic_vein": Kind.GROUP,
         "liver": Kind.ORGAN,
@@ -47,7 +42,7 @@ def test_body_extracts_tubular_anatomy_including_disabled_and_composite(monkeypa
         calls.append((v, f))
         return graph()
 
-    monkeypatch.setattr(topology, "extract_centerlines", extract)
+    monkeypatch.setattr(body_module, "extract_centerlines", extract)
     result = body.extract_topology()
     assert set(result) == {
         "aorta",
@@ -89,7 +84,7 @@ def test_failure_is_named_and_does_not_commit_partial_results(monkeypatch):
             raise ValueError("bad tube")
         return graph()
 
-    monkeypatch.setattr(topology, "extract_centerlines", extract)
+    monkeypatch.setattr(body_module, "extract_centerlines", extract)
     with pytest.raises(RuntimeError, match="second: bad tube"):
         body.extract_topology()
     assert body.anatomy.structures["first"].centerline is previous
@@ -99,38 +94,6 @@ def test_empty_body_and_invalid_spacing():
     assert HumanBody().extract_topology() == {}
     with pytest.raises(ValueError, match="spacing_m"):
         HumanBody().extract_topology(spacing_m=0)
-
-
-def test_mesh_skeleton_grid_round_trip_and_physical_radii():
-    pytest.importorskip("vtk")
-    from patient_digital_twin.imaging_to_mesh import mask_to_mesh
-    from scipy.ndimage import distance_transform_edt
-    from skimage.morphology import skeletonize
-
-    mask = np.zeros((24, 17, 17), dtype=bool)
-    mask[2:22, 6:11, 6:11] = True
-    spacing = np.array([0.002, 0.001, 0.0015])
-    origin = np.array([-0.02, 0.3, -0.1])
-    vertices, faces = mask_to_mesh(
-        mask, spacing_zyx_mm=spacing * 1000, origin_xyz_mm=origin * 1000
-    )
-    grid = {"shape_zyx": mask.shape, "spacing_zyx_m": spacing, "origin_xyz_m": origin}
-    recovered = topology.voxelize_mesh(vertices * 0.001, faces, **grid)
-    np.testing.assert_array_equal(recovered, mask)
-    result = topology.extract_centerlines(vertices * 0.001, faces, **grid)
-    coordinates = np.argwhere(skeletonize(mask))
-    np.testing.assert_allclose(
-        result.points, origin + coordinates[:, ::-1] * spacing[::-1]
-    )
-    np.testing.assert_allclose(
-        result.radii,
-        distance_transform_edt(mask, sampling=spacing)[tuple(coordinates.T)],
-    )
-    assert len(result.edges) == len(result.points) - 1
-    with pytest.raises(ValueError, match="Grid needs"):
-        topology.voxelize_mesh(
-            vertices * 0.001, faces, **{**grid, "spacing_zyx_m": [0, 1, 1]}
-        )
 
 
 def test_topology_selection_preserves_other_centerlines(monkeypatch):
@@ -147,7 +110,7 @@ def test_topology_selection_preserves_other_centerlines(monkeypatch):
         }
     )
     original = body.anatomy.structures["aorta"].centerline
-    monkeypatch.setattr(topology, "extract_centerlines", lambda v, f, **grid: graph())
+    monkeypatch.setattr(body_module, "extract_centerlines", lambda v, f, **grid: graph())
     assert set(body.extract_topology(names=["vascular_tree"])) == {"vascular_tree"}
     assert body.anatomy.structures["aorta"].centerline is original
     with pytest.raises(KeyError, match="Unknown anatomy"):

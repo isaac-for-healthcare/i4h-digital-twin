@@ -57,17 +57,19 @@ For a bounded headless check and a rendered PNG (requires Pillow in that runtime
 
 ## CT and centerline arrays only
 
-```bash
-python -m patient_digital_twin.artifacts \
-  --ct examples/data/s0011/ct.nii.gz \
-  --vessel-mask examples/data/s0011/segmentations/aorta.nii.gz \
-  --output /tmp/s0011-arrays
+```python
+from patient_digital_twin.export import write_artifacts
+from patient_digital_twin.scan_volume import from_nifti
+
+ct = from_nifti("examples/data/s0011/ct.nii.gz")
+aorta = from_nifti("examples/data/s0011/segmentations/aorta.nii.gz")
+write_artifacts(ct, "/tmp/s0011-arrays", vessel_mask=aorta.values)
 ```
 
 This writes native `volume.npy` + `volume.yaml`, `vessel_mask.npy`, and
 `centerline_points.npy`, `centerline_edges.npy`, `centerline_radii.npy`.
-`topology.py` calculates centerlines; `artifacts.py` writes the arrays.
-Points/radii use the scan frame and units. Omit `--vessel-mask` for CT-only output.
+The mask must share the CT grid. Points/radii use the scan frame and units.
+Omit `vessel_mask` for CT-only output.
 For a navigation bundle with USD, use
 `body.export_patient_twin(..., vessel_names=["aorta"])` as shown in the
 [main guide](../README.md#4-export).

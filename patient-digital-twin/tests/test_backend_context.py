@@ -10,7 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from patient_digital_twin.importers._common import backend_context, runtime
+from patient_digital_twin.importers import _backend
 
 
 @pytest.mark.parametrize("fail", [False, True])
@@ -26,7 +26,7 @@ def test_backend_switching_restores_host_state(tmp_path, monkeypatch, fail):
         (root / "scripts/__init__.py").write_text("")
         (root / "scripts/model.py").write_text(f"BACKEND = {name!r}\n")
         try:
-            with backend_context(root):
+            with _backend(root):
                 assert importlib.import_module("scripts.model").BACKEND == name
                 assert "scripts.host" not in sys.modules
                 assert Path.cwd() == root
@@ -39,13 +39,6 @@ def test_backend_switching_restores_host_state(tmp_path, monkeypatch, fail):
         assert sys.modules["scripts"] is host
         assert sys.modules["scripts.host"] is child
         assert "scripts.model" not in sys.modules
-
-
-def test_default_runtime_does_not_launch_python_and_has_install_hint(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("subprocess"))
-    assert runtime(None, ["json"], "patient-digital-twin[nvsegment]") is None
-    with pytest.raises(ImportError, match=r"patient-digital-twin\[nvsegment\]"):
-        runtime(None, ["not_an_installed_inference_dependency"], "patient-digital-twin[nvsegment]")
 
 
 def test_base_import_does_not_require_inference_dependencies():

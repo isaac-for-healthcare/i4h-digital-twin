@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import yaml
 from patient_digital_twin import HumanBody, SegmentationImporter  # noqa: E402
+from patient_digital_twin.geometry import transform_points  # noqa: E402
 
 pytest.importorskip("vtk")
 pytest.importorskip("pxr")
@@ -39,7 +40,7 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
     affine_m = affine.copy()
     affine_m[:3] *= 0.001
     body = HumanBody(
-        SegmentationImporter.from_array(
+        SegmentationImporter(
             mask, {1: "aorta"}, affine_xyz_to_imaging_m=affine_m
         ).to_anatomy_collection()
     )
@@ -77,7 +78,7 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
     actual = np.array(
         [xf.Transform(Gf.Vec3d(p)) for p in UsdGeom.Mesh(prim).GetPointsAttr().Get()]
     )
-    np.testing.assert_allclose(actual, body.imaging_vertices("aorta") * 1000, atol=1e-5)
+    np.testing.assert_allclose(actual, transform_points(body.anatomy.structures["aorta"].body_vertices, body.imaging.body_to_imaging) * 1000, atol=1e-5)
     np.testing.assert_array_equal(
         body.anatomy.structures["aorta"].local_to_world, original
     )

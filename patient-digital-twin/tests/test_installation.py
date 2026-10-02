@@ -14,14 +14,14 @@ def test_installed_meshing_from_unrelated_directory(tmp_path):
 import sys
 import numpy as np
 from patient_digital_twin import SegmentationImporter
-from patient_digital_twin.imaging_to_mesh import mask_to_mesh
-from patient_digital_twin.exporters import export_to_usd, export_patient_twin
+from patient_digital_twin.geometry import mask_to_mesh
+from patient_digital_twin.export import export_to_usd, export_patient_twin
 assert all(callable(f) for f in (export_to_usd, export_patient_twin))
 vertices, faces = mask_to_mesh(np.ones((3, 3, 3)))
 assert len(vertices) and len(faces)
-body = SegmentationImporter.from_array(np.ones((3, 3, 3)), {1: "liver"}).to_anatomy_collection()
+body = SegmentationImporter(np.ones((3, 3, 3)), {1: "liver"}).to_anatomy_collection()
 assert not body.structures["liver"].is_empty
-assert not {"imaging_to_mesh", "pxr", "trimesh"} & sys.modules.keys()
+assert not {"pxr", "trimesh", "vtk"} & sys.modules.keys()
 print("installed patient mesher OK")
 """
     result = subprocess.run(

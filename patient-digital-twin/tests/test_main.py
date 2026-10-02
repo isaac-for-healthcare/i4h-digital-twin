@@ -6,7 +6,8 @@ import nibabel as nib
 import numpy as np
 import pytest
 from patient_digital_twin import __main__ as main
-from patient_digital_twin.importers._common import segmentation_anatomy, selected_labels
+from patient_digital_twin.importers import _supported as selected_labels
+from patient_digital_twin.importers import segmentation_anatomy
 
 
 def test_named_selection_uses_native_ids_and_limits_meshes():

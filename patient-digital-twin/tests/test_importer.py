@@ -5,11 +5,9 @@ import nibabel as nib
 import numpy as np
 import pytest
 from patient_digital_twin import HumanBody, Kind, SegmentationImporter
+from patient_digital_twin.body import canonical_name
 from patient_digital_twin.geometry import transform_points
-from patient_digital_twin.importers._segmentation import (
-    canonical_name,
-    normalize_labelmap,
-)
+from patient_digital_twin.importers import _labelmap
 
 
 @pytest.mark.parametrize(
@@ -85,7 +83,7 @@ def test_nifti_units(tmp_path):
 
 
 def test_imported_geometry_can_be_hidden_and_restored():
-    importer = SegmentationImporter.from_array(
+    importer = SegmentationImporter(
         np.ones((3, 3, 3)), {1: "liver", 2: "heart"}
     )
     body = HumanBody(importer.to_anatomy_collection())
@@ -100,11 +98,13 @@ def test_imported_geometry_can_be_hidden_and_restored():
 
 def test_invalid_input_and_unknown_labels():
     with pytest.raises(ValueError, match="integer"):
-        SegmentationImporter.from_array(np.full((3, 3, 3), 1.5), {1: "liver"})
+        SegmentationImporter(np.full((3, 3, 3), 1.5), {1: "liver"})
     with pytest.raises(ValueError, match="missing"):
-        SegmentationImporter.from_array(np.ones((3, 3, 3)), {2: "liver"})
-    with pytest.raises(ValueError, match="Duplicate"):
-        normalize_labelmap({"liver": 1, "heart": 1})
+        SegmentationImporter(np.ones((3, 3, 3)), {2: "liver"})
+    with pytest.raises(ValueError, match="unique"):
+        _labelmap({"liver": 1, "heart": 1})
+    with pytest.raises(ValueError, match="labelmap"):
+        _labelmap({"1.5": "liver"})
 
 
 def test_directory_grid_and_overlap_rejected(tmp_path):
@@ -133,7 +133,7 @@ def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibilit
         ]
     )
     first = HumanBody(
-        SegmentationImporter.from_array(
+        SegmentationImporter(
             masks, labelmap, affine_xyz_to_imaging_m=affine
         ).to_anatomy_collection()
     )
@@ -141,7 +141,7 @@ def test_body_origin_is_shared_and_independent_of_scan_translation_and_visibilit
     shifted = affine.copy()
     shifted[:3, 3] += shift
     second = HumanBody(
-        SegmentationImporter.from_array(
+        SegmentationImporter(
             masks, labelmap, affine_xyz_to_imaging_m=shifted
         ).to_anatomy_collection()
     )

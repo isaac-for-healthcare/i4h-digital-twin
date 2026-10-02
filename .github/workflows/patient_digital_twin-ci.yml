@@ -61,7 +61,7 @@ jobs:
           python -m build
           twine check dist/*
           python -m pip install dist/*.whl
-          python -I -c "import numpy as np; from patient_digital_twin.imaging_to_mesh import mask_to_mesh; vertices, faces = mask_to_mesh(np.ones((3, 3, 3))); assert len(vertices) and len(faces)"
+          python -I -c "import numpy as np; from patient_digital_twin.geometry import mask_to_mesh; vertices, faces = mask_to_mesh(np.ones((3, 3, 3))); assert len(vertices) and len(faces)"
       - uses: actions/upload-artifact@v4
         with:
           name: patient-digital-twin-dist

@@ -20,9 +20,9 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 
 | Component | Status | Purpose |
 | --- | --- | --- |
-| [`patient_digital_twin.exporters`](./patient-digital-twin/patient_digital_twin/exporters/) | Bundled patient subpackage | USD, native HU scan bundles, vessel masks and centerlines |
-| [`patient_digital_twin.imaging_to_mesh`](./patient-digital-twin/patient_digital_twin/imaging_to_mesh/) | Bundled patient subpackage | Binary masks → NumPy vertices and faces |
-| [`patient_digital_twin.importers`](./patient-digital-twin/examples/README.md) | Bundled patient subpackage | Synthetic CT/MR masks, segmentation and mesh import |
+| [`patient_digital_twin.export`](./patient-digital-twin/patient_digital_twin/export.py) | Patient module | USD, native HU scan bundles, vessel masks and centerlines |
+| [`patient_digital_twin.geometry`](./patient-digital-twin/patient_digital_twin/geometry.py) | Patient module | Binary masks → NumPy vertices and faces; skeleton centerlines |
+| [`patient_digital_twin.importers`](./patient-digital-twin/examples/README.md) | Patient module | Synthetic CT/MR masks, segmentation and mesh import |
 
 ### Quick start — installable packages
 

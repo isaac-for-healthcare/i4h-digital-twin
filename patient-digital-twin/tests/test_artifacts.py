@@ -4,9 +4,9 @@
 
 import numpy as np
 import pytest
-from patient_digital_twin.artifacts import write_artifacts, write_centerline
+from patient_digital_twin.export import write_artifacts
+from patient_digital_twin.geometry import native_centerline
 from patient_digital_twin.scan_volume import from_array, load_artifact
-from patient_digital_twin.topology import native_centerline
 
 
 def test_rotated_native_mask_artifacts(tmp_path):
@@ -25,16 +25,6 @@ def test_rotated_native_mask_artifacts(tmp_path):
     assert not (output/'mu_volume.npy').exists()
     with pytest.raises(FileExistsError):
         write_artifacts(scan, output)
-
-
-def test_graph_writer_preserves_arrays_and_validates_before_writing(tmp_path):
-    graph = (np.array([[1., 2., 3.], [1., 2., 4.]]), np.array([[0, 1]]), np.array([.1, .2]))
-    paths = write_centerline(tmp_path/'graph', *graph)
-    for name, data in zip(paths.values(), graph):
-        np.testing.assert_array_equal(np.load(tmp_path/'graph'/name), data)
-    with pytest.raises(ValueError):
-        write_centerline(tmp_path/'invalid', graph[0], np.array([[0, 99]]), graph[2])
-    assert not (tmp_path/'invalid').exists()
 
 
 def test_bad_mask_fails_without_partial_export(tmp_path):

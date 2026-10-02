@@ -9,13 +9,13 @@ centerlines and CT, and export the result.
 ```mermaid
 flowchart TD
     S["Segmentation + label dictionary"] --> I["SegmentationImporter"]
-    I --> M["imaging_to_mesh: surface extraction"]
+    I --> M["geometry.mask_to_mesh: surface extraction"]
     M --> A["AnatomyCollection: named structures + mesh placement"]
     A --> B["HumanBody: user API + attached imaging"]
     B --> T["extract_topology: local centerline graphs"]
     CT["Native ScanVolume + full affine"] --> V["attach_scan: ImagingVolume"]
     B --> V
-    B --> E["exporters"]
+    B --> E["export"]
     T --> E
     V --> E
     E --> U["USD: anatomy + optional graphs and CT"]
@@ -24,21 +24,25 @@ flowchart TD
 
 ## Main entry points
 
-- [SegmentationImporter](importers/_segmentation.py) reads labeled NIfTI,
-  binary-mask directories, or NumPy masks. `to_anatomy_collection()` extracts meshes.
-- [HumanBody](human.py) owns `anatomy` and optional `imaging`, and exposes
-  `extract_topology()`, `attach_scan()`, `attach_imaging()`, `export_to_usd()`, and `export_patient_twin()`.
-- [AnatomyCollection](anatomy.py) exposes `structures[name]` and controls visibility.
-  Disabling a structure preserves its mesh.
-- The optional `nvsegment` and `nvgenerate` extras enable the corresponding
-  importers. Model dependencies load only when inference is requested; source
-  checkouts and weights are separate. Inference runs in-process unless an
+The package is seven modules:
+
+- [body.py](body.py): the curated catalog (kinds and systems), `AnatomicalStructure`,
+  `AnatomyCollection` (`structures[name]`, `select()`, visibility controls), and
+  `HumanBody`, which owns `anatomy` and optional `imaging` and exposes
+  `extract_topology()`, `attach_scan()`, `attach_imaging()`, `export_to_usd()`, and
+  `export_patient_twin()`. Disabling a structure preserves its mesh.
+- [importers.py](importers.py): `SegmentationImporter` (labeled NIfTI, binary-mask
+  directories, or NumPy label arrays), `NVSegmentImporter`, `NVGenerateImporter`, and
+  `SimpleImporter` (STL/OBJ). Model dependencies load only when inference is requested;
+  source checkouts and weights are separate. Inference runs in-process unless an
   explicit `python_executable` is provided.
-- [__main__.py](__main__.py) provides the NV-Segment / NV-Generate CLI.
-- [scan_volume.py](scan_volume.py) reads native NIfTI/DICOM grids and saves or replays
+- [geometry.py](geometry.py): transforms, mask-to-mesh surfaces, voxelization, and
+  skeleton centerlines for meshes and native scan masks.
+- [export.py](export.py): standalone USD, schema-3 patient bundles, and
+  `write_artifacts()` for native volume/mask/graph arrays.
+- [__main__.py](__main__.py): the NV-Segment / NV-Generate CLI.
+- [scan_volume.py](scan_volume.py): reads native NIfTI/DICOM grids and saves or replays
   NumPy + YAML artifacts. The same helper is shipped in sensor-simulation.
-- [topology.py](topology.py) calculates mesh and mask centerlines;
-  [artifacts.py](artifacts.py) writes native volume/mask/graph arrays.
 
 ## Coordinates and outputs
 
@@ -57,16 +61,14 @@ See the [export steps](../README.md#4-export) and [USD guide](../docs/usd.md).
 
 ## Small implementation, direct controls
 
-`anatomy.py` owns structures and their collection; `human.py` owns the body and
-attached imaging. Importer runtime helpers live together in `importers/_common.py`.
-The bundle exporter owns scan-frame placement and shares array writing with
-`artifacts.py`. `scan_volume.py` stays synchronized with sensor-simulation.
+`scan_volume.py` stays byte-identical with sensor-simulation; its hash is recorded
+in every artifact.
 
 There is no YAML configuration policy or `configuration=` argument. Set
 `structure.enabled` directly, or use `body.anatomy.set_structure_enabled`,
 `set_system_enabled`, and `set_enabled`. Each call changes current visibility;
 the last call wins. Hidden geometry remains stored for later re-enabling.
 
-`attach_scan` shares the scan's read-only voxel buffer. Raw arrays passed to
-`attach_imaging` are still copied. Existing centerline tuple return order and
+`attach_scan` shares the scan's read-only voxel buffer. `attach_imaging` copies a
+raw array into a new `ScanVolume`. Existing centerline tuple return order and
 bundle metadata remain compatible with workflow consumers.

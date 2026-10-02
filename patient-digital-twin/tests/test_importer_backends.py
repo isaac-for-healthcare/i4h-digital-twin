@@ -3,6 +3,7 @@
 
 """Importer contracts; run pytest tests/test_importer_backends.py (no model downloads)."""
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -12,26 +13,27 @@ import nibabel as nib
 import numpy as np
 import pytest
 from patient_digital_twin import AnatomyCollection
-from patient_digital_twin.catalog import CATALOG
+from patient_digital_twin import importers as module
 from patient_digital_twin.importers import (
     NVGenerateImporter,
     NVSegmentImporter,
     SimpleImporter,
+    segmentation_anatomy,
 )
-from patient_digital_twin.importers._common import image_input, segmentation_anatomy
 
 
-def test_array_coordinates_require_physical_affine():
-    values = np.zeros((3, 4, 5))
-    with pytest.raises(ValueError, match="affine"):
-        image_input(values)
+def test_nvsegment_input_is_converted_to_millimeter_nifti():
     affine = np.diag([0.002, 0.003, 0.004, 1])
     affine[:3, 3] = [0.1, -0.2, 0.3]
-    image = image_input(values, affine)
+    image = nib.Nifti1Image(np.zeros((3, 4, 5)), affine)
+    image.header.set_xyzt_units("meter")
+    converted = NVSegmentImporter(image).image
     expected = affine.copy()
     expected[:3] *= 1000
-    np.testing.assert_allclose(image.affine, expected)
-    assert image.header.get_xyzt_units()[0] == "mm"
+    np.testing.assert_allclose(converted.affine, expected)
+    assert converted.header.get_xyzt_units()[0] == "mm"
+    with pytest.raises(ValueError, match="finite 3D"):
+        NVSegmentImporter(nib.Nifti1Image(np.full((2, 2, 2), np.nan), np.eye(4)))
 
 
 def test_segmentation_filters_non_catalog_ids_and_keeps_missing_empty():
@@ -39,10 +41,10 @@ def test_segmentation_filters_non_catalog_ids_and_keeps_missing_empty():
     mask[1:3, 1:3, 1:3] = 5
     mask[4:6, 4:6, 4:6] = 90
     body = segmentation_anatomy(
-        nib.Nifti1Image(mask, np.eye(4)), {5: "left kidney", 90: "unrelated"}
+        nib.Nifti1Image(mask, np.eye(4)), {5: "left kidney", 90: "unrelated", 62: "colon"}
     )
     assert isinstance(body, AnatomyCollection)
-    assert set(body.structures) == set(CATALOG)
+    assert set(body.structures) == {"kidney_left", "colon"}
     assert not body.structures["kidney_left"].is_empty
     assert body.structures["colon"].is_empty
 
@@ -53,9 +55,6 @@ def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_pr
     (tmp_path / "configs").mkdir()
     (tmp_path / "scripts/inference.py").write_text("")
     (tmp_path / "configs/label_dict.json").write_text(json.dumps({"colon": 62}))
-    import patient_digital_twin.importers.nvgenerate_importer as module
-
-    monkeypatch.setattr(module, "runtime", lambda *args: None if in_process else sys.executable)
     seeds = iter([12, 13])
     monkeypatch.setattr(module.secrets, "randbits", lambda bits: next(seeds))
 
@@ -70,19 +69,16 @@ def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_pr
         )
 
     monkeypatch.setattr(module.subprocess, "run", run)
-    from patient_digital_twin.importers import _nvgenerate_worker
 
     def generate(seed, output, ct_output):
         assert Path.cwd() == tmp_path
         run([seed, output, ct_output])
 
-    monkeypatch.setattr(_nvgenerate_worker, "generate", generate)
-    importer = NVGenerateImporter(source_root=tmp_path)
-    with pytest.warns(UserWarning):
-        first = importer.to_anatomy_collection()
+    monkeypatch.setattr(module, "_generate", generate)
+    importer = NVGenerateImporter(source_root=tmp_path, python_executable=None if in_process else sys.executable)
+    first = importer.to_anatomy_collection()
     assert importer.seed == 12 and not first.structures["colon"].is_empty
-    with pytest.warns(UserWarning):
-        importer.to_anatomy_collection()
+    importer.to_anatomy_collection()
     assert importer.seed == 13
     np.testing.assert_array_equal(importer.ct_scan.values_kji, np.full((3, 3, 3), 100))
     assert importer.ct_scan.metadata["source"]["seed"] == 13
@@ -103,10 +99,6 @@ def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
             }
         )
     )
-    import patient_digital_twin.importers.nvsegment_importer as module
-
-    monkeypatch.setattr(module, "runtime", lambda *args: None if in_process else sys.executable)
-
     def run(command, **kwargs):
         config = json.loads(
             Path(command[command.index("--config_file") + 1]).read_text()
@@ -132,14 +124,13 @@ def test_nvsegment_requests_supported_prompts_and_uses_output_ids(
     bundle.run = bundle_run
     monkeypatch.setitem(sys.modules, "monai.bundle", bundle)
     importer = NVSegmentImporter(
-        np.zeros((3, 3, 3)),
+        nib.Nifti1Image(np.zeros((3, 3, 3)), np.eye(4)),
         bundle_root=tmp_path,
         modality="MR",
-        affine_xyz_to_imaging_m=np.diag([0.001, 0.001, 0.001, 1]),
+        python_executable=None if in_process else sys.executable,
     )
-    with pytest.warns(UserWarning):
-        body = importer.to_anatomy_collection()
-    assert not body.structures["colon"].is_empty and body.structures["liver"].is_empty
+    body = importer.to_anatomy_collection()
+    assert not body.structures["colon"].is_empty and "liver" not in body.structures  # CT-only label
 
 
 def test_simple_default_colon_and_explicit_placement(tmp_path):
@@ -166,33 +157,14 @@ def test_simple_default_colon_and_explicit_placement(tmp_path):
         ).to_anatomy_collection()
 
 
-def test_usd_units_authored_transform_and_winding(tmp_path):
-    pytest.importorskip("pxr")
-    from pxr import Gf, Usd, UsdGeom
-
-    path = tmp_path / "mesh.usda"
-    stage = Usd.Stage.CreateNew(str(path))
-    UsdGeom.SetStageMetersPerUnit(stage, 0.01)
-    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
-    mesh = UsdGeom.Mesh.Define(stage, "/colon")
-    mesh.CreatePointsAttr([(0, 0, 0), (1, 0, 0), (0, 1, 0)])
-    mesh.CreateFaceVertexCountsAttr([3])
-    mesh.CreateFaceVertexIndicesAttr([0, 1, 2])
-    UsdGeom.Xformable(mesh).AddTranslateOp().Set(Gf.Vec3d(10, 20, 30))
-    stage.GetRootLayer().Save()
-    body = SimpleImporter(
-        {"colon": path}, mesh_to_body={"colon": np.eye(4)}
-    ).to_anatomy_collection()
-    np.testing.assert_allclose(
-        body.structures["colon"].vertices,
-        [[0.1, 0.2, 0.3], [0.11, 0.2, 0.3], [0.1, 0.21, 0.3]],
-    )
+def test_simple_rejects_unsupported_formats(tmp_path):
+    pytest.importorskip("trimesh")
+    with pytest.raises(ValueError, match="Supported mesh formats"):
+        SimpleImporter({"colon": tmp_path / "mesh.usda"}).to_anatomy_collection()
 
 
 @pytest.mark.parametrize("fail", [False, True])
 def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail):
-    import runpy
-
     root = tmp_path / "upstream"
     (root / "configs").mkdir(parents=True)
     (root / "conditions.json").write_text(json.dumps([{"organ_size": [0.5] * 10}]))
@@ -237,16 +209,14 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
     mask, ct = tmp_path / "mask.nii.gz", tmp_path / "ct.nii.gz"
     monkeypatch.setattr(sys, "argv", ["worker", "12", str(mask), str(ct)])
     monkeypatch.chdir(root)
-    worker = (
-        Path(__file__).resolve().parents[1]
-        / "patient_digital_twin/importers/_nvgenerate_worker.py"
-    )
     original_argv = sys.argv
+    # The separate-process path runs this exact source with `python -c`.
+    code = inspect.getsource(module._generate) + "\nimport sys\n_generate(*sys.argv[1:])\n"
     if fail:
         with pytest.raises(RuntimeError, match="generation failed"):
-            runpy.run_path(str(worker), run_name="__main__")
+            exec(compile(code, "<worker>", "exec"), {"__name__": "__main__"})
     else:
-        runpy.run_path(str(worker), run_name="__main__")
+        exec(compile(code, "<worker>", "exec"), {"__name__": "__main__"})
     assert sys.argv is original_argv
     assert scripts.sample.filter_mask_with_organs is original_filter
     if fail:

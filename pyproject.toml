@@ -36,9 +36,6 @@ packages = [
   "hospital_digital_twin",
   "i4h_asset_helper",
   "patient_digital_twin",
-  "patient_digital_twin.exporters",
-  "patient_digital_twin.imaging_to_mesh",
-  "patient_digital_twin.importers",
   "robot_digital_twin",
   "sim_ready_assets",
 ]

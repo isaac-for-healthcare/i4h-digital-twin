@@ -81,7 +81,7 @@ def test_bad_mesh_does_not_overwrite_existing_file(tmp_path):
 
 def test_embedded_ct_and_hidden_centerline_roundtrip(tmp_path):
     import nibabel as nib
-    from patient_digital_twin.topology import CenterlineGraph
+    from patient_digital_twin import CenterlineGraph
 
     patient = body()
     graph = CenterlineGraph(

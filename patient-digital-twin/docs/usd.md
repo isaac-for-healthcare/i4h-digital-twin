@@ -1,7 +1,7 @@
 # Working with patient USD files
 
 This guide describes the files authored by
-[`patient_digital_twin.exporters`](../patient_digital_twin/exporters/). Commands
+[`patient_digital_twin.export`](../patient_digital_twin/export.py). Commands
 run from `patient-digital-twin/`; Python examples use an environment with the
 patient package, NumPy and the `usd` extra installed.
 
@@ -176,12 +176,9 @@ s0011 binary masks; the aorta is selected by default.
 
 ## Reimporting mesh files
 
-`SimpleImporter` can read triangulated USD files, flatten authored transforms,
-convert stage units to meters, and convert Y-up to the package's reference axis.
-However, it merges every mesh in each supplied USD into one named structure,
-including hidden meshes. It does not reconstruct the patient hierarchy,
-CT, centerlines, or visibility policy. A whole patient USD is therefore not a
-round-trip patient serialization format for `SimpleImporter`.
+`SimpleImporter` reads STL/OBJ files (with `trimesh`), one file per named
+structure. It does not read USD: a patient USD is not a round-trip serialization
+format, so reload anatomy from its source segmentation instead.
 
 For already-positioned per-structure meshes, supply explicit `mesh_to_body`
 matrices (identity when already in a shared body frame). The Python importer's

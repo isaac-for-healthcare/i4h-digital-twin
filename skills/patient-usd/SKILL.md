@@ -54,7 +54,7 @@ recorded shape; the full affine maps array indices to scan coordinates.
 
 USD mesh centerlines use local stage units. Bundle graph arrays use scan units and
 physical coordinates. Read `patient_twin.yaml` and `volume.yaml`; do not assume
-ZYX, LPS, or millimeters. `topology.py` calculates graphs and `artifacts.py` writes them.
+ZYX, LPS, or millimeters. `geometry.py` calculates graphs and `export.py` writes them.
 
 ## View or reuse
 
@@ -69,10 +69,8 @@ The checked-in script starts `SimulationApp` before Kit imports and adds
 session-only light/camera changes. Plain `usd-core` suffices for file inspection,
 not this viewer. Do not install a simulator just to inspect metadata.
 
-Do not feed an entire patient USD to `SimpleImporter` expecting a round trip:
-it merges all meshes, including hidden ones, into a single named structure per
-input file and loses patient-level CT, topology and policy state. For
-per-structure import, use triangulated assets and explicit `mesh_to_body` placement.
+`SimpleImporter` reads STL/OBJ only, one file per named structure; a patient USD
+is not a round-trip format. Supply explicit `mesh_to_body` placements.
 
 ## Check the result
 
