@@ -256,7 +256,18 @@ def native_centerline(
     direction = a[:3, :3] / spacing
     if not np.allclose(direction.T @ direction, np.eye(3), atol=1e-5):
         raise ValueError("Centerline radii require orthogonal voxel axes; reconstruct sheared grids")
-    kji = mask.transpose([scan.array_axes.index(c) for c in "kji"])
-    points, edges, radii = centerline_from_mask(kji, spacing[::-1], (0.0, 0.0, 0.0))
-    points = points.astype(np.float32).astype(float) @ direction.T + a[:3, 3]
+    # Thinning depends on voxel traversal order. Orient a temporary view toward
+    # LPS for reproducible graphs, without resampling or changing exported arrays.
+    from nibabel.orientations import apply_orientation, inv_ornt_aff, io_orientation
+
+    ijk = mask.transpose([scan.array_axes.index(c) for c in "ijk"])
+    lps = np.diag([-1.0, -1.0, 1.0, 1.0]) @ scan.ijk_to_ras_m
+    orientation = io_orientation(lps)
+    ordered = apply_orientation(ijk, orientation)
+    ordered_to_scan = a @ inv_ornt_aff(orientation, ijk.shape)
+    ordered_spacing = np.linalg.norm(ordered_to_scan[:3, :3], axis=0)
+    points, edges, radii = centerline_from_mask(
+        ordered.transpose(2, 1, 0), ordered_spacing[::-1], (0.0, 0.0, 0.0)
+    )
+    points = points @ (ordered_to_scan[:3, :3] / ordered_spacing).T + ordered_to_scan[:3, 3]
     return points, edges, radii.astype(np.float32)

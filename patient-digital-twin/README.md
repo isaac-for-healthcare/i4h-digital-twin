@@ -114,7 +114,9 @@ manifest = body.export_patient_twin(
 ```
 
 The exporter retains the segmentation labels on the source CT grid and calculates
-navigation centerlines from that mask. If only meshes are available, it rasterizes
+navigation centerlines from that mask. Skeletonization uses a temporary LPS-ordered
+view for consistent results; points are mapped back to the native scan frame.
+If only meshes are available, it rasterizes
 them on that grid. It does not close the mask or discard components. This works
 without step 2; `ct_exterior=True` adds a CT-derived patient envelope.
 

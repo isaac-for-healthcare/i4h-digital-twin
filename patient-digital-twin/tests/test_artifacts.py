@@ -37,3 +37,28 @@ def test_bad_mask_fails_without_partial_export(tmp_path):
     affine[0, 1] = .2
     with pytest.raises(ValueError, match='orthogonal'):
         native_centerline(np.ones(scan.values.shape), from_array(scan.values, affine))
+
+
+@pytest.mark.parametrize("oblique", [False, True])
+def test_native_centerline_is_invariant_to_scan_axis_order(oblique):
+    """A reindexed scan must retain the same physical graph, including node order."""
+    x, y, z = np.indices((23, 21, 31))
+    mask = ((x - 10 - z / 12) ** 2 + (y - 10) ** 2 < 20) & (z > 3) & (z < 28)
+    affine = np.diag([1.1, 1.4, 2., 1.])
+    if oblique:
+        angle = 0.3
+        affine[:3, :3] = np.array([[np.cos(angle), -np.sin(angle), 0],
+                                 [np.sin(angle), np.cos(angle), 0], [0, 0, 1]]) @ affine[:3, :3]
+    affine[:3, 3] = [20, -30, 10]
+    scan = from_array(mask.astype(np.float32), affine)
+    expected = native_centerline(mask, scan)
+    flip = np.eye(4)
+    flip[0, 0], flip[0, 3] = -1, mask.shape[0] - 1
+    permute = np.eye(4)
+    permute[:3, :3] = np.eye(3)[:, [2, 0, 1]]
+    for values, transform in [(mask[::-1], affine @ flip), (mask.transpose(2, 0, 1), affine @ permute)]:
+        other = from_array(values.astype(np.float32), transform)
+        actual = native_centerline(values, other)
+        for a, b in zip(actual, expected):
+            np.testing.assert_allclose(a, b, atol=1e-6)
+        np.testing.assert_array_equal(other.values, values)
