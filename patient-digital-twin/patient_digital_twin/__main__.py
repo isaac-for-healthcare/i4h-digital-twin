@@ -6,7 +6,7 @@
 ``python -m patient_digital_twin --source nvsegment --input ct.nii.gz --classes aorta
 --bundle-root <bundle> --format bundle --output out/`` segments a CT (NIfTI, DICOM
 directory, or ``volume.yaml``), meshes only the requested classes, extracts missing
-vessel centerlines, attaches the CT, and writes a USD file or a schema-3 bundle.
+vessel centerlines, attaches the CT, and writes a USD file or a schema-2 bundle.
 ``--source nvgenerate`` synthesizes the CT instead. Run with ``--help`` for all options.
 
 Main functions:

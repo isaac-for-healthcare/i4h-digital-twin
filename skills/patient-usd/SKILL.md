@@ -35,7 +35,7 @@ text parsing of binary `.usdc` files.
   `/HumanBody`. Transpose Gf matrices when using the package's NumPy column-vector
   convention. Respect `metersPerUnit`; do not apply a second axis conversion.
 - Standalone export preserves current placements, transformed into the scan frame.
-- Schema-3 bundle anatomy uses the scan physical frame (`RAS`/`LPS`) and units.
+- Schema-2 bundle anatomy uses the scan physical frame (`RAS`/`LPS`) and units.
   Apply simulator placement downstream, after converting declared scan units.
 - Use computed visibility, including ancestors. Disabled meshes are retained
   but invisible; missing meshes have no prim. Hide `/HumanBody/Exterior` for

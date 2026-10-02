@@ -120,7 +120,7 @@ If only meshes are available, it rasterizes
 them on that grid. It does not close the mask or discard components. This works
 without step 2; `ct_exterior=True` adds a CT-derived patient envelope.
 
-Schema-3 bundles preserve **scan array order** for CT and masks. Meshes and
+Schema-2 bundles preserve **scan array order** for CT and masks. Meshes and
 navigation points/radii use the **scan physical frame and units**, declared in
 `patient_twin.yaml`; `volume.yaml` records the full array-to-world affine and
 source provenance. Read these fields rather than assuming ZYX, LPS, or millimeters.

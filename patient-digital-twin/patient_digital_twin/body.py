@@ -138,7 +138,7 @@ class HumanBody:
         ct_exterior: bool = False,
         skin_opacity: float = 0.15,
     ) -> Path:
-        """Write a new schema-3 bundle directory for i4h-workflows; returns its ``patient_twin.yaml``.
+        """Write a new schema-2 bundle directory for i4h-workflows; returns its ``patient_twin.yaml``.
 
         Args:
             output: New directory path (must not exist).

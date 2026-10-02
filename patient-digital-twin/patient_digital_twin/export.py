@@ -8,7 +8,7 @@ Usually reached through ``HumanBody.export_to_usd`` and ``HumanBody.export_patie
 - ``export_to_usd``: one standalone stage with anatomy in its current pose, centerlines
   as custom prim attributes, and attached CT as native HU attributes. The stage uses the
   scan's units (meters without CT), Z-up, and default prim ``/HumanBody``.
-- ``export_patient_twin``: a new schema-3 bundle directory: ``patient_twin.yaml``
+- ``export_patient_twin``: a new schema-2 bundle directory: ``patient_twin.yaml``
   (manifest), ``patient_anatomy.usdc`` (anatomy in the scan's physical frame), and with
   CT ``volume.npy``/``volume.yaml``; ``vessel_names`` adds ``vessel_mask.npy`` and
   ``centerline_{points,edges,radii}.npy`` on the CT grid for navigation.
@@ -283,7 +283,7 @@ def export_patient_twin(
     ct_exterior: bool = False,
     skin_opacity: float = 0.15,
 ) -> Path:
-    """Write a schema-3 patient bundle directory and return its ``patient_twin.yaml`` path.
+    """Write a schema-2 patient bundle directory and return its ``patient_twin.yaml`` path.
 
     Geometry uses the attached scan's physical frame and units (or the body/RAS frame in
     meters without CT). No CT canonicalization, mask cleanup, resampling, or simulator
@@ -335,7 +335,7 @@ def export_patient_twin(
                           placement=_scan_from_body(body, scan), exterior=exterior, skin_opacity=skin_opacity)
         structures = body.anatomy.structures
         manifest: dict[str, Any] = {
-            "schema_version": 3,
+            "schema_version": 2,
             "patient_id": patient_id or (Path(source_path).parent.name if source_path else "geometry"),
             "coordinate_frame": frame,
             "spatial_unit": scan.metadata["output"]["world_unit"] if scan is not None else "m",

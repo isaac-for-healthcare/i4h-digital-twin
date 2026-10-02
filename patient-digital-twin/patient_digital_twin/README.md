@@ -42,7 +42,7 @@ The package is eight modules (see the [architecture guide](../docs/architecture.
   explicit `python_executable` is provided.
 - [geometry.py](geometry.py): transforms, mask-to-mesh surfaces, voxelization, and
   skeleton centerlines for meshes and native scan masks.
-- [export.py](export.py): standalone USD, schema-3 patient bundles, and
+- [export.py](export.py): standalone USD, schema-2 patient bundles, and
   `write_artifacts()` for native volume/mask/graph arrays.
 - [__main__.py](__main__.py): the NV-Segment / NV-Generate CLI.
 - [scan_volume.py](scan_volume.py): reads native NIfTI/DICOM grids and saves or replays
@@ -55,7 +55,7 @@ uses the local frame; `structure.body_vertices` includes the original body
 placement. `structure.world_vertices` includes the current display placement.
 
 `attach_scan()` retains native values and geometry for export; `attach_imaging()`
-remains a lower-level KJI/RAS-meter API. With CT, schema-3 USD and bundle geometry
+remains a lower-level KJI/RAS-meter API. With CT, schema-2 USD and bundle geometry
 use the scan physical frame and units. CT and masks preserve source array order.
 Simulator world placement is applied downstream.
 

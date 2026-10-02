@@ -120,7 +120,7 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
     assert not (path.parent / "mu_volume.npy").exists()
     manifest = yaml.safe_load(path.read_text())
     assert manifest["patient_id"] == tmp_path.name
-    assert manifest["schema_version"] == 3
+    assert manifest["schema_version"] == 2
     assert "attenuation_volume" not in manifest["artifacts"]
     for relative in manifest["artifacts"].values():
         assert (path.parent / relative).is_file()

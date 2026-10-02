@@ -39,7 +39,7 @@ Standalone export uses an identity root and current structure transforms.
 It preserves the live body's transforms and visibility. Do not apply a second
 axis conversion to an exported stage.
 
-Schema-3 bundle anatomy is authored in the scan's `RAS` or `LPS` physical frame
+Schema-2 bundle anatomy is authored in the scan's `RAS` or `LPS` physical frame
 and `spatial_unit`. `transforms.voxel_to_scan` maps IJK indices to scan coordinates.
 Simulator world placement is chosen downstream. An explicit optional
 `transforms.world_from_patient_m` is a column-vector placement matrix in meters;

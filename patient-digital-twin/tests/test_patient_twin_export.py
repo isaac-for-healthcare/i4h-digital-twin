@@ -55,6 +55,7 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
         tmp_path / "bundle", vessel_names=["aorta"], ct_exterior=True
     )
     manifest = yaml.safe_load(target.read_text())
+    assert manifest["schema_version"] == 2
     assert manifest["coordinate_frame"] == "RAS"
     for value in manifest["artifacts"].values():
         assert (target.parent / value).exists()
