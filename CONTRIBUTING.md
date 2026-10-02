@@ -85,12 +85,8 @@ We use pre-commit hooks to ensure code quality. To set up pre-commit:
 Before submitting your contribution, ensure relevant package tests pass:
 
 ```bash
-# Patient digital twin — vasculature
-cd patient-digital-twin/vasculature_digital_twin
-uv venv && uv pip install -e ".[dev]" && pytest
-
-# Patient digital twin — imaging to mesh
-cd patient-digital-twin/imaging_to_mesh
+# Patient digital twin — anatomy and bundled imaging-to-mesh
+cd patient-digital-twin
 uv sync --extra dev && uv run pytest
 ```
 
