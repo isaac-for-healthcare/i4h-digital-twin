@@ -113,7 +113,7 @@ def voxelize_mesh(
     vertices: ArrayLike,
     faces: ArrayLike,
     *,
-    shape_zyx: tuple[int, int, int],
+    shape_zyx: tuple[int, ...],
     spacing_zyx_m: ArrayLike,
     origin_xyz_m: ArrayLike,
 ) -> NDArray[np.bool_]:
@@ -221,7 +221,7 @@ def extract_centerlines(
     vertices: ArrayLike,
     faces: ArrayLike,
     *,
-    shape_zyx: tuple[int, int, int],
+    shape_zyx: tuple[int, ...],
     spacing_zyx_m: ArrayLike,
     origin_xyz_m: ArrayLike,
 ) -> CenterlineGraph:

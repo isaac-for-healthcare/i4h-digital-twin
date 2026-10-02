@@ -16,7 +16,7 @@ dicom = ["SimpleITK>=2.3.0"]
 nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
 nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
 pipeline = ["usd-core", "vtk", "scipy>=1.10"]
-dev = ["pytest>=8.0", "mypy>=1.10", "pydicom>=2.4"]
+dev = ["pytest>=8.0", "mypy>=1.10", "pydicom>=2.4", "usd-core", "vtk", "scipy>=1.10", "SimpleITK>=2.3.0", "trimesh"]  # Everything the test suite exercises.
 usd = ["usd-core"]
 # Deprecated vasculature_digital_twin package (all of its former optional features).
 vasculature = ["SimpleITK>=2.3", "scipy>=1.10", "scikit-image>=0.22", "totalsegmentator>=2.7", "vtk>=9.2", "warp-lang>=1.3"]
