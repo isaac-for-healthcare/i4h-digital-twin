@@ -1,16 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Export s0011 anatomy, then view it with an installed Isaac Sim runtime."""
+"""Export s0011 anatomy to USD, then view it with an installed Isaac Sim runtime.
+
+``python examples/isaac_sim.py export out.usdc --anatomy aorta liver --with-ct`` meshes the
+bundled s0011 masks (``generate_body``); ``<isaac-sim>/python.sh examples/isaac_sim.py view
+out.usdc`` opens the stage in Isaac Sim with a session-only light and camera (``view_usd``),
+optionally headless for a fixed number of frames with a PNG screenshot.
+"""
+
+from __future__ import annotations
 
 import argparse
 import math
+from collections.abc import Sequence
 from pathlib import Path
 
 SAMPLE = Path(__file__).resolve().parent / "data/s0011"
 
 
-def generate_body(output, *, names=("aorta",), with_ct=False):
-    """Extract selected supplied s0011 masks and optionally embed the matching CT."""
+def generate_body(output: str | Path, *, names: Sequence[str] = ("aorta",), with_ct: bool = False) -> Path:
+    """Mesh the named s0011 masks, optionally embed the matching CT, and write a USD; returns its path."""
     from patient_digital_twin import HumanBody, SegmentationImporter
     from patient_digital_twin.scan_volume import from_nifti
 
@@ -22,8 +31,11 @@ def generate_body(output, *, names=("aorta",), with_ct=False):
     return body.export_to_usd(output)
 
 
-def view_usd(path, *, headless=False, frames=0, screenshot=None):
-    """Frame source-unit geometry; keep all lighting/camera edits session-only."""
+def view_usd(path: str | Path, *, headless: bool = False, frames: int = 0, screenshot: str | Path | None = None) -> None:
+    """Open a patient USD in Isaac Sim and frame its anatomy; lighting/camera edits stay session-only.
+
+    ``frames=0`` runs until the window closes (not allowed headless); ``screenshot`` saves a PNG.
+    """
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -96,7 +108,8 @@ def view_usd(path, *, headless=False, frames=0, screenshot=None):
         app.close()
 
 
-def main():
+def main() -> None:
+    """CLI entry point for the ``export`` and ``view`` actions."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("export", "view"))
     parser.add_argument("usd", type=Path, help="Output/input USD path")

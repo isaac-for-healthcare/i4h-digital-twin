@@ -2,7 +2,9 @@
 
 The Python library behind Patient Digital Twin. Start with the
 [quickstart](../README.md) to load a segmentation, extract meshes, optionally add
-centerlines and CT, and export the result.
+centerlines and CT, and export the result. The
+[architecture guide](../docs/architecture.md) explains the key classes, module
+dependencies, data flow, and coordinate frames.
 
 ## How the library fits together
 
@@ -24,13 +26,15 @@ flowchart TD
 
 ## Main entry points
 
-The package is seven modules:
+The package is eight modules (see the [architecture guide](../docs/architecture.md)):
 
-- [body.py](body.py): the curated catalog (kinds and systems), `AnatomicalStructure`,
-  `AnatomyCollection` (`structures[name]`, `select()`, visibility controls), and
-  `HumanBody`, which owns `anatomy` and optional `imaging` and exposes
-  `extract_topology()`, `attach_scan()`, `attach_imaging()`, `export_to_usd()`, and
-  `export_patient_twin()`. Disabling a structure preserves its mesh.
+- [anatomy.py](anatomy.py): the structures inside the body: the curated catalog
+  (`Kind`, `System`, `CATALOG`, `canonical_name`), `AnatomicalStructure`, and
+  `AnatomyCollection` (`structures[name]`, `select()`, visibility controls). Disabling
+  a structure preserves its mesh.
+- [body.py](body.py): `HumanBody`, which owns `anatomy` and optional `imaging`
+  (`ImagingVolume`) and exposes `extract_topology()`, `attach_scan()`,
+  `attach_imaging()`, `export_to_usd()`, and `export_patient_twin()`.
 - [importers.py](importers.py): `SegmentationImporter` (labeled NIfTI, binary-mask
   directories, or NumPy label arrays), `NVSegmentImporter`, `NVGenerateImporter`, and
   `SimpleImporter` (STL/OBJ). Model dependencies load only when inference is requested;

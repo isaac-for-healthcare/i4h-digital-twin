@@ -44,6 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,pipeline,dicom]"
           pytest
+          mypy
 
   build:
     name: Build Python Package

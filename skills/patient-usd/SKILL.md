@@ -18,7 +18,7 @@ coordinate frame or available imaging:
 | Asset | Interpretation |
 | --- | --- |
 | Standalone `human_body.usdc` or another `export_to_usd` file | Presentation stage; CT may be embedded |
-| Manifest's `artifacts.anatomy_usd` (normally `patient_anatomy.usdc`) | Patient-frame anatomy; CT/attenuation are separate manifest artifacts |
+| Manifest's `artifacts.anatomy_usd` (normally `patient_anatomy.usdc`) | Patient-frame anatomy; CT and vessel arrays are separate manifest artifacts |
 
 Names alone are not proof: inspect the stage and manifest. Patient stages have
 `/HumanBody` as default prim, declared `metersPerUnit`, and Z-up metadata. Exterior, CT and

@@ -16,7 +16,7 @@ dicom = ["SimpleITK>=2.3.0"]
 nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
 nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
 pipeline = ["usd-core", "vtk", "scipy>=1.10"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "mypy>=1.10"]
 usd = ["usd-core"]
 
 [project.scripts]
@@ -29,3 +29,9 @@ include = ["patient_digital_twin*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.mypy]
+files = ["patient_digital_twin"]
+exclude = ["patient_digital_twin/scan_volume\\.py"]  # Kept byte-identical with sensor-simulation.
+ignore_missing_imports = true
+follow_imports = "silent"

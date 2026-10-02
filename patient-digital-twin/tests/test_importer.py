@@ -5,7 +5,7 @@ import nibabel as nib
 import numpy as np
 import pytest
 from patient_digital_twin import HumanBody, Kind, SegmentationImporter
-from patient_digital_twin.body import canonical_name
+from patient_digital_twin.anatomy import canonical_name
 from patient_digital_twin.geometry import transform_points
 from patient_digital_twin.importers import _labelmap
 

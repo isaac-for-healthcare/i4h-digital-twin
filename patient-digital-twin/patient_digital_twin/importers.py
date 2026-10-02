@@ -38,31 +38,39 @@ from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import RLock
-from typing import Any
+from typing import Any, cast
 
 import nibabel as nib
 import numpy as np
+from nibabel.spatialimages import SpatialImage
 from numpy.typing import ArrayLike, NDArray
 
-from .body import CATALOG, AnatomyCollection, canonical_name
+from .anatomy import CATALOG, AnatomyCollection, canonical_name
 from .geometry import (
     mask_to_mesh,
     rigid_transform,
     transform_points,
     validate_triangles,
 )
+from .scan_volume import ScanVolume
 
 SKIP = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
 _UNITS = {"unknown": 0.001, "mm": 0.001, "meter": 1.0, "micron": 1e-6}
 
 
-def nifti_affine_m(image: nib.spatialimages.SpatialImage) -> NDArray[np.float64]:
+def _load_nifti(path: str | Path) -> SpatialImage:
+    """``nib.load`` typed as the spatial image every caller expects."""
+    return cast(SpatialImage, nib.load(str(path)))
+
+
+def nifti_affine_m(image: SpatialImage) -> NDArray[np.float64]:
     """Return a 3D NIfTI's XYZ-voxel-to-world 4x4 affine in meters (missing units mean mm).
 
     Example:
         ``nifti_affine_m(nib.load("labels.nii.gz"))``
     """
-    unit = image.header.get_xyzt_units()[0]
+    header: Any = image.header  # NIfTI headers carry spatial units; the stub type does not.
+    unit = header.get_xyzt_units()[0]
     if len(image.shape) != 3 or unit not in _UNITS:
         raise ValueError(f"Expected a 3D NIfTI in supported units, got {image.shape} in {unit}")
     affine = image.affine.copy()
@@ -72,10 +80,9 @@ def nifti_affine_m(image: nib.spatialimages.SpatialImage) -> NDArray[np.float64]
 
 def _labelmap(value: Mapping[Any, Any] | str | Path) -> dict[int, str]:
     """Normalize an ID->name or NV-Generate name->ID mapping (or a JSON file of either) to ID->name."""
-    if isinstance(value, (str, Path)):
-        value = json.loads(Path(value).read_text())
+    mapping: Mapping[Any, Any] = json.loads(Path(value).read_text()) if isinstance(value, (str, Path)) else value
     try:
-        items = [(int(k), v) if isinstance(v, str) else (int(v), k) for k, v in dict(value).items()]
+        items = [(int(k), v) if isinstance(v, str) else (int(v), k) for k, v in dict(mapping).items()]
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Invalid labelmap: {exc}") from exc
     result = dict(items)
@@ -100,12 +107,12 @@ def _load_masks(
         files = {n: f for n, f in files.items() if canonical_name(n) in selected}
     if not files:
         raise FileNotFoundError(f"No NIfTI masks in {path}")
-    volume, affine, labels = None, None, {}
+    reference = _load_nifti(next(iter(files.values())))
+    volume, affine = np.zeros(reference.shape[::-1], np.int32), nifti_affine_m(reference)
+    labels: dict[int, str] = {}
     for label_id, (name, file) in enumerate(files.items(), 1):
-        image = nib.load(str(file))
+        image = _load_nifti(file)
         data = np.asanyarray(image.dataobj)
-        if volume is None:
-            volume, affine = np.zeros(image.shape[::-1], np.int32), nifti_affine_m(image)
         if image.shape != volume.shape[::-1] or not np.allclose(nifti_affine_m(image), affine, atol=1e-8):
             raise ValueError(f"Mask grid/affine mismatch: {file}")
         if not np.isin(data, [0, 1]).all():
@@ -146,21 +153,23 @@ class SegmentationImporter:
             names: Directory only: load just these structures.
             affine_xyz_to_imaging_m: Array only: XYZ voxel index to meters (default 1 mm voxels).
         """
+        source_volume: ArrayLike
+        source_affine: ArrayLike | None
         if isinstance(source, (str, Path)) and Path(source).is_dir():
-            volume, labelmap, affine = _load_masks(Path(source), names)
+            source_volume, labels, source_affine = _load_masks(Path(source), names)
         else:
             if names is not None:
                 raise ValueError("names selects files in a binary-mask directory only")
             if labelmap is None:
                 raise ValueError("Pass the matching label dictionary (e.g. configs/label_dict.json)")
-            labelmap, affine = _labelmap(labelmap), affine_xyz_to_imaging_m
+            labels, source_affine = _labelmap(labelmap), affine_xyz_to_imaging_m
             if isinstance(source, (str, Path)):
-                image = nib.load(str(source))
-                volume, affine = np.asanyarray(image.dataobj).transpose(2, 1, 0), nifti_affine_m(image)
+                image = _load_nifti(source)
+                source_volume, source_affine = np.asanyarray(image.dataobj).transpose(2, 1, 0), nifti_affine_m(image)
             else:
-                volume = source
-        volume = np.asarray(volume)
-        affine = np.diag([0.001] * 3 + [1.0]) if affine is None else np.asarray(affine, dtype=float)
+                source_volume = source
+        volume = np.asarray(source_volume)
+        affine = np.diag([0.001] * 3 + [1.0]) if source_affine is None else np.asarray(source_affine, dtype=float)
         if (volume.ndim != 3 or min(volume.shape) == 0 or not np.isfinite(volume).all()
                 or np.any(volume < 0) or np.any(volume != np.floor(volume))
                 or np.any(volume > np.iinfo(np.int32).max)):
@@ -168,10 +177,10 @@ class SegmentationImporter:
         if (affine.shape != (4, 4) or not np.isfinite(affine).all()
                 or not np.allclose(affine[3], [0, 0, 0, 1]) or abs(np.linalg.det(affine[:3, :3])) < 1e-18):
             raise ValueError("Expected an invertible finite voxel-to-imaging affine")
-        if missing := set(map(int, np.unique(volume))) - {0} - labelmap.keys():
+        if missing := set(map(int, np.unique(volume))) - {0} - labels.keys():
             raise ValueError(f"Present IDs missing from labelmap: {sorted(missing)}")
         self.masks_zyx, self.affine_xyz_to_imaging_m = volume.astype(np.int32), affine.copy()
-        self._names = {i: canonical_name(raw) for i, raw in labelmap.items()
+        self._names = {i: canonical_name(raw) for i, raw in labels.items()
                        if i and not SKIP.fullmatch(canonical_name(raw))}
 
     def to_anatomy_collection(self, *, strict: bool = False) -> AnatomyCollection:
@@ -185,7 +194,9 @@ class SegmentationImporter:
         from scipy.ndimage import find_objects
 
         body = AnatomyCollection.from_names(self._names.values(), strict=strict)
-        boxes, present, bounds = find_objects(self.masks_zyx), {}, []
+        boxes = find_objects(self.masks_zyx)
+        present: dict[str, list[int]] = {}
+        bounds: list[NDArray[np.floating]] = []
         for label_id, name in self._names.items():
             if label_id <= len(boxes) and boxes[label_id - 1] is not None:
                 present.setdefault(name, []).append(label_id)
@@ -225,7 +236,7 @@ def _supported(labelmap: Mapping[Any, str], names: Iterable[str] | None = None) 
 
 
 def segmentation_anatomy(
-    image: nib.spatialimages.SpatialImage, labelmap: Mapping[Any, str], *, names: Iterable[str] | None = None
+    image: SpatialImage, labelmap: Mapping[Any, str], *, names: Iterable[str] | None = None
 ) -> AnatomyCollection:
     """Mesh a backend's label NIfTI, keeping only catalog labels (and only ``names``, if given).
 
@@ -248,6 +259,7 @@ _BACKEND_LOCK = RLock()
 def _backend(root: Path) -> Iterator[None]:
     """Serialize in-process inference; upstream needs its checkout as cwd and `scripts` package."""
     def scripts() -> list[str]:
+        """Names of loaded modules in the upstream top-level ``scripts`` package."""
         return [n for n in sys.modules if n == "scripts" or n.startswith("scripts.")]
 
     with _BACKEND_LOCK:
@@ -279,7 +291,7 @@ class NVSegmentImporter:
 
     def __init__(
         self,
-        image: str | Path | nib.spatialimages.SpatialImage,
+        image: str | Path | SpatialImage,
         *,
         bundle_root: str | Path | None = None,
         modality: str = "CT",
@@ -293,11 +305,11 @@ class NVSegmentImporter:
             modality: ``"CT"`` or ``"MR"``.
             python_executable: Run inference in this interpreter instead of in-process.
         """
-        image = nib.load(str(image)) if isinstance(image, (str, Path)) else image
-        data = np.asanyarray(image.dataobj)
+        loaded = _load_nifti(image) if isinstance(image, (str, Path)) else image
+        data = np.asanyarray(loaded.dataobj)
         if data.ndim != 3 or not np.isfinite(data).all():
             raise ValueError("Input image must be a finite 3D volume")
-        affine = nifti_affine_m(image)
+        affine = nifti_affine_m(loaded)
         affine[:3] *= 1000  # Backends assume NIfTI millimeters regardless of header units.
         self.image = nib.Nifti1Image(data.astype(np.float32), affine)
         self.image.header.set_xyzt_units("mm")
@@ -320,8 +332,8 @@ class NVSegmentImporter:
         supported = _supported({v["index"]: k for k, v in definitions.items() if dataset in v.get("datasets", [])}, names)
         if not supported:
             raise ValueError(f"No catalog labels supported by NV-Segment for {self.modality}")
-        with TemporaryDirectory(prefix="patient-nvsegment-") as temp:
-            temp = Path(temp)
+        with TemporaryDirectory(prefix="patient-nvsegment-") as temp_dir:
+            temp = Path(temp_dir)
             nib.save(self.image, temp / "image.nii.gz")
             overrides = json.loads(config.read_text())
             overrides.update(
@@ -341,7 +353,7 @@ class NVSegmentImporter:
             outputs = list((temp / "masks").rglob("*.nii.gz"))
             if len(outputs) != 1:
                 raise RuntimeError(f"Expected one NV-Segment output, found {len(outputs)}")
-            result = nib.load(outputs[0])
+            result = _load_nifti(outputs[0])
             if result.shape != self.image.shape or not np.allclose(
                 nifti_affine_m(result), nifti_affine_m(self.image), atol=1e-6
             ):
@@ -378,9 +390,11 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
     finally:
         sample.filter_mask_with_organs, sys.argv = original_filter, original_argv
     images = list((folder / "generated").glob("*_image.nii.gz"))
-    mask = images[0].with_name(images[0].name.replace("_image.nii.gz", "_label.nii.gz")) if images else None
-    if len(images) != 1 or not mask.is_file():
-        raise RuntimeError(f"Expected one generated CT and its paired label, found {len(images)} CTs")
+    if len(images) != 1:
+        raise RuntimeError(f"Expected one generated CT, found {len(images)}")
+    mask = images[0].with_name(images[0].name.replace("_image.nii.gz", "_label.nii.gz"))
+    if not mask.is_file():
+        raise RuntimeError("Generated CT is missing its paired segmentation")
     shutil.copyfile(mask, mask_output)
     shutil.copyfile(images[0], ct_output)
 
@@ -400,7 +414,9 @@ class NVGenerateImporter:
     def __init__(self, *, source_root: str | Path | None = None, python_executable: str | Path | None = None) -> None:
         """``source_root`` defaults to ``$NV_GENERATE_ROOT``; ``python_executable`` runs out of process."""
         self.root = Path(source_root or os.environ.get("NV_GENERATE_ROOT", ".")).resolve()
-        self.python_executable, self.seed, self.ct_scan = python_executable, None, None
+        self.python_executable = python_executable
+        self.seed: int | None = None
+        self.ct_scan: ScanVolume | None = None
 
     def to_anatomy_collection(self, *, names: Iterable[str] | None = None) -> AnatomyCollection:
         """Generate a new patient with a fresh random seed and mesh ``names`` (default: all)."""
@@ -413,17 +429,17 @@ class NVGenerateImporter:
         labels = json.loads((self.root / "configs/label_dict.json").read_text())
         labelmap = {value: name for name, value in labels.items()}
         _supported(labelmap, names)
-        self.seed = secrets.randbits(32)
+        self.seed = seed = secrets.randbits(32)
         with TemporaryDirectory(prefix="patient-nvgenerate-") as temp:
             mask_path, ct_path = Path(temp) / "mask.nii.gz", Path(temp) / "ct.nii.gz"
             if self.python_executable is None:
                 with _backend(self.root):
-                    _generate(self.seed, mask_path, ct_path)
+                    _generate(seed, mask_path, ct_path)
             else:
                 code = inspect.getsource(_generate) + "\nimport sys\n_generate(*sys.argv[1:])\n"
-                subprocess.run([str(self.python_executable), "-c", code, str(self.seed), str(mask_path),
+                subprocess.run([str(self.python_executable), "-c", code, str(seed), str(mask_path),
                                 str(ct_path)], cwd=self.root, check=True)
-            mask_image, ct_image = nib.load(mask_path), nib.load(ct_path)
+            mask_image, ct_image = _load_nifti(mask_path), _load_nifti(ct_path)
             if mask_image.shape != ct_image.shape or not np.allclose(
                 nifti_affine_m(mask_image), nifti_affine_m(ct_image)
             ):
@@ -469,7 +485,7 @@ class SimpleImporter:
         for raw, name in names.items():
             if Path(self.meshes[raw]).suffix.lower() not in (".stl", ".obj"):
                 raise ValueError("Supported mesh formats: .stl, .obj")
-            mesh = trimesh.load(str(self.meshes[raw]), force="scene", process=False).to_geometry()
+            mesh: Any = cast(Any, trimesh.load(str(self.meshes[raw]), force="scene", process=False)).to_geometry()
             structure = body.structures[name]
             structure.vertices, structure.faces = validate_triangles(mesh.vertices, mesh.faces.astype(np.int64), name=name)
             structure.local_to_body = rigid_transform(transforms.get(name, np.eye(4)))

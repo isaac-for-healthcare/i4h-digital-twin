@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from patient_digital_twin import AnatomicalStructure, CenterlineGraph, HumanBody, Kind
 from patient_digital_twin import body as body_module
-from patient_digital_twin.body import CATALOG
+from patient_digital_twin.anatomy import CATALOG
 
 
 def graph():

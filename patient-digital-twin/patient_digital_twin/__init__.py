@@ -3,15 +3,8 @@
 
 """Public API for patient digital twins."""
 
-from .body import (
-    AnatomicalStructure,
-    AnatomyCollection,
-    HumanBody,
-    ImagingVolume,
-    Kind,
-    MeshGeometry,
-    System,
-)
+from .anatomy import AnatomicalStructure, AnatomyCollection, Kind, MeshGeometry, System
+from .body import HumanBody, ImagingVolume
 from .geometry import CenterlineGraph
 from .importers import (
     NVGenerateImporter,

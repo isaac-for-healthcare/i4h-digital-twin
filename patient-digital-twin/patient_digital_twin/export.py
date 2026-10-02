@@ -72,7 +72,7 @@ def _write_scan(scan: ScanVolume, folder: Path, vessel_mask: ArrayLike | None = 
         if mask.shape != scan.values.shape or not np.isin(mask, [0, 1]).all():
             raise ValueError("Vessel mask must be binary and match the scan grid")
         names = ("centerline_points", "centerline_edges", "centerline_radii")
-        arrays = {**dict(zip(names, native_centerline(mask, scan))), "vessel_mask": mask.astype(np.uint8)}
+        arrays: dict[str, np.ndarray] = {**dict(zip(names, native_centerline(mask, scan))), "vessel_mask": mask.astype(np.uint8)}
         for name, values in arrays.items():
             np.save(Path(folder) / f"{name}.npy", values, allow_pickle=False)
             paths[name] = f"{name}.npy"
@@ -107,11 +107,13 @@ def write_artifacts(scan: ScanVolume, output: str | Path, *, vessel_mask: ArrayL
 
 def _vessel_mask(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> NDArray[np.bool_]:
     """Requested vessels on the scan grid: source labels, or rasterized meshes without them."""
-    anatomy = body.anatomy
-    labels = anatomy.source_segmentation
+    anatomy, imaging = body.anatomy, body.imaging
+    labels, labels_to_ras = anatomy.source_segmentation, anatomy.source_voxel_to_ras_m
+    if imaging is None:
+        raise ValueError("Vessel masks require attached CT")
     if labels is not None:
-        if labels.shape != scan.values_kji.shape or not np.allclose(
-            anatomy.source_voxel_to_ras_m, scan.ijk_to_ras_m, atol=1e-9, rtol=1e-6
+        if labels_to_ras is None or labels.shape != scan.values_kji.shape or not np.allclose(
+            labels_to_ras, scan.ijk_to_ras_m, atol=1e-9, rtol=1e-6
         ):
             raise ValueError("Segmentation and attached scan must share the same physical grid")
         mask = np.isin(labels, [i for i, n in anatomy.source_label_names.items() if n in names])
@@ -119,9 +121,12 @@ def _vessel_mask(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> NDA
         mask = np.zeros(scan.values_kji.shape, bool)
         for name in names:
             structure = anatomy.structures[name]
-            to_ijk = np.linalg.inv(scan.ijk_to_ras_m) @ body.imaging.body_to_imaging @ structure.local_to_body
+            vertices, faces = structure.mesh.vertices, structure.mesh.faces
+            if vertices is None or faces is None:
+                raise ValueError(f"Missing vessel mesh: {name}")
+            to_ijk = np.linalg.inv(scan.ijk_to_ras_m) @ imaging.body_to_imaging @ structure.local_to_body
             mask |= voxelize_mesh(
-                transform_points(structure.mesh.vertices, to_ijk), structure.mesh.faces,
+                transform_points(vertices, to_ijk), faces,
                 shape_zyx=mask.shape, spacing_zyx_m=(1.0, 1.0, 1.0), origin_xyz_m=(0.0, 0.0, 0.0),
             )
     if not mask.any():
@@ -187,6 +192,7 @@ def write_usd(
         UsdGeom.Scope.Define(stage, f"/HumanBody/{scope}")
 
     def custom(prim: Any, name: str, kind: str, value: Any) -> None:
+        """Author a custom attribute of Sdf type ``kind`` (e.g. ``"FloatArray"``) on ``prim``."""
         prim.CreateAttribute(name, getattr(Sdf.ValueTypeNames, kind), custom=True).Set(value)
 
     def mesh(prim_path: str, vertices: ArrayLike, faces: ArrayLike, color: Sequence[float], opacity: float,
@@ -221,9 +227,10 @@ def write_usd(
 
     if exterior is not None:
         mesh("/HumanBody/Exterior/CT", *exterior, (0.72, 0.77, 0.84), skin_opacity).SetDisplayName("CT exterior")
-    prims = {}
+    prims: dict[str, str] = {}
     for name, structure in body.anatomy.structures.items():
-        if structure.mesh.vertices is None:
+        vertices, faces = structure.mesh.vertices, structure.mesh.faces
+        if vertices is None or faces is None:
             continue
         identifier = candidate = Tf.MakeValidIdentifier(name)
         number = 2
@@ -233,7 +240,7 @@ def write_usd(
         digest = hashlib.sha256(name.encode()).digest()
         color = (0.88, 0.84, 0.69) if structure.kind.value == "bone" else tuple(0.25 + 0.65 * v / 255 for v in digest[:3])
         matrix = structure.local_to_world if placement is None else placement @ structure.local_to_body
-        prim = mesh(prims[name], structure.mesh.vertices, structure.mesh.faces, color, 1.0, matrix, structure.enabled)
+        prim = mesh(prims[name], vertices, faces, color, 1.0, matrix, structure.enabled)
         prim.SetDisplayName(name)
         prim.SetCustomDataByKey("anatomy:name", name)
         prim.SetCustomDataByKey("anatomy:kind", structure.kind.value)
@@ -305,7 +312,7 @@ def export_patient_twin(
     frame = scan.frame if scan is not None else "RAS" if body.anatomy.body_to_imaging is not None else "body"
     mask = _vessel_mask(body, scan, vessel_names) if scan is not None and vessel_names else None
     exterior = None
-    if ct_exterior:
+    if ct_exterior and scan is not None:
         from scipy import ndimage
 
         envelope = ndimage.binary_fill_holes(scan.values_kji[::3, ::3, ::3] > -300)
@@ -316,6 +323,7 @@ def export_patient_twin(
     source_path = None if body.imaging is None else body.imaging.source_path
 
     def write(folder: Path) -> None:
+        """Write every bundle file into the staging ``folder``."""
         artifacts = {"anatomy_usd": "patient_anatomy.usdc"}
         if scan is not None:
             artifacts.update(_write_scan(scan, folder, mask))
@@ -324,7 +332,7 @@ def export_patient_twin(
         prims = write_usd(body, folder / "patient_anatomy.usdc", units=units, scan=None,
                           placement=_scan_from_body(body, scan), exterior=exterior, skin_opacity=skin_opacity)
         structures = body.anatomy.structures
-        manifest = {
+        manifest: dict[str, Any] = {
             "schema_version": 3,
             "patient_id": patient_id or (Path(source_path).parent.name if source_path else "geometry"),
             "coordinate_frame": frame,

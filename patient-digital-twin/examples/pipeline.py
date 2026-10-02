@@ -1,10 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Import existing masks or meshes, attach matching CT, extract topology, and export.
+"""Example pipeline: import existing masks or meshes, attach CT, extract topology, and export.
 
-For NV-Generate/NV-Segment inference use `python -m patient_digital_twin`.
+``python examples/pipeline.py --source sample --anatomy aorta --output out/`` uses the bundled
+s0011 masks and CT. ``--source segmentation --input labels.nii.gz --labels labels.json --ct
+ct.nii.gz`` imports your own label volume; ``--source simple --input meshes.json`` imports
+STL/OBJ meshes (``{"meshes": {name: file}, "mesh_to_body": {...}}``). ``import_body``
+builds the ``HumanBody``; ``run`` extracts centerlines and writes a patient bundle plus a
+standalone ``human_body.usdc``. For NV-Generate/NV-Segment inference use
+``python -m patient_digital_twin``.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -21,7 +29,8 @@ from patient_digital_twin.scan_volume import from_nifti
 SAMPLE = Path(__file__).parent / "data/s0011"
 
 
-def parser():
+def parser() -> argparse.ArgumentParser:
+    """Build the example's CLI parser."""
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument(
         "--source", choices=("sample", "segmentation", "simple"), default="sample"
@@ -35,7 +44,7 @@ def parser():
     return cli
 
 
-def import_body(args):
+def import_body(args: argparse.Namespace) -> HumanBody:
     """Build a HumanBody and attach only the CT belonging to its anatomy."""
     ct = None
     if args.source == "sample":
@@ -60,7 +69,8 @@ def import_body(args):
     return body
 
 
-def run(args):
+def run(args: argparse.Namespace) -> Path:
+    """Validate options, import, extract vessel centerlines, and write the bundle; returns the manifest path."""
     output = args.output.expanduser().resolve()
     if output.exists():
         raise FileExistsError(f"Use a new output directory: {output}")
