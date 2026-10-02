@@ -227,9 +227,86 @@ In an installed i4h-workflows checkout:
 
 Add `--headless` when no display is available.
 
+## Deprecated: `vasculature_digital_twin`
+
+> **Deprecated.** `vasculature_digital_twin` is kept only so existing users can migrate.
+> It will be removed in a future release, receives no new features, and importing it
+> emits a `DeprecationWarning` (its `vdt-*` commands emit a `FutureWarning`). Use the
+> `patient_digital_twin` APIs above for new work.
+
+| Deprecated capability | Replacement |
+| --- | --- |
+| `VolumePreprocessor` / `load_nifti_hu` / `load_dicom_series_hu` (reorient CT to LPS) | `scan_volume.from_nifti` / `from_dicom`, which keep native axes, frame, and units |
+| `HuToMuMapping`, `hu_to_mu`, `mu_volume.npy` | HU → μ presets in i4h-sensor-simulation |
+| `get_vessel_mask` / `vessel_mask_from_totalsegmentator` | `NVSegmentImporter`, or `SegmentationImporter` on existing labels |
+| `extract_centerlines` (VMTK), `centerline_points_mm.npy` | `HumanBody.extract_topology`, and `export_patient_twin(vessel_names=...)` for scan-grid `centerline_*.npy` |
+| `extract_vessel_mesh` (VTK/Warp) | Structure meshes from any importer; `export_to_usd` / `export_patient_twin` |
+
+It installs with this package. Its optional features (DICOM, TotalSegmentator, VTK/Warp
+meshing) are in the `vasculature` extra:
+
+```bash
+pip install -e './patient-digital-twin[vasculature]'
+```
+
+The package reorients CT into a canonical **LPS** frame (axis 0 toward Superior, axis 1
+toward Posterior, axis 2 toward Left) by permuting and flipping axes, never
+resampling. It maps Hounsfield Units to linear attenuation (mm⁻¹) with a piecewise-linear
+`HuToMuMapping` and caches `mu_volume.npy` + `metadata.json`. It segments vessels by HU
+threshold or TotalSegmentator, and extracts centerlines (VMTK) and vessel meshes
+(VTK/Warp). This example runs on the bundled s0011 CT:
+
+```python
+from vasculature_digital_twin import (  # Emits a DeprecationWarning.
+    HuToMuMapping,
+    PreprocessingSettings,
+    VolumePreprocessor,
+    get_vessel_mask,
+)
+
+mapping = HuToMuMapping.from_window_level(window_center=100.0, window_width=800.0)
+vdt_preprocessor = VolumePreprocessor.from_nifti(
+    sample / "ct.nii.gz", settings=PreprocessingSettings(hu_to_mu=mapping)
+)
+vdt_volume = vdt_preprocessor.preprocess("vasculature_cache")  # mu_volume.npy + metadata.json
+vdt_vessels = get_vessel_mask(
+    vdt_preprocessor.hu_volume_zyx,
+    vdt_volume.spacing_zyx_mm,
+    use_totalsegmentator=False,  # True runs TotalSegmentator and adds per-territory masks.
+    hu_threshold=200.0,
+)
+vdt_mask = vdt_vessels.combined_mask  # ZYX uint8 in the canonical LPS frame.
+```
+
+The same pipeline is available from the command line:
+
+```bash
+vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache \
+  --window-center 100 --window-width 800
+vdt-segment-vessels --ct-dir /tmp/ct_cache
+```
+
+`vdt-preprocess-ct` also accepts `--dicom <series dir>`, `--control-points=-1000:0,0:0.004,300:0.012`
+for a multi-knot curve, and `--no-reorient` to keep stored axes. `vdt-segment-vessels`
+writes `vessel_mask.npy`, `centerline_points_mm.npy`, `centerline_edges.npy`, and
+`centerline_radii_mm.npy` beside the cache; `metadata.json` records
+`anatomical_frame`, `source_orientation`, spacing, origin, and the `hu_to_mu` curve.
+
+Its public API, all importable from `vasculature_digital_twin`:
+
+| Area | Names |
+| --- | --- |
+| CT loading and frame | `VolumePreprocessor.from_nifti` / `from_dicom` / `from_numpy`, `to_canonical_lps`, `orientation_code`, `affine_to_lps`, `CanonicalVolume`, `CANONICAL_FRAME` |
+| HU → μ | `HuToMuMapping` (`from_window_level`, `with_window_level`, `shifted`, `scaled`, `to_dict` / `from_dict`), `PreprocessingSettings`, `hu_to_mu`, `hu_to_mu_curve`, `VolumePreprocessor.with_hu_to_mu` |
+| Cache | `PreprocessedVolume` (`save`, `load`, `mu_volume`), `VolumeMetadata` |
+| Vessels | `get_vessel_mask`, `vessel_mask_from_hu`, `vessel_mask_from_totalsegmentator`, `VesselSegmentationResult`, `TOTALSEG_VESSEL_TERRITORY_MAP`, `TOTALSEG_CORONARY_LABEL`, `apply_vessel_boost` |
+| Centerlines and meshes | `extract_centerlines` (requires VMTK), `CenterlineGraph`, `extract_vessel_mesh` (requires Warp; VTK optional), `ct_coords_to_voxel` |
+| Contrast timing | `compute_arrival_map`, `gamma_variate`, `build_contrast_volume` |
+
 ## More detail
 
 - [Package architecture](patient_digital_twin/README.md)
 - [USD layout and coordinate transforms](docs/usd.md)
 - [Example scripts and viewer](examples/README.md)
 - [Standalone CT and centerline artifacts](examples/README.md#ct-and-centerline-arrays-only)
+- [Deprecated `vasculature_digital_twin`](#deprecated-vasculature_digital_twin)

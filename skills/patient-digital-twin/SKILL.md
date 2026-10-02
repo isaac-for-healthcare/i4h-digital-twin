@@ -67,6 +67,8 @@ All public classes import from `patient_digital_twin`; `scan_volume`, `export`, 
 - In-process NV inference changes the working directory under a lock; pass
   `python_executable=` (CLI `--python`) to run the model in another environment.
 - `scan_volume.py` is kept byte-identical with sensor-simulation; do not edit it here.
+- `vasculature_digital_twin` (same distribution) is deprecated: do not use it for new work.
+  Map its calls to `patient_digital_twin` with the README's "Deprecated" section.
 
 ## Verify
 
