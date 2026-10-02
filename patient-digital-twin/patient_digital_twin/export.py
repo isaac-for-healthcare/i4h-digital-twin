@@ -315,8 +315,10 @@ def export_patient_twin(
     if ct_exterior and scan is not None:
         from scipy import ndimage
 
-        envelope = ndimage.binary_fill_holes(scan.values_kji[::3, ::3, ::3] > -300)
-        if envelope.any():
+        # Keep only the body: the table and air cavities would otherwise add nested shells.
+        labels, count = ndimage.label(ndimage.binary_closing(scan.values_kji[::3, ::3, ::3] > -300, iterations=2))
+        envelope = ndimage.binary_fill_holes(labels == np.argmax(np.bincount(labels.ravel())[1:]) + 1) if count else None
+        if envelope is not None:
             points, faces = mask_to_mesh(envelope)
             points = transform_points(points * 3, scan.ijk_to_world) * units
             exterior = (points, faces[:, ::-1] if np.linalg.det(scan.ijk_to_world[:3, :3]) < 0 else faces)

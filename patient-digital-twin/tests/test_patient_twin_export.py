@@ -93,3 +93,31 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
     assert not stage.GetRootLayer().GetExternalReferences()
     with pytest.raises(FileExistsError):
         body.export_patient_twin(target.parent, vessel_names=["aorta"])
+
+
+def test_ct_exterior_is_one_body_surface(tmp_path):
+    from patient_digital_twin.scan_volume import from_nifti
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    shape = (42, 42, 42)
+    hu = np.full(shape, -1000.0, dtype=np.float32)
+    hu[6:36, 6:30, 6:36] = 40  # body
+    hu[15:24, 12:21, 15:24] = -900  # enclosed gas pocket
+    hu[6:36, 33:39, 6:36] = 400  # table, separate from the body
+    mask = np.zeros(shape, dtype=np.uint8)
+    mask[9:33, 15:18, 27:30] = 1
+    image = nib.Nifti1Image(hu.transpose(2, 1, 0), np.eye(4))
+    image.header.set_xyzt_units("mm")
+    nib.save(image, tmp_path / "ct.nii.gz")
+    body = HumanBody(SegmentationImporter(mask, {1: "aorta"}, affine_xyz_to_imaging_m=np.diag([1e-3] * 3 + [1])).to_anatomy_collection())
+    body.attach_scan(from_nifti(tmp_path / "ct.nii.gz"), source_path=tmp_path / "ct.nii.gz")
+    target = body.export_patient_twin(tmp_path / "bundle", vessel_names=["aorta"], ct_exterior=True)
+
+    stage = Usd.Stage.Open(str(target.parent / "patient_anatomy.usdc"))
+    skin = UsdGeom.Mesh(stage.GetPrimAtPath("/HumanBody/Exterior/CT"))
+    faces = np.asarray(skin.GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
+    edges = np.r_[faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]
+    count = len(skin.GetPointsAttr().Get())
+    graph = coo_matrix((np.ones(len(edges)), (edges[:, 0], edges[:, 1])), shape=(count, count))
+    assert connected_components(graph, directed=False)[0] == 1
