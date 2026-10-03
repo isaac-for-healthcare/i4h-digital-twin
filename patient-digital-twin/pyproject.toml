@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patient-digital-twin"
+version = "0.1.0"
+description = "Patient digital twin Python module."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "i4h" }]
+dependencies = ["numpy>=1.24", "nibabel>=5.0", "PyYAML>=6.0", "scikit-image>=0.22"]
+
+[project.optional-dependencies]
+dicom = ["SimpleITK>=2.3.0"]
+nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
+nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
+pipeline = ["usd-core", "vtk", "scipy>=1.10"]
+dev = ["pytest>=8.0", "mypy>=1.10", "pydicom>=2.4", "usd-core", "vtk", "scipy>=1.10", "SimpleITK>=2.3.0", "trimesh"]  # Everything the test suite exercises.
+usd = ["usd-core"]
+# Deprecated vasculature_digital_twin package (all of its former optional features).
+vasculature = ["SimpleITK>=2.3", "scipy>=1.10", "scikit-image>=0.22", "totalsegmentator>=2.7", "vtk>=9.2", "warp-lang>=1.3"]
+
+[project.scripts]
+patient-digital-twin = "patient_digital_twin.__main__:main"
+# Deprecated vasculature_digital_twin commands.
+vdt-preprocess-ct = "vasculature_digital_twin.cli.preprocess_ct:main"
+vdt-segment-vessels = "vasculature_digital_twin.cli.segment_vessels:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["patient_digital_twin*", "vasculature_digital_twin*"]  # vasculature_digital_twin is deprecated.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+files = ["patient_digital_twin"]
+exclude = ["patient_digital_twin/scan_volume\\.py"]  # Kept byte-identical with sensor-simulation.
+ignore_missing_imports = true
+follow_imports = "silent"

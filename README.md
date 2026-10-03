@@ -20,46 +20,28 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 
 | Component | Status | Purpose |
 | --- | --- | --- |
-| [`vasculature_digital_twin`](./patient-digital-twin/vasculature_digital_twin/README.md) | Installable package | CT ingest, HU→μ preprocessing, vessel masks, centerlines |
-| [`imaging_to_mesh`](./patient-digital-twin/imaging_to_mesh/README.md) | Installable package | Labelmaps / NumPy masks → OBJ + OpenUSD |
-| [`generate_imaging`](./patient-digital-twin/generate_imaging/README.md) | Guide | Synthetic CT/MR generation with MAISI |
+| [`patient_digital_twin.export`](./patient-digital-twin/patient_digital_twin/export.py) | Patient module | USD, native HU scan bundles, vessel masks and centerlines |
+| [`patient_digital_twin.geometry`](./patient-digital-twin/patient_digital_twin/geometry.py) | Patient module | Binary masks → NumPy vertices and faces; skeleton centerlines |
+| [`patient_digital_twin.importers`](./patient-digital-twin/examples/README.md) | Patient module | Synthetic CT/MR masks, segmentation and mesh import |
+| [`vasculature_digital_twin`](./patient-digital-twin/README.md#deprecated-vasculature_digital_twin) | **Deprecated** | CT HU→μ preprocessing and vessel masks; kept for migration only |
 
 ### Quick start — installable packages
 
 ```bash
-# CT preprocessing + vessel extraction
-cd patient-digital-twin/vasculature_digital_twin
-uv venv && uv pip install -e ".[dev]"
-vdt-preprocess-ct --nifti /path/to/ct.nii.gz --output-dir /tmp/ct_cache
-vdt-segment-vessels --ct-dir /tmp/ct_cache --no-totalsegmentator
-
-# Mask / labelmap → USD
-cd ../imaging_to_mesh
-uv venv && uv pip install -e ".[dev]"
-imaging-to-mesh /path/to/patient_label.nii.gz --output-dir /tmp/usd_out
+# Patient anatomy and bundled meshing
+cd patient-digital-twin
+uv sync --extra dev --extra usd
 ```
 
-Python API example (mask from vasculature twin → USD):
+Python API example (segmentation → patient anatomy meshes):
 
 ```python
-from imaging_to_mesh import convert_mask_to_usd
-from vasculature_digital_twin import VolumePreprocessor, get_vessel_mask
+from patient_digital_twin import HumanBody, SegmentationImporter
 
-pre = VolumePreprocessor.from_nifti("ct.nii.gz")
-volume = pre.preprocess(output_dir="ct_cache")
-mask = get_vessel_mask(
-    hu_zyx=pre.hu_volume_zyx,
-    spacing_zyx_mm=volume.spacing_zyx_mm,
-    use_totalsegmentator=False,
-).combined_mask
-
-result = convert_mask_to_usd(
-    mask,
-    "output/vasculature.usd",
-    name="Vasculature",
-    spacing_zyx_mm=volume.spacing_zyx_mm,
-)
-print(result.usd_path)
+anatomy = SegmentationImporter("patient_label.nii.gz", "label_dict.json").to_anatomy_collection()
+body = HumanBody(anatomy)
+for structure in body.anatomy.select(include_empty=False):
+    print(structure.name, structure.world_vertices.shape, structure.faces.shape)
 ```
 
 ## Hospital Digital Twin
@@ -90,19 +72,45 @@ Shared / typical prerequisites (exact versions depend on the component):
 | Requirement | Notes |
 | --- | --- |
 | OS | Linux (x86_64) recommended |
-| Python | 3.10+ for installable packages (`vasculature_digital_twin`, `imaging_to_mesh`) |
-| GPU | Optional for TotalSegmentator / MAISI / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
+| Python | 3.10+ for installable packages (`patient_digital_twin` and the other twin modules) |
+| GPU | Optional for NV-Segment / NV-Generate / Isaac Sim; CPU paths exist for basic vessel masking and mesh conversion |
 | Tooling | `uv` or `pip`; Isaac Sim when loading USD in simulation |
 
 Installable packages do **not** require Conda. Hospital / robot twin guides may assume Isaac Sim, Isaac Lab, or XR runtimes — see each component README.
+
+## Python Packages
+
+Install every top-level digital twin module from the repository root:
+
+```bash
+uv pip install .
+# or: pip install .
+```
+
+Install one top-level module by supplying its directory instead:
+
+```bash
+uv pip install ./patient-digital-twin
+uv pip install ./hospital-digital-twin
+uv pip install ./sim-ready-assets
+uv pip install ./robot-digital-twin
+```
+
+The corresponding Python imports are `patient_digital_twin`, `hospital_digital_twin`, `sim_ready_assets`, and `robot_digital_twin`.
+
+To install patient USD support in the repository's own `.venv`, run from this root:
+
+```bash
+uv sync --extra dev --extra patient-usd
+```
 
 ## Development / CI
 
 Installable packages under `patient-digital-twin/` include unit tests and can be exercised with:
 
 ```bash
-cd patient-digital-twin/vasculature_digital_twin && uv pip install -e ".[dev]" && pytest
-cd ../imaging_to_mesh && uv sync --extra dev && uv run pytest
+cd patient-digital-twin
+uv run --extra dev pytest
 ```
 
 Repository GitHub Actions cover copyright headers, markdown link checks, pre-commit linting, and package build/test for the installable modules.

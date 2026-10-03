@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Native artifacts and topology use a single physical mask-to-graph path."""
+
+import numpy as np
+import pytest
+from patient_digital_twin.export import write_artifacts
+from patient_digital_twin.geometry import native_centerline
+from patient_digital_twin.scan_volume import from_array, load_artifact
+
+
+def test_rotated_native_mask_artifacts(tmp_path):
+    z, y, x = np.indices((30, 15, 15))
+    mask = ((x-7)**2+(y-7)**2 < 16) & (z>2) & (z<27)
+    affine = np.array([[0., -1., 0., 20.], [1., 0., 0., 30.], [0., 0., 2., 40.], [0., 0., 0., 1.]])
+    scan = from_array(np.where(mask, 9000, -1500).transpose(2, 1, 0), affine)
+    output = write_artifacts(scan, tmp_path/'out', vessel_mask=mask.transpose(2, 1, 0))
+    loaded = load_artifact(output/'volume.yaml')
+    np.testing.assert_array_equal(loaded.values, scan.values)
+    points = np.load(output/'centerline_points.npy')
+    indices = (np.c_[points, np.ones(len(points))] @ np.linalg.inv(affine).T)[:, :3]
+    np.testing.assert_allclose(indices, np.rint(indices), atol=1e-6)
+    assert mask[tuple(np.rint(indices[:, ::-1]).astype(int).T)].all()
+    assert np.all(np.load(output/'centerline_radii.npy')>0)
+    assert not (output/'mu_volume.npy').exists()
+    with pytest.raises(FileExistsError):
+        write_artifacts(scan, output)
+
+
+def test_bad_mask_fails_without_partial_export(tmp_path):
+    scan = from_array(np.ones((3, 4, 5)), np.eye(4))
+    for mask in [np.ones((2, 2, 2)), np.full(scan.values.shape, 2)]:
+        with pytest.raises(ValueError):
+            write_artifacts(scan, tmp_path/'bad', vessel_mask=mask)
+    assert not (tmp_path/'bad').exists()
+    affine = np.eye(4)
+    affine[0, 1] = .2
+    with pytest.raises(ValueError, match='orthogonal'):
+        native_centerline(np.ones(scan.values.shape), from_array(scan.values, affine))
+
+
+@pytest.mark.parametrize("oblique", [False, True])
+def test_native_centerline_is_invariant_to_scan_axis_order(oblique):
+    """A reindexed scan must retain the same physical graph, including node order."""
+    x, y, z = np.indices((23, 21, 31))
+    mask = ((x - 10 - z / 12) ** 2 + (y - 10) ** 2 < 20) & (z > 3) & (z < 28)
+    affine = np.diag([1.1, 1.4, 2., 1.])
+    if oblique:
+        angle = 0.3
+        affine[:3, :3] = np.array([[np.cos(angle), -np.sin(angle), 0],
+                                 [np.sin(angle), np.cos(angle), 0], [0, 0, 1]]) @ affine[:3, :3]
+    affine[:3, 3] = [20, -30, 10]
+    scan = from_array(mask.astype(np.float32), affine)
+    expected = native_centerline(mask, scan)
+    flip = np.eye(4)
+    flip[0, 0], flip[0, 3] = -1, mask.shape[0] - 1
+    permute = np.eye(4)
+    permute[:3, :3] = np.eye(3)[:, [2, 0, 1]]
+    for values, transform in [(mask[::-1], affine @ flip), (mask.transpose(2, 0, 1), affine @ permute)]:
+        other = from_array(values.astype(np.float32), transform)
+        actual = native_centerline(values, other)
+        for a, b in zip(actual, expected):
+            np.testing.assert_allclose(a, b, atol=1e-6)
+        np.testing.assert_array_equal(other.values, values)
