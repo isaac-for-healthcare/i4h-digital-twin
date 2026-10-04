@@ -174,6 +174,8 @@ an upstream checkout and its model assets; use a CUDA-compatible PyTorch build.
 Inference runs through Python imports in the current process by default. See the upstream
 [NV-Segment](https://github.com/NVIDIA-Medtech/NV-Segment-CTMR) and
 [NV-Generate](https://github.com/NVIDIA-Medtech/NV-Generate-CTMR) setup guides.
+As upstream, NV-Generate reads its `datasets/` files from `$MONAI_DATA_DIRECTORY`; set it
+to reuse downloaded data, otherwise each run downloads the datasets to a temporary directory.
 
 Example: segment the aorta from `s0011/ct.nii.gz` in the
 [TotalSegmentator small dataset v201](https://zenodo.org/records/10047263), using

@@ -5,6 +5,7 @@
 
 import inspect
 import json
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -164,19 +165,40 @@ def test_simple_rejects_unsupported_formats(tmp_path):
 
 
 @pytest.mark.parametrize("fail", [False, True])
-def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail):
+@pytest.mark.parametrize("data_dir_set", [True, False])
+def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail, data_dir_set):
     root = tmp_path / "upstream"
     (root / "configs").mkdir(parents=True)
-    (root / "conditions.json").write_text(json.dumps([{"organ_size": [0.5] * 10}]))
+    # As upstream: dataset paths are relative to MONAI_DATA_DIRECTORY, not the checkout.
     (root / "configs/environment_rflow-ct.json").write_text(
-        json.dumps({"all_anatomy_size_conditions_json": "conditions.json"})
+        json.dumps({"all_anatomy_size_conditions_json": "datasets/all_anatomy_size_conditions.json"})
     )
     (root / "configs/config_infer.json").write_text(
         json.dumps({"anatomy_list": ["lung tumor"]})
     )
+    data_dir = tmp_path / "monai_data"
+    if data_dir_set:
+        (data_dir / "datasets").mkdir(parents=True)
+        (data_dir / "datasets/all_anatomy_size_conditions.json").write_text(json.dumps([{"organ_size": [0.5] * 10}]))
+        monkeypatch.setenv("MONAI_DATA_DIRECTORY", str(data_dir))
+    else:
+        monkeypatch.delenv("MONAI_DATA_DIRECTORY", raising=False)
+    downloads = []
+
+    def download_model_data(version, root_dir):
+        """Stub upstream download: provides the conditions file only under the data root."""
+        downloads.append((version, root_dir))
+        target = Path(root_dir) / "datasets/all_anatomy_size_conditions.json"
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps([{"organ_size": [0.5] * 10}]))
+
     scripts = ModuleType("scripts")
     scripts.sample = ModuleType("scripts.sample")
     scripts.inference = ModuleType("scripts.inference")
+    downloader = ModuleType("scripts.download_model_data")
+    downloader.download_model_data = download_model_data
+    monkeypatch.setitem(sys.modules, "scripts.download_model_data", downloader)
     def original_filter(labels, organs):
         return labels[:1]
 
@@ -185,6 +207,12 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
     def infer():
         environment = json.loads(Path(sys.argv[sys.argv.index("-e") + 1]).read_text())
         config = json.loads(Path(sys.argv[sys.argv.index("-i") + 1]).read_text())
+        data_root = os.environ["MONAI_DATA_DIRECTORY"]  # Inference resolves the same root.
+        assert downloads == [("rflow-ct", data_root)]
+        assert environment["all_anatomy_size_conditions_json"] == os.path.join(
+            data_root, "datasets/all_anatomy_size_conditions.json"
+        )
+        assert data_root == str(data_dir) if data_dir_set else data_root.startswith(str(tmp_path))
         assert config["num_output_samples"] == 1
         assert config["controllable_anatomy_size"] == [["liver", 0.5]]
         labels = np.array([1, 2, 62], dtype=np.uint8)
@@ -219,6 +247,7 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         exec(compile(code, "<worker>", "exec"), {"__name__": "__main__"})
     assert sys.argv is original_argv
     assert scripts.sample.filter_mask_with_organs is original_filter
+    assert os.environ.get("MONAI_DATA_DIRECTORY") == (str(data_dir) if data_dir_set else None)
     if fail:
         assert not mask.exists() and not ct.exists()
         return

@@ -407,16 +407,29 @@ class NVSegmentImporter:
 
 
 def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Path") -> None:
-    """Run upstream NV-Generate rflow-ct inference from its checkout; self-contained for -c."""
+    """Run upstream NV-Generate rflow-ct inference from its checkout; self-contained for -c.
+
+    Data files resolve exactly as upstream does: ``datasets/...`` entries live under
+    ``$MONAI_DATA_DIRECTORY`` (or a fresh directory when it is unset), downloaded by
+    upstream's ``download_model_data``. Inference then runs against that same root.
+    """
     import json
+    import os
     import shutil
     import sys
+    import tempfile
     from pathlib import Path
 
     from scripts import inference, sample
+    from scripts.download_model_data import download_model_data
 
     folder = Path(mask_output).parent
+    data_root = os.environ.get("MONAI_DATA_DIRECTORY") or tempfile.mkdtemp(prefix="data-", dir=folder)
+    os.makedirs(data_root, exist_ok=True)
+    download_model_data("rflow-ct", data_root)  # Skips files that already exist.
     environment = json.loads(Path("configs/environment_rflow-ct.json").read_text())
+    # Upstream's rule; absolute paths survive its own os.path.join(root_dir, value) unchanged.
+    environment = {k: os.path.join(data_root, v) if "datasets/" in v else v for k, v in environment.items()}
     config = json.loads(Path("configs/config_infer.json").read_text())
     # A size condition triggers fresh mask diffusion instead of selecting a cached mask.
     conditions = json.loads(Path(environment["all_anatomy_size_conditions_json"]).read_text())
@@ -427,13 +440,19 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
     (folder / "inference.json").write_text(json.dumps(config))
     # Upstream keeps only the conditioning organ in its saved mask; keep every label.
     original_filter, original_argv = sample.filter_mask_with_organs, sys.argv
+    original_root = os.environ.get("MONAI_DATA_DIRECTORY")
     sample.filter_mask_with_organs = lambda labels, organs: labels
     sys.argv = ["inference", "-t", "configs/config_network_rflow.json", "-e", str(folder / "environment.json"),
                 "-i", str(folder / "inference.json"), "--random-seed", str(seed), "--version", "rflow-ct"]
+    os.environ["MONAI_DATA_DIRECTORY"] = data_root  # Inference resolves (and downloads into) the same root.
     try:
         inference.main()
     finally:
         sample.filter_mask_with_organs, sys.argv = original_filter, original_argv
+        if original_root is None:
+            os.environ.pop("MONAI_DATA_DIRECTORY", None)
+        else:
+            os.environ["MONAI_DATA_DIRECTORY"] = original_root
     images = list((folder / "generated").glob("*_image.nii.gz"))
     if len(images) != 1:
         raise RuntimeError(f"Expected one generated CT, found {len(images)}")
