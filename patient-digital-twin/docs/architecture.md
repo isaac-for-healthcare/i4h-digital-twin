@@ -42,7 +42,6 @@ classDiagram
     class AnatomyCollection {
         structures: dict[str, AnatomicalStructure]
         body_to_imaging: 4x4 | None
-        source_segmentation: ZYX labels | None
         select(kind, system, include_empty)
         set_enabled / set_system_enabled / set_structure_enabled
     }
@@ -135,7 +134,7 @@ flowchart LR
    structure.
 4. **Export.** `export_to_usd` writes the current pose plus embedded HU. `export_patient_twin`
    writes anatomy in the scan's physical frame and, for `vessel_names`, rasterizes those
-   vessels on the CT grid (from the retained source labels, or by voxelizing meshes) and
+   vessel meshes, as placed in the USD, onto the CT grid and
    writes navigation centerline arrays in scan units.
 
 The CLI (`__main__.run_pipeline`) chains these steps for NV-Segment and NV-Generate:

@@ -122,3 +122,22 @@ def test_ct_exterior_is_one_body_surface(tmp_path):
     count = len(skin.GetPointsAttr().Get())
     graph = coo_matrix((np.ones(len(edges)), (edges[:, 0], edges[:, 1])), shape=(count, count))
     assert connected_components(graph, directed=False)[0] == 1
+
+
+@pytest.mark.parametrize("shift_mm", [0.0, 10.0])
+def test_navigation_mask_follows_attached_registration(tmp_path, shift_mm):
+    """A custom attach_scan registration moves the navigation path with the exported vessel."""
+    from patient_digital_twin.scan_volume import from_array
+
+    labels = np.zeros((30, 20, 25), np.uint8)  # ZYX on a 1 mm grid.
+    labels[3:27, 8:13, 9:14] = 1  # Aorta occupies X indices 9-13.
+    body = HumanBody(SegmentationImporter(labels, {1: "aorta"}).to_anatomy_collection())
+    registration = body.anatomy.body_to_imaging.copy()
+    registration[0, 3] += shift_mm / 1000
+    ct = from_array(np.where(labels, 300.0, 40.0).transpose(2, 1, 0), np.eye(4), world_unit="mm")
+    body.attach_scan(ct, body_to_imaging=registration)
+    manifest = body.export_patient_twin(tmp_path / "bundle", vessel_names=["aorta"])
+    x = np.load(manifest.parent / "centerline_points.npy")[:, 0]
+    np.testing.assert_allclose(x, 11.0 + shift_mm, atol=1e-6)
+    mask = np.load(manifest.parent / "vessel_mask.npy")  # Native IJK order from from_array.
+    assert mask[int(9 + shift_mm):int(14 + shift_mm)].any() and mask.sum() == labels.sum()

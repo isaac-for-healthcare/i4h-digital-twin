@@ -60,7 +60,7 @@ use the scan physical frame and units. CT and masks preserve source array order.
 Simulator world placement is applied downstream.
 
 With attached CT and `vessel_names`, bundle export calculates a navigation graph
-from the retained source labels, or rasterizes meshes if labels are unavailable.
+by rasterizing the registered vessel meshes onto the CT grid.
 See the [export steps](../README.md#4-export) and [USD guide](../docs/usd.md).
 
 ## Small implementation, direct controls

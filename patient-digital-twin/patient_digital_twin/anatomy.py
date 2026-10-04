@@ -234,22 +234,16 @@ class AnatomicalStructure:
 
 
 class AnatomyCollection:
-    """Named structures plus the source registration and label volume they came from.
+    """Named structures plus the source registration they were imported with.
 
     Attributes:
         structures: ``dict[name, AnatomicalStructure]`` (shared, not copied).
         body_to_imaging: Optional rigid body-frame-to-RAS-meter transform (validated on set).
-        source_segmentation / source_label_names / source_voxel_to_ras_m: the importer's
-            ZYX label volume, its ID -> name map, and voxel-to-RAS-meter affine, used by
-            bundle export to build vessel masks on the CT grid. None for mesh imports.
     """
 
     def __init__(self, structures: dict[str, AnatomicalStructure] | None = None) -> None:
         self.structures: dict[str, AnatomicalStructure] = {} if structures is None else structures
         self._body_to_imaging: np.ndarray | None = None
-        self.source_segmentation: np.ndarray | None = None
-        self.source_label_names: dict[int, str] = {}
-        self.source_voxel_to_ras_m: np.ndarray | None = None
 
     @property
     def body_to_imaging(self) -> np.ndarray | None:

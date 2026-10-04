@@ -106,29 +106,29 @@ def write_artifacts(scan: ScanVolume, output: str | Path, *, vessel_mask: ArrayL
 
 
 def _vessel_mask(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> NDArray[np.bool_]:
-    """Requested vessels on the scan grid: source labels, or rasterized meshes without them."""
-    anatomy, imaging = body.anatomy, body.imaging
-    labels, labels_to_ras = anatomy.source_segmentation, anatomy.source_voxel_to_ras_m
+    """Rasterize the requested vessel meshes onto the scan grid, exactly as the bundle USD places them.
+
+    Each mesh goes through ``body.imaging.body_to_imaging @ local_to_body``, so a custom
+    registration passed to ``attach_scan`` (or an edited structure placement) moves the
+    navigation mask and centerline together with the exported vessel.
+    """
+    imaging = body.imaging
     if imaging is None:
         raise ValueError("Vessel masks require attached CT")
-    if labels is not None:
-        if labels_to_ras is None or labels.shape != scan.values_kji.shape or not np.allclose(
-            labels_to_ras, scan.ijk_to_ras_m, atol=1e-9, rtol=1e-6
-        ):
-            raise ValueError("Segmentation and attached scan must share the same physical grid")
-        mask = np.isin(labels, [i for i, n in anatomy.source_label_names.items() if n in names])
-    else:
-        mask = np.zeros(scan.values_kji.shape, bool)
-        for name in names:
-            structure = anatomy.structures[name]
-            vertices, faces = structure.mesh.vertices, structure.mesh.faces
-            if vertices is None or faces is None:
-                raise ValueError(f"Missing vessel mesh: {name}")
-            to_ijk = np.linalg.inv(scan.ijk_to_ras_m) @ imaging.body_to_imaging @ structure.local_to_body
+    scan_from_body = np.linalg.inv(scan.ijk_to_ras_m) @ imaging.body_to_imaging
+    mask = np.zeros(scan.values_kji.shape, bool)
+    for name in names:
+        structure = body.anatomy.structures[name]
+        vertices, faces = structure.mesh.vertices, structure.mesh.faces
+        if vertices is None or faces is None:
+            raise ValueError(f"Missing vessel mesh: {name}")
+        try:
             mask |= voxelize_mesh(
-                transform_points(vertices, to_ijk), faces,
+                transform_points(vertices, scan_from_body @ structure.local_to_body), faces,
                 shape_zyx=mask.shape, spacing_zyx_m=(1.0, 1.0, 1.0), origin_xyz_m=(0.0, 0.0, 0.0),
             )
+        except ValueError as exc:
+            raise ValueError(f"Cannot rasterize vessel {name!r} onto the scan grid: {exc}") from exc
     if not mask.any():
         raise ValueError("Selected vessels have no foreground in the scan")
     return mask.transpose(["kji".index(c) for c in scan.array_axes])

@@ -219,9 +219,6 @@ class SegmentationImporter:
             if structure.mesh.vertices is not None:
                 structure.local_to_body[:3, 3] -= registration[:3, 3]
                 structure.local_to_world = structure.local_to_body.copy()
-        self.masks_zyx.setflags(write=False)
-        body.source_segmentation, body.source_label_names = self.masks_zyx, dict(self._names)
-        body.source_voxel_to_ras_m = self.affine_xyz_to_imaging_m.copy()
         return body
 
 
