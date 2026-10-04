@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digital-twin"
+version = "0.1.0"
+description = "Patient, hospital, robot, and simulation-ready digital twin modules."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "i4h" }]
+dependencies = [
+  "numpy>=1.24",
+  "nibabel>=5.0",
+  "PyYAML>=6.0",
+  "scikit-image>=0.22",
+  "boto3",
+  "requests",
+  "tqdm",
+]
+
+[project.optional-dependencies]
+patient-dicom = ["SimpleITK>=2.3.0"]
+patient-nvsegment = ["torch>=2.4", "monai>=1.5", "pytorch-ignite>=0.5", "fire>=0.6", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "scipy>=1.10"]
+patient-nvgenerate = ["torch>=2.4", "monai>=1.5", "einops>=0.7", "huggingface_hub>=0.20", "matplotlib>=3.7", "tqdm>=4.65", "fire>=0.5", "tensorboard>=2.14", "scipy>=1.10"]
+patient-pipeline = ["usd-core", "vtk", "scipy>=1.10"]
+dev = ["pytest>=8.0", "mypy>=1.10", "pydicom>=2.4", "usd-core", "vtk", "scipy>=1.10", "SimpleITK>=2.3.0", "trimesh"]  # Everything the test suite exercises.
+patient-usd = ["usd-core"]
+patient-vasculature = ["SimpleITK>=2.3", "scipy>=1.10", "scikit-image>=0.22", "totalsegmentator>=2.7", "vtk>=9.2", "warp-lang>=1.3"]  # Deprecated vasculature_digital_twin.
+
+[project.scripts]
+patient-digital-twin = "patient_digital_twin.__main__:main"
+i4h-asset-retrieve = "i4h_asset_helper.cli:retrieve_main"
+vdt-preprocess-ct = "vasculature_digital_twin.cli.preprocess_ct:main"  # Deprecated.
+vdt-segment-vessels = "vasculature_digital_twin.cli.segment_vessels:main"  # Deprecated.
+
+[tool.setuptools]
+packages = [
+  "hospital_digital_twin",
+  "i4h_asset_helper",
+  "patient_digital_twin",
+  "robot_digital_twin",
+  "sim_ready_assets",
+  "vasculature_digital_twin",  # Deprecated.
+  "vasculature_digital_twin.cli",
+  "vasculature_digital_twin.ct",
+]
+package-dir = { hospital_digital_twin = "hospital-digital-twin/hospital_digital_twin", i4h_asset_helper = "sim-ready-assets/i4h_asset_helper", patient_digital_twin = "patient-digital-twin/patient_digital_twin", robot_digital_twin = "robot-digital-twin/robot_digital_twin", sim_ready_assets = "sim-ready-assets/sim_ready_assets", vasculature_digital_twin = "patient-digital-twin/vasculature_digital_twin" }
+include-package-data = true
+
+[tool.setuptools.package-data]
+i4h_asset_helper = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["patient-digital-twin/tests"]
+addopts = "-v --tb=short"
