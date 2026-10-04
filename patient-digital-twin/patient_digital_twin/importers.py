@@ -93,10 +93,41 @@ def _labelmap(value: Mapping[Any, Any] | str | Path) -> dict[int, str]:
     return result
 
 
+Region = tuple[NDArray[np.intp], NDArray[np.bool_]]
+
+
+def _crop(mask: NDArray[np.bool_]) -> Region | None:
+    """``(low_zyx, cropped mask)`` for a binary ZYX mask, or None when it is empty."""
+    from scipy.ndimage import find_objects
+
+    box = find_objects(mask.astype(np.uint8))
+    if not box or box[0] is None:
+        return None
+    low = np.array([s.start for s in box[0]])
+    return low, mask[box[0]].copy()
+
+
+def _union(first: Region | None, second: Region | None) -> Region | None:
+    """Union two cropped masks on the same grid (for files that share a canonical name)."""
+    if first is None or second is None:
+        return first or second
+    low = np.minimum(first[0], second[0])
+    high = np.maximum(first[0] + first[1].shape, second[0] + second[1].shape)
+    window = np.zeros(high - low, bool)
+    for start, mask in (first, second):
+        offset = start - low
+        window[tuple(slice(o, o + n) for o, n in zip(offset, mask.shape))] |= mask
+    return low, window
+
+
 def _load_masks(
     path: Path, names: Iterable[str] | None
-) -> tuple[NDArray[np.int32], dict[int, str], NDArray[np.float64]]:
-    """Merge a directory of binary NIfTI masks (named by file) into ``(ZYX labels, ID->name, affine_m)``."""
+) -> tuple[tuple[int, int, int], dict[str, Region | None], NDArray[np.float64]]:
+    """Read a directory of binary NIfTI masks (named by file) as independent cropped masks.
+
+    Masks may overlap: each structure keeps its own voxels. Returns ``(grid shape ZYX,
+    {canonical name: (low_zyx, cropped mask) or None when empty}, voxel-to-meter affine)``.
+    """
     files = {f.name.removesuffix(".gz").removesuffix(".nii"): f
              for f in sorted(path.glob("*.nii")) + sorted(path.glob("*.nii.gz"))}
     files = {n: f for n, f in files.items() if not SKIP.fullmatch(canonical_name(n))}
@@ -108,26 +139,28 @@ def _load_masks(
     if not files:
         raise FileNotFoundError(f"No NIfTI masks in {path}")
     reference = _load_nifti(next(iter(files.values())))
-    volume, affine = np.zeros(reference.shape[::-1], np.int32), nifti_affine_m(reference)
-    labels: dict[int, str] = {}
-    for label_id, (name, file) in enumerate(files.items(), 1):
+    shape, affine = reference.shape[::-1], nifti_affine_m(reference)
+    regions: dict[str, Region | None] = {}
+    for name, file in files.items():
         image = _load_nifti(file)
         data = np.asanyarray(image.dataobj)
-        if image.shape != volume.shape[::-1] or not np.allclose(nifti_affine_m(image), affine, atol=1e-8):
+        if image.shape != shape[::-1] or not np.allclose(nifti_affine_m(image), affine, atol=1e-8):
             raise ValueError(f"Mask grid/affine mismatch: {file}")
         if not np.isin(data, [0, 1]).all():
             raise ValueError(f"Expected a binary mask: {file}")
-        mask = data.transpose(2, 1, 0).astype(bool)
-        if np.any(volume[mask]):
-            raise ValueError(f"Overlapping binary masks cannot form a label volume: {file}")
-        volume[mask], labels[label_id] = label_id, name
-    return volume, labels, affine
+        key = canonical_name(name)
+        region = _crop(data.transpose(2, 1, 0).astype(bool))
+        regions[key] = _union(regions[key], region) if key in regions else region
+    return (int(shape[0]), int(shape[1]), int(shape[2])), regions, affine
 
 
 class SegmentationImporter:
     """Mesh an existing segmentation: a labeled NIfTI, a binary-mask directory, or a label array.
 
-    Construction reads and validates the labels; ``to_anatomy_collection()`` meshes them.
+    Construction reads and validates the labels into ``masks``: one cropped boolean mask per
+    canonical structure name (``(low_zyx, mask)``, or None when empty) on the shared
+    ``shape_zyx`` grid. Directory masks may overlap; each structure keeps its own voxels.
+    ``to_anatomy_collection()`` meshes every mask independently.
 
     Examples:
         ``SegmentationImporter("labels.nii.gz", "label_dict.json")`` (NV-Generate name->ID JSON),
@@ -153,21 +186,21 @@ class SegmentationImporter:
             names: Directory only: load just these structures.
             affine_xyz_to_imaging_m: Array only: XYZ voxel index to meters (default 1 mm voxels).
         """
-        source_volume: ArrayLike
-        source_affine: ArrayLike | None
         if isinstance(source, (str, Path)) and Path(source).is_dir():
-            source_volume, labels, source_affine = _load_masks(Path(source), names)
+            self.shape_zyx, self.masks, affine = _load_masks(Path(source), names)
+            self.affine_xyz_to_imaging_m = affine.copy()
+            return
+        if names is not None:
+            raise ValueError("names selects files in a binary-mask directory only")
+        if labelmap is None:
+            raise ValueError("Pass the matching label dictionary (e.g. configs/label_dict.json)")
+        labels, source_affine = _labelmap(labelmap), affine_xyz_to_imaging_m
+        source_volume: ArrayLike
+        if isinstance(source, (str, Path)):
+            image = _load_nifti(source)
+            source_volume, source_affine = np.asanyarray(image.dataobj).transpose(2, 1, 0), nifti_affine_m(image)
         else:
-            if names is not None:
-                raise ValueError("names selects files in a binary-mask directory only")
-            if labelmap is None:
-                raise ValueError("Pass the matching label dictionary (e.g. configs/label_dict.json)")
-            labels, source_affine = _labelmap(labelmap), affine_xyz_to_imaging_m
-            if isinstance(source, (str, Path)):
-                image = _load_nifti(source)
-                source_volume, source_affine = np.asanyarray(image.dataobj).transpose(2, 1, 0), nifti_affine_m(image)
-            else:
-                source_volume = source
+            source_volume = source
         volume = np.asarray(source_volume)
         affine = np.diag([0.001] * 3 + [1.0]) if source_affine is None else np.asarray(source_affine, dtype=float)
         if (volume.ndim != 3 or min(volume.shape) == 0 or not np.isfinite(volume).all()
@@ -179,9 +212,31 @@ class SegmentationImporter:
             raise ValueError("Expected an invertible finite voxel-to-imaging affine")
         if missing := set(map(int, np.unique(volume))) - {0} - labels.keys():
             raise ValueError(f"Present IDs missing from labelmap: {sorted(missing)}")
-        self.masks_zyx, self.affine_xyz_to_imaging_m = volume.astype(np.int32), affine.copy()
-        self._names = {i: canonical_name(raw) for i, raw in labels.items()
-                       if i and not SKIP.fullmatch(canonical_name(raw))}
+        self.affine_xyz_to_imaging_m = affine.copy()
+        self.shape_zyx = (int(volume.shape[0]), int(volume.shape[1]), int(volume.shape[2]))
+        self.masks = self._label_regions(volume.astype(np.int32), labels)
+
+    @staticmethod
+    def _label_regions(volume: NDArray[np.int32], labels: Mapping[int, str]) -> dict[str, Region | None]:
+        """Split a label volume into one cropped mask per canonical name (IDs sharing a name merge)."""
+        from scipy.ndimage import find_objects
+
+        boxes = find_objects(volume)
+        ids_by_name: dict[str, list[int]] = {}
+        for label_id, raw in labels.items():
+            name = canonical_name(raw)
+            if label_id and not SKIP.fullmatch(name):
+                ids_by_name.setdefault(name, []).append(label_id)
+        regions: dict[str, Region | None] = {}
+        for name, ids in ids_by_name.items():
+            present = [i for i in ids if i <= len(boxes) and boxes[i - 1] is not None]
+            if not present:
+                regions[name] = None
+                continue
+            low = np.min([[b.start for b in boxes[i - 1]] for i in present], axis=0)
+            high = np.max([[b.stop for b in boxes[i - 1]] for i in present], axis=0)
+            regions[name] = low, np.isin(volume[tuple(slice(a, b) for a, b in zip(low, high))], present)
+        return regions
 
     def to_anatomy_collection(self, *, strict: bool = False) -> AnatomyCollection:
         """Mesh every present label into a structure; labels with no voxels stay empty.
@@ -191,20 +246,13 @@ class SegmentationImporter:
         ``body_to_imaging`` maps it back to the image's RAS meters. With ``strict=True``
         label names missing from the catalog raise ``ValueError``.
         """
-        from scipy.ndimage import find_objects
-
-        body = AnatomyCollection.from_names(self._names.values(), strict=strict)
-        boxes = find_objects(self.masks_zyx)
-        present: dict[str, list[int]] = {}
+        body = AnatomyCollection.from_names(self.masks, strict=strict)
         bounds: list[NDArray[np.floating]] = []
-        for label_id, name in self._names.items():
-            if label_id <= len(boxes) and boxes[label_id - 1] is not None:
-                present.setdefault(name, []).append(label_id)
         flip = np.linalg.det(self.affine_xyz_to_imaging_m[:3, :3]) < 0
-        for name, ids in present.items():
-            low = np.min([[b.start for b in boxes[i - 1]] for i in ids], axis=0)
-            high = np.max([[b.stop for b in boxes[i - 1]] for i in ids], axis=0)
-            window = np.isin(self.masks_zyx[tuple(slice(a, b) for a, b in zip(low, high))], ids)
+        for name, region in self.masks.items():
+            if region is None:
+                continue
+            low, window = region
             vertices, faces = mask_to_mesh(window)  # Voxel XYZ; the full affine follows.
             vertices = transform_points(vertices + low[::-1], self.affine_xyz_to_imaging_m)
             structure, center = body.structures[name], vertices.mean(0)

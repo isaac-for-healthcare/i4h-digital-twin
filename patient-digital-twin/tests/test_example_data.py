@@ -31,7 +31,7 @@ def test_sample_mask_selection():
 
     root = Path(__file__).parents[1] / "examples/data/s0011/segmentations"
     importer = SegmentationImporter(root, names=["aorta"])
-    assert set(importer._names.values()) == {"aorta"}
+    assert set(importer.masks) == {"aorta"}
     anatomy = importer.to_anatomy_collection()
     assert set(anatomy.structures) == {"aorta"}
     assert not anatomy.structures["aorta"].is_empty

@@ -36,7 +36,11 @@ def test_full_affine_and_local_mesh_roundtrip(tmp_path):
     path = tmp_path / "sample_label.nii.gz"
     nib.save(image, path)
     importer = SegmentationImporter(path, {"right kidney": 5, "heart": 115})
-    np.testing.assert_array_equal(importer.masks_zyx, labels.transpose(2, 1, 0))
+    assert importer.shape_zyx == (14, 12, 10) and importer.masks["heart"] is None
+    low, mask = importer.masks["kidney_right"]
+    full = np.zeros(importer.shape_zyx, bool)
+    full[tuple(slice(a, a + n) for a, n in zip(low, mask.shape))] = mask
+    np.testing.assert_array_equal(full, labels.transpose(2, 1, 0) == 5)
     body = HumanBody(importer.to_anatomy_collection(strict=True))
     structure = body.anatomy.structures["kidney_right"]
     assert structure.kind == Kind.ORGAN
@@ -107,12 +111,23 @@ def test_invalid_input_and_unknown_labels():
         _labelmap({"1.5": "liver"})
 
 
-def test_directory_grid_and_overlap_rejected(tmp_path):
-    image = nib.Nifti1Image(np.ones((3, 3, 3), np.uint8), np.eye(4))
+def test_directory_masks_overlap_independently_and_grid_mismatch_is_rejected(tmp_path):
+    liver, spleen = np.zeros((6, 6, 6), np.uint8), np.zeros((6, 6, 6), np.uint8)
+    liver[0:4, 1:4, 1:4], spleen[2:6, 1:4, 1:4] = 1, 1  # XYZ overlap at x = 2-3.
+    image = nib.Nifti1Image(liver, np.eye(4))
     nib.save(image, tmp_path / "liver.nii.gz")
-    nib.save(image, tmp_path / "spleen.nii.gz")
-    with pytest.raises(ValueError, match="Overlapping"):
-        SegmentationImporter(tmp_path)
+    nib.save(nib.Nifti1Image(spleen, np.eye(4)), tmp_path / "spleen.nii.gz")
+    importer = SegmentationImporter(tmp_path)
+    for name, mask in (("liver", liver), ("spleen", spleen)):
+        low, window = importer.masks[name]
+        assert window.sum() == mask.sum()  # Each structure keeps the shared voxels.
+    anatomy = importer.to_anatomy_collection()
+    widths = {n: np.ptp(anatomy.structures[n].body_vertices[:, 0]) for n in ("liver", "spleen")}
+    np.testing.assert_allclose(list(widths.values()), [0.004, 0.004])
+    np.testing.assert_allclose(
+        anatomy.structures["spleen"].body_vertices[:, 0].min() - anatomy.structures["liver"].body_vertices[:, 0].min(),
+        0.002,
+    )
     image.set_sform(np.diag([2, 2, 2, 1]))
     nib.save(image, tmp_path / "spleen.nii.gz")
     with pytest.raises(ValueError, match="mismatch"):
