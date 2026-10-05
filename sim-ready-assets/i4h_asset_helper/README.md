@@ -108,6 +108,48 @@ What `--verify` can check depends on what the catalog version publishes in `asse
 
 Listing verification needs network access and is the check that catches a partial download, which is the usual failure when a fetch is interrupted or exceeds `--timeout`. Pass `--sub-path` alongside `--verify` to scope it to the sub path you downloaded; without it, verification expects the entire catalog.
 
+### Operating-room node-graph icon repair
+
+Catalog `0.7.0/724f82e` contains an unresolved
+`core_definitions.file_texture.png` reference in
+`Props/shared_OR_without_Mark/main.usd`. It is the
+`ui:nodegraph:node:icon` default on the bed-sheet material's `file_texture`
+node graph, not a material texture input. A complete download can therefore
+pass `--verify` while USD dependency validation still reports this missing icon.
+
+An opt-in repair clears only that known icon default in a new sibling layer.
+Install `usd-core` (validated with `25.11`) or use Isaac Sim's USD runtime:
+
+```bash
+uv pip install usd-core==25.11
+scene="$HOME/.cache/i4h-assets/724f82e/Props/shared_OR_without_Mark"
+python -m i4h_asset_helper.repair_or_scene "$scene/main.usd" "$scene/main.repaired.usd"
+```
+
+Open `main.repaired.usd` to use the corrected scene. Keep it beside `main.usd`
+so relative asset paths continue to resolve. The source is preserved, existing
+output files are refused, and an unexpected icon value aborts the repair.
+No rendering inputs, connections, or material library references are changed.
+
+With plain USD 25.11, `UsdUtils.ComputeAllDependencies` reports seven unresolved
+paths before this repair and six afterward. The remaining names are
+`OmniEmissive.mdl`, `OmniGlass.mdl`, `OmniPBR.mdl`, `OmniSurface.mdl`,
+`nvidia/aux_definitions.mdl`, and `nvidia/core_definitions.mdl`; the reported
+Isaac Sim environment supplies these through its MDL search path. Do not ignore
+arbitrary missing `.mdl` files when validating other scenes.
+
+The permanent catalog fix is to clear this same icon default in the authored
+scene and publish the corrected asset in a new catalog revision. The asset
+binaries are hosted outside this repository; this utility does not change the
+published catalog or silently alter downloads. The node will use its fallback
+UI icon; visual validation in Isaac Sim is still recommended before publication.
+
+Run the USD regression tests with `usd-core` installed:
+
+```bash
+python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
+```
+
 ### Environment Variables
 
 #### I4H_ASSET_DOWNLOAD_DIR
