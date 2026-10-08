@@ -1394,7 +1394,8 @@ dev = [
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "simpleitk" },
     { name = "trimesh" },
-    { name = "usd-core" },
+    { name = "usd-core", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
     { name = "vtk" },
 ]
 patient-dicom = [
@@ -1432,11 +1433,13 @@ patient-pipeline = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "usd-core" },
+    { name = "usd-core", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
     { name = "vtk" },
 ]
 patient-usd = [
-    { name = "usd-core" },
+    { name = "usd-core", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
 ]
 patient-vasculature = [
     { name = "scikit-image", version = "0.25.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1489,9 +1492,12 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'patient-nvgenerate'", specifier = ">=4.65" },
     { name = "tqdm", marker = "extra == 'patient-nvsegment'", specifier = ">=4.65" },
     { name = "trimesh", marker = "extra == 'dev'" },
-    { name = "usd-core", marker = "extra == 'dev'" },
-    { name = "usd-core", marker = "extra == 'patient-pipeline'" },
-    { name = "usd-core", marker = "extra == 'patient-usd'" },
+    { name = "usd-core", marker = "(platform_machine != 'aarch64' and extra == 'dev') or (sys_platform != 'linux' and extra == 'dev')", specifier = ">=24.3" },
+    { name = "usd-core", marker = "(platform_machine != 'aarch64' and extra == 'patient-pipeline') or (sys_platform != 'linux' and extra == 'patient-pipeline')", specifier = ">=24.3" },
+    { name = "usd-core", marker = "(platform_machine != 'aarch64' and extra == 'patient-usd') or (sys_platform != 'linux' and extra == 'patient-usd')", specifier = ">=24.3" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'dev'", specifier = ">=2.2" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'patient-pipeline'", specifier = ">=2.2" },
+    { name = "usd-exchange", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'patient-usd'", specifier = ">=2.2" },
     { name = "vtk", marker = "extra == 'dev'" },
     { name = "vtk", marker = "extra == 'patient-pipeline'" },
     { name = "vtk", marker = "extra == 'patient-vasculature'", specifier = ">=9.2" },
@@ -6101,6 +6107,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/94/56/1b14f82eaa8db9d054246ec6c4abad146c21eb4e914e742d4ad153f8325a/usd_core-26.8-cp314-none-macosx_10_15_universal2.whl", hash = "sha256:fec6ba0ddcf6b285e1757494fcb66e57c23993098cb3cb26bf8db263567bb945", size = 40856543, upload-time = "2026-07-20T14:32:39.783Z" },
     { url = "https://files.pythonhosted.org/packages/4f/ce/76e0476d04c387cbf435f11aafb36ff4f79345215d7b9dbb677a7a1efa11/usd_core-26.8-cp314-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:114f39723ccfc9a269cfdf6a7b80fec53aa96530806e510a6cccfd577401a07c", size = 29575839, upload-time = "2026-07-20T14:32:43.582Z" },
     { url = "https://files.pythonhosted.org/packages/fc/87/d5cd29f5326bb945cf90198d28c7f3fca45a950e7512851360ced2e0a7e9/usd_core-26.8-cp314-none-win_amd64.whl", hash = "sha256:c780f28b624f4efb3d8f78af805f17082b3976f61ba18da8171bb898ce31f2be", size = 14451875, upload-time = "2026-07-20T14:32:46.461Z" },
+]
+
+[[package]]
+name = "usd-exchange"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/60/a53a81f1bc9d7f62a63e25d426aeefe493a0558eeba7082293cf1c327db6/usd_exchange-3.0.1-cp310-cp310-manylinux_2_34_aarch64.whl", hash = "sha256:af569ae6a7b78e878fa696e9dac6d2d05ba85dc70804233c2a96f7597fff898a", size = 25948706, upload-time = "2026-10-07T14:43:39.644Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/36/1468879aae3aafd495d551114490d44df212a361113654f81ff12a12ffa9/usd_exchange-3.0.1-cp311-cp311-manylinux_2_34_aarch64.whl", hash = "sha256:8c173a44be1412c8cc3df8a6c8886478b2ebe24155c69585ffbb5d5bdb2b5ce4", size = 25946095, upload-time = "2026-10-07T14:45:01.109Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/7f/6fc695ddc4904f9835084eb72523b3ffa82bf231d2818694fffaa9f297ce/usd_exchange-3.0.1-cp312-cp312-manylinux_2_34_aarch64.whl", hash = "sha256:687dae585ffceee4acacb19723bc6f61e9c61dcef332651be7dd230e3d99c9fb", size = 25810541, upload-time = "2026-10-07T14:46:03.864Z" },
+    { url = "https://files.pythonhosted.org/packages/17/3c/ccdb6812c15776b0902172b8cfd0f853647197501bfc1dd5c8c87f2083f6/usd_exchange-3.0.1-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:330806db3fb147026bc278645718c9efc890a469eaf813ce235405d6fa1d2d9e", size = 25808381, upload-time = "2026-10-07T14:47:25.163Z" },
 ]
 
 [[package]]

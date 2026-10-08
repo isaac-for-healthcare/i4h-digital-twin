@@ -452,16 +452,19 @@ def _is_url_folder(url_entry: str) -> bool:
             s3_client = _get_s3_client()
 
             # For S3, a folder is indicated by a key that ends with a '/'
-            # If key doesn't end with '/', check if objects exist with this prefix
+            # If key doesn't end with '/', check if objects exist under "<key>/"
             if not key.endswith("/"):
-                # List objects with this prefix to see if it's a folder
+                # The bare key is not a usable prefix: a file's own key matches it, and so does a sibling such as
+                # "NuRec" for "Nu". Only objects below "<key>/" make it a folder.
                 max_retries = 5
                 retry_count = 0
                 backoff_time = 1  # Start with 1 second
 
                 while True:
                     try:
-                        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=key, Delimiter="/", MaxKeys=1)
+                        response = s3_client.list_objects_v2(
+                            Bucket=bucket, Prefix=key + "/", Delimiter="/", MaxKeys=1
+                        )
                         # If CommonPrefixes exist, it's a folder
                         return "CommonPrefixes" in response or response.get("KeyCount", 0) > 0
                     except ClientError as e:
@@ -726,6 +729,9 @@ def retrieve_asset(
         remote_path = remote_path + "/" + sub_path
 
     paths = _list_asset_url(remote_path)
+    if not paths:
+        # Reporting success with nothing downloaded hides a mistyped or unsupported sub-path from scripts.
+        raise FileNotFoundError(f"No assets match {sub_path if sub_path is not None else remote_path}")
 
     if force_download:
         url_entries = paths
