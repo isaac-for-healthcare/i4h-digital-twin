@@ -86,16 +86,22 @@ def retrieve_main():
 
     if not args.skip_download:
         print(f"Retrieving assets for version: {args.version}")
-        local_path = retrieve_asset(
-            version=args.version,
-            download_dir=args.download_dir,
-            sub_path=args.sub_path,
-            hash=args.hash,
-            force_download=args.force,
-            verbose=True,
-            concurrency=args.concurrency,
-            timeout=args.timeout,
-        )
+        try:
+            local_path = retrieve_asset(
+                version=args.version,
+                download_dir=args.download_dir,
+                sub_path=args.sub_path,
+                hash=args.hash,
+                force_download=args.force,
+                verbose=True,
+                concurrency=args.concurrency,
+                timeout=args.timeout,
+            )
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            if use_omni:
+                app.close()
+            return 1
         print(f"Assets downloaded to: {local_path}")
     else:
         print(f"Skipping download for version: {args.version}")
