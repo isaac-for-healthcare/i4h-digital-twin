@@ -8,7 +8,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import nibabel as nib
 import numpy as np
@@ -196,6 +196,11 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
     scripts = ModuleType("scripts")
     scripts.sample = ModuleType("scripts.sample")
     scripts.inference = ModuleType("scripts.inference")
+    # Upstream's own torch; checkpoints as mask_generation_diffusion_unet_v2.pt stores them (float scale_factor).
+    def original_load(path, **kwargs):
+        return {"unet_state_dict": {}, "scale_factor": 0.75} if path == "v2.pt" else {"scale_factor": "tensor"}
+
+    scripts.inference.torch = SimpleNamespace(load=original_load, tensor=lambda value: ("tensor", value))
     downloader = ModuleType("scripts.download_model_data")
     downloader.download_model_data = download_model_data
     monkeypatch.setitem(sys.modules, "scripts.download_model_data", downloader)
@@ -215,6 +220,10 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         assert data_root == str(data_dir) if data_dir_set else data_root.startswith(str(tmp_path))
         assert config["num_output_samples"] == 1
         assert config["controllable_anatomy_size"] == [["liver", 0.5]]
+        # nvbugs 6892486: upstream calls checkpoint["scale_factor"].to(device), so a float must arrive as a tensor.
+        torch = scripts.inference.torch
+        assert torch.load("v2.pt", map_location="cpu")["scale_factor"] == ("tensor", 0.75)
+        assert torch.load("v1.pt")["scale_factor"] == "tensor"
         labels = np.array([1, 2, 62], dtype=np.uint8)
         np.testing.assert_array_equal(
             scripts.sample.filter_mask_with_organs(labels, [1]), labels
@@ -247,6 +256,7 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         exec(compile(code, "<worker>", "exec"), {"__name__": "__main__"})
     assert sys.argv is original_argv
     assert scripts.sample.filter_mask_with_organs is original_filter
+    assert scripts.inference.torch.load is original_load
     assert os.environ.get("MONAI_DATA_DIRECTORY") == (str(data_dir) if data_dir_set else None)
     if fail:
         assert not mask.exists() and not ct.exists()

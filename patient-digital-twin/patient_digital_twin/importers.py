@@ -441,7 +441,18 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
     # Upstream keeps only the conditioning organ in its saved mask; keep every label.
     original_filter, original_argv = sample.filter_mask_with_organs, sys.argv
     original_root = os.environ.get("MONAI_DATA_DIRECTORY")
+    original_load = inference.torch.load
     sample.filter_mask_with_organs = lambda labels, organs: labels
+
+    def load_with_tensor_scale_factor(*args, **kwargs):
+        # mask_generation_diffusion_unet_v2.pt stores scale_factor as a float, but upstream inference calls
+        # .to(device) on it (NV-Generate-CTMR 5cb04e8 onwards); a 0-d tensor works for both.
+        checkpoint = original_load(*args, **kwargs)
+        if isinstance(checkpoint, dict) and isinstance(checkpoint.get("scale_factor"), (int, float)):
+            checkpoint["scale_factor"] = inference.torch.tensor(float(checkpoint["scale_factor"]))
+        return checkpoint
+
+    inference.torch.load = load_with_tensor_scale_factor
     sys.argv = ["inference", "-t", "configs/config_network_rflow.json", "-e", str(folder / "environment.json"),
                 "-i", str(folder / "inference.json"), "--random-seed", str(seed), "--version", "rflow-ct"]
     os.environ["MONAI_DATA_DIRECTORY"] = data_root  # Inference resolves (and downloads into) the same root.
@@ -449,6 +460,7 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
         inference.main()
     finally:
         sample.filter_mask_with_organs, sys.argv = original_filter, original_argv
+        inference.torch.load = original_load
         if original_root is None:
             os.environ.pop("MONAI_DATA_DIRECTORY", None)
         else:
