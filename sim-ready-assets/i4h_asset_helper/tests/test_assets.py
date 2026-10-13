@@ -44,18 +44,21 @@ def test_get_i4h_asset_path_valid_version():
     version = _get_default_version()
     expected_production_path = f"{_I4H_ASSET_ROOT['production']}/{version}/{hash}"
     expected_staging_path = f"{_I4H_ASSET_ROOT['staging']}/{version}/{hash}"
-    expected_dev_path = f"{_I4H_ASSET_ROOT['dev']}/{version}/{hash}"
+    # Nucleus catalogs have no build directory.
+    expected_dev_path = f"{_I4H_ASSET_ROOT['dev']}/{version}"
     expected_paths = {expected_staging_path, expected_dev_path, expected_production_path}
     assert result in expected_paths
 
 
-def test_get_i4h_local_asset_path():
+def test_get_i4h_local_asset_path(monkeypatch):
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     result = get_i4h_local_asset_path()
     expected_path = os.path.join(os.path.expanduser("~"), ".cache", "i4h-assets", get_i4h_asset_hash())
     assert result == expected_path
 
 
-def test_get_i4h_local_asset_path_override():
+def test_get_i4h_local_asset_path_override(monkeypatch):
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     os.environ["I4H_ASSET_DOWNLOAD_DIR"] = "/tmp/i4h-assets"
     result = get_i4h_local_asset_path()
     expected_path = os.path.join("/tmp/i4h-assets", get_i4h_asset_hash())
@@ -79,6 +82,9 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
     monkeypatch.delenv("I4H_ASSET_VERSION", raising=False)
     monkeypatch.delenv("I4H_ASSET_SHA256_HASH", raising=False)
     assert _get_default_version() == "v0.9.0"
+    monkeypatch.delenv("I4H_ASSET_ENV", raising=False)
+    assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['dev']}/v0.9.0"
+    assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/v0.9.0"
     for environment in ("staging", "production"):
         monkeypatch.setenv("I4H_ASSET_ENV", environment)
         assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/c02e5b5e3d71"
@@ -87,7 +93,8 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
 
 
 def test_retrieve_asset(monkeypatch):
-    # Exercise downloads against a published catalog even while the next release is staged.
+    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
         local_dir = retrieve_asset(download_dir=temp_dir, sub_path="Test")
@@ -97,7 +104,8 @@ def test_retrieve_asset(monkeypatch):
 
 
 def test_retrieve_asset_force_download(monkeypatch):
-    # Exercise downloads against a published catalog even while the next release is staged.
+    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
         # First download
@@ -118,8 +126,9 @@ def test_retrieve_asset_force_download(monkeypatch):
         assert second_download_time > first_download_time
 
 
-def test_retrieve_asset_custom_hash():
+def test_retrieve_asset_custom_hash(monkeypatch):
     """Test retrieve_asset with custom hash parameter to ensure it doesn't fail with ValueError."""
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     with tempfile.TemporaryDirectory() as temp_dir:
         # Use a custom hash different from the default
         custom_hash = "8c0bf782eab2f44f1cc82da60eb10f6be8f941406d291b7fbfbdb53c05b3d149"
@@ -148,7 +157,8 @@ def test_retrieve_asset_custom_hash():
 
 
 def test_class_inheritance(monkeypatch):
-    # Exercise downloads against a published catalog even while the next release is staged.
+    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     class TestI4HAssets(BaseI4HAssets):
         test = "Test/basic.usda"
