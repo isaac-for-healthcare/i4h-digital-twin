@@ -28,6 +28,12 @@ from i4h_asset_helper.assets import (
 )
 
 
+@pytest.fixture(autouse=True)
+def production_env(monkeypatch):
+    # These model the S3 catalogs; the CLI would otherwise reach for omni.client.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
+
+
 def _capture_download(monkeypatch):
     """Stub out listing and downloading, recording the keyword arguments used."""
     recorded = {}

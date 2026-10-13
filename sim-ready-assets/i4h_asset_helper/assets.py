@@ -49,6 +49,11 @@ _I4H_ASSET_ROOT = {
 }
 
 
+_NUCLEUS_CLIENT_REQUIRED = (
+    "Nucleus downloads need omni.client: install `sim-ready-assets[nucleus]` or start the Isaac Sim app "
+    "before the asset helper."
+)
+
 # S3 bucket mapping
 _S3_BUCKETS = {
     "staging": "omniverse-content-staging",
@@ -136,7 +141,7 @@ def _is_import_ready(package_name: str):
 
 def _get_asset_env() -> str:
     """Get the current configuration of the asset root."""
-    return os.getenv("I4H_ASSET_ENV", "production")
+    return os.getenv("I4H_ASSET_ENV", "dev")
 
 
 def _get_download_dir() -> str:
@@ -445,7 +450,7 @@ def _is_url_folder(url_entry: str) -> bool:
 
     if not _is_import_ready("omni.client"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
@@ -505,7 +510,9 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
 
     if not _is_import_ready("isaacsim.storage.native.nucleus"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            if _is_import_ready("omni.client"):
+                return _list_omni_client_entries(_unify_path(url_entry))
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
@@ -561,6 +568,25 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
     return [(entry, None) for entry in nucleus_entries]
 
 
+def _list_omni_client_entries(folder_url: str) -> List[Tuple[str, int | None]]:
+    """List every file under a Nucleus folder with the standalone omni.client, outside Isaac Sim."""
+    import omni.client
+
+    result, items = omni.client.list(folder_url)
+    if result != omni.client.Result.OK:
+        raise ValueError(f"Failed to list {folder_url}: {result}")
+
+    entries: List[Tuple[str, int | None]] = []
+    for item in items:
+        item_url = f"{folder_url.rstrip('/')}/{item.relative_path}"
+        is_file = item.flags & omni.client.ItemFlags.READABLE_FILE
+        if item.flags & omni.client.ItemFlags.CAN_HAVE_CHILDREN and not is_file:
+            entries.extend(_list_omni_client_entries(item_url))
+        else:
+            entries.append((item_url, item.size))
+    return entries
+
+
 def _list_asset_url(url_entry: str) -> List[str]:
     """
     List all the items in the url_entry. When it is a folder, it will return all the items in the folder.
@@ -607,7 +633,7 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
 
     if not _is_import_ready("omni.client"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)

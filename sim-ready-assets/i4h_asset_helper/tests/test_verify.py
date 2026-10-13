@@ -30,7 +30,7 @@ from i4h_asset_helper.assets import (
 )
 
 # Catalog versions that publish a short S3 path segment instead of a content digest.
-PATH_IDENTIFIER_VERSIONS = ("0.5.0", "0.6.0", "0.7.0")
+PATH_IDENTIFIER_VERSIONS = ("0.5.0", "0.6.0", "0.7.0", "v0.9.0")
 CONTENT_DIGEST_VERSIONS = ("0.1.0ea", "0.1.0", "0.2.0", "0.3.0")
 
 CATALOG_FILES = {

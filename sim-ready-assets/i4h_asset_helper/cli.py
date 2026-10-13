@@ -21,6 +21,7 @@ from .assets import (
     DEFAULT_DOWNLOAD_TIMEOUT,
     _get_default_version,
     _get_download_dir,
+    _is_import_ready,
     _is_s3_environment,
     retrieve_asset,
     verify_asset,
@@ -70,19 +71,21 @@ def retrieve_main():
     )
     args = parser.parse_args()
 
-    use_omni = args.force_omni_client or not _is_s3_environment()
-    if use_omni:
+    app = None
+    if args.force_omni_client or not _is_s3_environment():
         try:
             from isaacsim import SimulationApp
         except ImportError as exc:
-            raise ImportError(
-                "Isaac Sim is required for Nucleus / omni.client downloads "
-                "(`I4H_ASSET_ENV=dev` or `--force_omni_client`). Install with "
-                "`uv pip install --extra-index-url https://pypi.nvidia.com "
-                "isaacsim[all,extscache]` on Linux x86_64 Python 3.10."
-            ) from exc
-
-        app = SimulationApp({"headless": True})
+            # The standalone omni.client reaches Nucleus without starting Isaac Sim.
+            if not _is_import_ready("omni.client"):
+                raise ImportError(
+                    "Isaac Sim or omni.client is required for Nucleus / omni.client downloads "
+                    "(the default `I4H_ASSET_ENV=dev`, or `--force_omni_client`). Install "
+                    "`sim-ready-assets[nucleus]`, or Isaac Sim with `uv pip install --extra-index-url "
+                    "https://pypi.nvidia.com isaacsim[all,extscache]` on Linux x86_64 Python 3.10."
+                ) from exc
+        else:
+            app = SimulationApp({"headless": True})
 
     if not args.skip_download:
         print(f"Retrieving assets for version: {args.version}")
@@ -114,11 +117,11 @@ def retrieve_main():
             sub_path=args.sub_path,
         )
         if not passed:
-            if use_omni:
+            if app is not None:
                 app.close()
             return 1
 
-    if use_omni:
+    if app is not None:
         app.close()
     return 0
 

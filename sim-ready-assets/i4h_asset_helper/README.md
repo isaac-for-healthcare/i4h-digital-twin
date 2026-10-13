@@ -17,10 +17,21 @@ That installs `boto3`, `tqdm`, `requests`, and pytest. On Linux aarch64 (for
 example DGX Spark) this is the supported path: Isaac Sim has no ARM64 pip
 wheels.
 
-Isaac Sim is optional and only needed for Nucleus (`I4H_ASSET_ENV=dev`) or
-`--force_omni_client`. It is not a package extra: its pip wheel stub cannot be
-locked from aarch64. On Linux x86_64 with Python 3.10, install it into the
-environment separately:
+The default catalog is on the internal dev Nucleus server (`I4H_ASSET_ENV=dev`),
+which needs `omni.client`. Install the `nucleus` extra to get the standalone
+`omniverseclient` package (Python 3.10–3.12; NVIDIA proprietary license):
+
+```bash
+uv sync --extra nucleus
+```
+
+The first Nucleus request prints a device-login URL and code; open the URL and
+enter the code to sign in to `isaac-dev.ov.nvidia.com`.
+
+Isaac Sim is an alternative way to provide `omni.client`, and is otherwise
+only needed for `--force_omni_client` without the extra. It is not a package
+extra: its pip wheel stub cannot be locked from aarch64. On Linux x86_64 with
+Python 3.10, install it into the environment separately:
 
 ```bash
 uv sync --python 3.10
@@ -40,7 +51,32 @@ pip install --extra-index-url https://pypi.nvidia.com "isaacsim[all,extscache]"
 
 ### Usage
 
-To download the asset to a local directory `~/.cache/i4h-assets/<SHA256_HASH>`:
+To download the asset to a local directory `~/.cache/i4h-assets/<VERSION>` (dev Nucleus) or
+`~/.cache/i4h-assets/<SHA256_HASH>` (S3):
+
+### v0.9.0 asset release
+
+The default catalog is `v0.9.0` on the dev Nucleus server:
+`omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0/{Props,Robots,Test}/...`,
+with no build directory. It downloads to `~/.cache/i4h-assets/v0.9.0`. This
+complete catalog includes the corrected OR editor icon and repaired organ
+materials (NVBugs 6646936 and 6657585).
+
+`assets_sha256.json` records the build ID `c02e5b5e3d71`, the first 12
+characters of the catalog's SHA-256 digest. It is not a content digest, so
+`--verify` checks the download against the Nucleus listing, including partial
+downloads. If the catalog is later published to S3 under that build directory,
+`I4H_ASSET_ENV=production` selects `v0.9.0/c02e5b5e3d71`.
+
+Older catalogs are on S3: use `I4H_ASSET_ENV=production` with `--version 0.7.0`
+or `I4H_ASSET_VERSION=0.7.0`.
+
+```bash
+i4h-asset-retrieve --sub-path Props/shared_OR_without_Mark --verify
+```
+
+The staged `main.usd` is already repaired; no local repair command is needed
+for `v0.9.0`. The opt-in utility below remains useful for older catalogs.
 
 ### Python Usage
 
@@ -108,23 +144,64 @@ What `--verify` can check depends on what the catalog version publishes in `asse
 
 Listing verification needs network access and is the check that catches a partial download, which is the usual failure when a fetch is interrupted or exceeds `--timeout`. Pass `--sub-path` alongside `--verify` to scope it to the sub path you downloaded; without it, verification expects the entire catalog.
 
+### Operating-room node-graph icon repair
+
+Catalog `0.7.0/724f82e` contains an unresolved
+`core_definitions.file_texture.png` reference in
+`Props/shared_OR_without_Mark/main.usd`. It is the
+`ui:nodegraph:node:icon` default on the bed-sheet material's `file_texture`
+node graph, not a material texture input. A complete download can therefore
+pass `--verify` while USD dependency validation still reports this missing icon.
+
+An opt-in repair clears only that known icon default in a new sibling layer.
+Install `usd-core` (validated with `25.11`) or use Isaac Sim's USD runtime:
+
+```bash
+uv pip install usd-core==25.11
+scene="$HOME/.cache/i4h-assets/724f82e/Props/shared_OR_without_Mark"
+python -m i4h_asset_helper.repair_or_scene "$scene/main.usd" "$scene/main.repaired.usd"
+```
+
+Open `main.repaired.usd` to use the corrected scene. Keep it beside `main.usd`
+so relative asset paths continue to resolve. The source is preserved, existing
+output files are refused, and an unexpected icon value aborts the repair.
+No rendering inputs, connections, or material library references are changed.
+
+With plain USD 25.11, `UsdUtils.ComputeAllDependencies` reports seven unresolved
+paths before this repair and six afterward. The remaining names are
+`OmniEmissive.mdl`, `OmniGlass.mdl`, `OmniPBR.mdl`, `OmniSurface.mdl`,
+`nvidia/aux_definitions.mdl`, and `nvidia/core_definitions.mdl`; the reported
+Isaac Sim environment supplies these through its MDL search path. Do not ignore
+arbitrary missing `.mdl` files when validating other scenes.
+
+The `v0.9.0` release applies this same repair to the authored scene before
+publication. The asset binaries are hosted outside this repository; this utility
+does not upload assets or silently alter downloads. The node uses its fallback
+UI icon. Validate the staged release in Isaac Sim before production publication.
+
+Run the USD regression tests with `usd-core` installed:
+
+```bash
+python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
+```
+
 ### Environment Variables
 
 #### I4H_ASSET_DOWNLOAD_DIR
 
 - You can set the `I4H_ASSET_DOWNLOAD_DIR` environment variable to the directory to download assets to.
 - The default directory is `~/.cache/i4h-assets`.
-- A subfolder with the hash of the asset will be created in this directory.
+- A subfolder named after the version (dev Nucleus) or the hash of the asset (S3) will be created in this directory.
 
 #### I4H_ASSET_ENV
 
 - There are three different asset server environments: `dev`, `staging`, and `production`. `staging` and `production` are publicly accessible and `dev` is only accessible by the internal team. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
-- The current default environment is `production`.
-- If you use the `dev` environment, i.e. `export I4H_ASSET_ENV=dev`, you must have a display (either physical or virtual) and a web browser (e.g. Chrome) to authenticate in the first run.
+- The current default environment is `dev`, which serves the `v0.9.0` catalog. Set `I4H_ASSET_ENV=production` for the public S3 catalogs, including all versions before `v0.9.0`.
+- The `dev` environment needs `omni.client`, from the `nucleus` extra or Isaac Sim. On the first run, open the printed device-login URL in a web browser and enter the code to authenticate.
 
 #### I4H_ASSET_SHA256_HASH
 
-- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; from `0.5.0` onwards it is the catalog's short commit id, which selects the remote prefix and the local directory name. See [Verification](#verification).
+- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; later versions use a short build identifier (a catalog commit ID or a content-digest prefix), which selects the remote prefix and the local directory name. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
   - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `i4h_asset_helper` package.

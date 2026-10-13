@@ -22,6 +22,8 @@ include-package-data = true
 
 [project.optional-dependencies]
 ci = ["pytest", "pytest-cov"]
+# Standalone omni.client for the dev Nucleus catalog without Isaac Sim (NVIDIA proprietary license).
+nucleus = ["omniverseclient; python_version < '3.13'"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "pytest-cov"]

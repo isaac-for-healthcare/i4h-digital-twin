@@ -22,17 +22,22 @@ import subprocess
 import sys
 import tempfile
 
+from i4h_asset_helper.assets import _is_import_ready
+
 CLI = [sys.executable, "-m", "i4h_asset_helper.cli"]
+# The public S3 catalog; the default dev Nucleus needs a sign-in.
+PRODUCTION_ENV = {**os.environ, "I4H_ASSET_ENV": "production"}
 
 
 def test_cli_retrieve():
     """Test the cli i4h-asset-retrieve."""
     with tempfile.TemporaryDirectory() as temp_dir:
         result = subprocess.run(
-            [*CLI, "--download-dir", temp_dir, "--sub-path", "Test"],
+            [*CLI, "--version", "0.7.0", "--download-dir", temp_dir, "--sub-path", "Test"],
             check=True,
             capture_output=True,
             text=True,
+            env=PRODUCTION_ENV,
         )
         assert "Assets downloaded to:" in result.stdout
         assert os.path.isdir(temp_dir)
@@ -41,11 +46,11 @@ def test_cli_retrieve():
 def test_force_omni_client():
     """Test the cli i4h-asset-retrieve with force_omni_client."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        cmd = [*CLI, "--download-dir", temp_dir, "--sub-path", "Test", "--force_omni_client"]
-        if importlib.util.find_spec("isaacsim") is None:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+        cmd = [*CLI, "--version", "0.7.0", "--download-dir", temp_dir, "--sub-path", "Test", "--force_omni_client"]
+        if importlib.util.find_spec("isaacsim") is None and not _is_import_ready("omni.client"):
+            result = subprocess.run(cmd, capture_output=True, text=True, env=PRODUCTION_ENV)
             assert result.returncode != 0
-            assert "Isaac Sim is required" in result.stderr
+            assert "Isaac Sim or omni.client is required" in result.stderr
             return
 
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, env=PRODUCTION_ENV)
