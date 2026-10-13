@@ -57,6 +57,8 @@ class _FakeS3:
 
 @pytest.fixture
 def fake_s3(monkeypatch):
+    # The S3 catalogs are the production/staging ones; the default env is dev Nucleus.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setattr(assets, "_is_import_ready", lambda name: False)
     monkeypatch.setattr(assets, "_is_s3_environment", lambda: True)
     monkeypatch.setattr(assets, "_get_s3_client", lambda: _FakeS3())

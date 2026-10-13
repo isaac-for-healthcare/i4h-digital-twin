@@ -102,7 +102,7 @@ def retrieve_main():
             )
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
-            if use_omni:
+            if app is not None:
                 app.close()
             return 1
         print(f"Assets downloaded to: {local_path}")
