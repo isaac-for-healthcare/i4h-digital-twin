@@ -21,17 +21,12 @@ import os
 import pytest
 
 from i4h_asset_helper import assets
-from i4h_asset_helper.assets import (
-    get_i4h_asset_hash,
-    get_i4h_asset_path,
-    is_content_digest,
-    sha256_of_folder,
-    verify_asset,
-)
+from i4h_asset_helper.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
 
-# Catalog versions that publish a short S3 path segment instead of a content digest.
-PATH_IDENTIFIER_VERSIONS = ("0.5.0", "0.6.0", "0.7.0")
-CONTENT_DIGEST_VERSIONS = ("0.1.0ea", "0.1.0", "0.2.0", "0.3.0")
+# Catalog versions whose manifest entry is the catalog's short commit id.
+COMMIT_ID_VERSIONS = ("0.5.0", "0.6.0", "0.7.0")
+# Catalog versions whose manifest entry is the SHA-256 of the asset ZIP package, not of the served tree.
+ZIP_DIGEST_VERSIONS = ("0.1.0ea", "0.1.0", "0.2.0", "0.3.0")
 
 CATALOG_FILES = {
     "Props/Organs/organs.usd": b"organs",
@@ -64,40 +59,31 @@ def _local_dir(tmp_path, version):
     return os.path.join(str(tmp_path), get_i4h_asset_hash(version=version))
 
 
-def test_manifest_records_path_identifiers_from_0_5_0_onwards():
-    """The values are S3 path segments, so hashing the download can never reproduce them."""
-    for version in PATH_IDENTIFIER_VERSIONS:
-        value = get_i4h_asset_hash(version=version)
-        assert not is_content_digest(value), version
-        # The same value names the remote prefix the assets are served from.
-        assert get_i4h_asset_path(version).endswith(f"/{version}/{value}")
+@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS)
+def test_manifest_value_names_the_remote_prefix(version):
+    """Every manifest value, digest-shaped or not, says where the assets live rather than what they contain."""
+    value = get_i4h_asset_hash(version=version)
+    assert get_i4h_asset_path(version).endswith(f"/{version}/{value}")
 
 
-def test_manifest_records_content_digests_before_0_5_0():
-    for version in CONTENT_DIGEST_VERSIONS:
-        assert is_content_digest(get_i4h_asset_hash(version=version)), version
+@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS)
+def test_verify_passes_for_complete_download(tmp_path, monkeypatch, capsys, version):
+    """Regression test for NVBugs 6646790 (0.5.0+) and 6921218 (0.3.0 and earlier).
 
-
-def test_is_content_digest_rejects_short_and_non_hex_values():
-    assert is_content_digest("a" * 64)
-    assert is_content_digest("A" * 64)
-    assert not is_content_digest("724f82e")
-    assert not is_content_digest("a" * 63)
-    assert not is_content_digest("z" * 64)
-
-
-def test_verify_passes_for_complete_path_addressed_download(tmp_path, monkeypatch, capsys):
-    """Regression test for NVBugs 6646790: this used to always fail on catalog 0.5.0+."""
-    version = "0.7.0"
+    Both used to always fail: the first hashed against a commit id, the second against the SHA-256 of a ZIP
+    package the S3 catalog does not serve.
+    """
     _write_catalog(_local_dir(tmp_path, version), CATALOG_FILES)
     monkeypatch.setattr(assets, "_list_asset_entries", lambda url: _fake_listing(version, CATALOG_FILES))
 
     assert verify_asset(version=version, download_dir=str(tmp_path)) is True
-    assert "Verification PASSED" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "against catalog listing" in output
+    assert "Verification PASSED" in output
 
 
-def test_verify_reports_missing_file(tmp_path, monkeypatch, capsys):
-    version = "0.7.0"
+@pytest.mark.parametrize("version", ("0.3.0", "0.7.0"))
+def test_verify_reports_missing_file(tmp_path, monkeypatch, capsys, version):
     present = dict(CATALOG_FILES)
     dropped = present.pop("Robots/arm.usd")
     assert dropped
@@ -124,9 +110,9 @@ def test_verify_reports_half_written_file(tmp_path, monkeypatch, capsys):
     assert "wrong size: Props/Organs/organs.usd (catalog 6 B, local 3 B)" in output
 
 
-def test_verify_scopes_listing_to_sub_path(tmp_path, monkeypatch):
+@pytest.mark.parametrize("version", ("0.3.0", "0.7.0"))
+def test_verify_scopes_listing_to_sub_path(tmp_path, monkeypatch, version):
     """--verify after a --sub-path download must not demand the rest of the catalog."""
-    version = "0.7.0"
     sub_path = "Props/Organs"
     organs = {k: v for k, v in CATALOG_FILES.items() if k.startswith(sub_path)}
     _write_catalog(_local_dir(tmp_path, version), organs)
@@ -140,41 +126,7 @@ def test_verify_scopes_listing_to_sub_path(tmp_path, monkeypatch):
     monkeypatch.setattr(assets, "_list_asset_entries", fake_listing)
 
     assert verify_asset(version=version, download_dir=str(tmp_path), sub_path=sub_path) is True
-    assert listed["url"].endswith(f"/{sub_path}")
-
-
-def _staged_digest_download(tmp_path, files):
-    """Lay out a download the way a content-digest catalog version addresses it."""
-    staging = os.path.join(str(tmp_path), "staging")
-    _write_catalog(staging, files)
-    digest = sha256_of_folder(staging)
-    local_dir = os.path.join(str(tmp_path), digest)
-    os.rename(staging, local_dir)
-    return digest, local_dir
-
-
-def test_verify_hashes_content_for_digest_versions(tmp_path, capsys):
-    digest, _ = _staged_digest_download(tmp_path, CATALOG_FILES)
-
-    assert verify_asset(version="0.3.0", download_dir=str(tmp_path), hash=digest) is True
-    assert "Verification PASSED" in capsys.readouterr().out
-
-
-def test_verify_accepts_a_digest_given_in_uppercase(tmp_path, capsys):
-    """Hex is case-insensitive, but sha256_of_folder only ever returns lowercase."""
-    digest, local_dir = _staged_digest_download(tmp_path, CATALOG_FILES)
-    os.rename(local_dir, os.path.join(str(tmp_path), digest.upper()))
-
-    assert verify_asset(version="0.3.0", download_dir=str(tmp_path), hash=digest.upper()) is True
-    assert "Verification PASSED" in capsys.readouterr().out
-
-
-def test_verify_fails_when_digest_version_content_changes(tmp_path, capsys):
-    digest, local_dir = _staged_digest_download(tmp_path, CATALOG_FILES)
-    _write_catalog(local_dir, {"Robots/arm.usd": b"tampered"})
-
-    assert verify_asset(version="0.3.0", download_dir=str(tmp_path), hash=digest) is False
-    assert "hash mismatch" in capsys.readouterr().out
+    assert listed["url"] == f"{get_i4h_asset_path(version)}/{sub_path}"
 
 
 def test_verify_rejects_missing_download_dir(tmp_path):
@@ -187,4 +139,4 @@ def test_manifest_versions_are_covered_by_the_tests():
     manifest_path = os.path.join(os.path.dirname(assets.__file__), "assets_sha256.json")
     with open(manifest_path) as handle:
         manifest = json.load(handle)
-    assert set(manifest) == set(PATH_IDENTIFIER_VERSIONS) | set(CONTENT_DIGEST_VERSIONS)
+    assert set(manifest) == set(COMMIT_ID_VERSIONS) | set(ZIP_DIGEST_VERSIONS)

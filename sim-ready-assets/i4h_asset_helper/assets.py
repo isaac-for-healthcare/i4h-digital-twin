@@ -14,11 +14,9 @@
 # limitations under the License.
 
 import asyncio
-import hashlib
 import importlib
 import json
 import os
-import string
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -35,9 +33,7 @@ __all__ = [
     "get_i4h_asset_hash",
     "get_i4h_asset_path",
     "get_i4h_local_asset_path",
-    "is_content_digest",
     "retrieve_asset",
-    "sha256_of_folder",
     "verify_asset",
     "BaseI4HAssets",
 ]
@@ -234,81 +230,7 @@ def get_i4h_local_asset_path(
         return os.path.join(download_dir, hash)
 
 
-_SHA256_SKIP_NAMES = {".gitattributes", ".gitignore"}
-_SHA256_SKIP_DIRS = {".git", "__pycache__"}
-
-
-def sha256_of_folder(folder_path: str, verbose: bool = False) -> str:
-    """
-    Compute a deterministic SHA-256 hash of a folder's contents.
-
-    The hash includes both relative file paths and file contents, sorted for
-    determinism. Skips .git/, __pycache__/, .gitattributes, and .gitignore.
-
-    Args:
-        folder_path: Path to the folder to hash.
-        verbose: If True, print each file being hashed.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    sha256 = hashlib.sha256()
-    folder_path = Path(folder_path)
-
-    for root, dirs, files in sorted(os.walk(folder_path)):
-        dirs[:] = sorted(d for d in dirs if d not in _SHA256_SKIP_DIRS)
-        for fname in sorted(files):
-            if fname in _SHA256_SKIP_NAMES:
-                continue
-            file_path = Path(root) / fname
-            relative_path = file_path.relative_to(folder_path).as_posix()
-            sha256.update(relative_path.encode())
-            if verbose:
-                print(f"  Hashing: {relative_path}")
-            with open(file_path, "rb") as f:
-                while chunk := f.read(8192):
-                    sha256.update(chunk)
-
-    return sha256.hexdigest()
-
-
-_CONTENT_DIGEST_LENGTH = 64
 _VERIFY_REPORT_LIMIT = 20
-
-
-def is_content_digest(manifest_value: str) -> bool:
-    """
-    Whether a value from assets_sha256.json is a content digest rather than a path identifier.
-
-    Catalog 0.1.0 through 0.3.0 recorded a real SHA-256 of the published tree. From 0.5.0 onwards the
-    entry holds the catalog's short commit id instead, which names the S3 prefix the assets are served
-    from (``Healthcare/0.7.0/724f82e``) and the local directory they land in. Such a value says where
-    the assets live, not what they contain, so it can never equal a digest of the download.
-
-    Args:
-        manifest_value: A value from assets_sha256.json, or an override passed as ``hash``.
-
-    Returns:
-        True if the value is a full hex SHA-256 digest, in either case.
-    """
-    return len(manifest_value) == _CONTENT_DIGEST_LENGTH and all(c in string.hexdigits for c in manifest_value)
-
-
-def _verify_content_digest(local_dir: str, expected_digest: str, verbose: bool = False) -> bool:
-    """Verify a download whose catalog version publishes a SHA-256 of the whole tree."""
-    print(f"Computing SHA-256 of {local_dir} ...")
-    computed_digest = sha256_of_folder(local_dir, verbose=verbose)
-
-    print(f"  Expected: {expected_digest}")
-    print(f"  Computed: {computed_digest}")
-
-    # Hex is case-insensitive, and is_content_digest() accepts either case, so compare in one case.
-    if computed_digest.lower() == expected_digest.lower():
-        print("Verification PASSED")
-        return True
-
-    print("Verification FAILED — hash mismatch!")
-    return False
 
 
 def _verify_against_catalog(
@@ -321,9 +243,9 @@ def _verify_against_catalog(
     """
     Verify a download against the remote catalog listing.
 
-    Path-addressed catalogs publish no per-file checksums, so the strongest available check is that every
-    object the catalog lists is present locally at its full size. That is also the check that matters in
-    practice, because an interrupted or timed-out download leaves files missing or half-written.
+    No catalog version publishes per-file checksums, so the strongest available check is that every object
+    the catalog lists is present locally at its full size. That is also the check that matters in practice,
+    because an interrupted or timed-out download leaves files missing or half-written.
     """
     remote_path = get_i4h_asset_path(version, hash)
     if sub_path is not None:
@@ -377,20 +299,20 @@ def verify_asset(
     verbose: bool = False,
 ) -> bool:
     """
-    Verify a downloaded asset folder against what the catalog publishes for its version.
+    Verify a downloaded asset folder against the catalog listing for its version.
 
-    Versions that publish a SHA-256 of the whole tree are verified by hashing the download. Versions that
-    publish a short path identifier instead carry no checksum to compare against, so those are verified
-    against the catalog listing: every object the catalog holds must exist locally at its full size.
+    Every object the catalog holds under the version's remote prefix must exist locally at its full size.
+    The value in assets_sha256.json only names that prefix and the local directory. From 0.5.0 onwards it
+    is the catalog's short commit id. Up to 0.3.0 it is the SHA-256 of the asset ZIP package the release
+    was built from. That ZIP is not what the S3 catalog serves, so no digest of the download can match it.
 
     Args:
         version: The version of the asset.
         download_dir: The directory where the asset was downloaded.
-        hash: The expected content digest, or the catalog path identifier. If None, looked up from
-            assets_sha256.json.
-        sub_path: Restrict listing verification to the sub path that was downloaded, matching the
-            ``--sub-path`` used to retrieve it. Ignored when the version publishes a content digest,
-            which always covers the whole tree.
+        hash: The catalog identifier that names the remote prefix and local directory. If None, looked
+            up from assets_sha256.json.
+        sub_path: Restrict verification to the sub path that was downloaded, matching the ``--sub-path``
+            used to retrieve it.
         verbose: If True, print per-file progress.
 
     Returns:
@@ -400,22 +322,13 @@ def verify_asset(
         ValueError: If no catalog entry is available or the folder doesn't exist.
     """
     version = version if version is not None else get_i4h_asset_version()
-    expected_value = hash if hash is not None else get_i4h_asset_hash(version=version)
-
-    if expected_value is None:
+    if hash is None and get_i4h_asset_hash(version=version) is None:
         raise ValueError(f"No catalog entry found for version {version}")
 
     local_dir = get_i4h_local_asset_path(version, download_dir, hash)
     if not os.path.isdir(local_dir):
         raise ValueError(f"Asset folder does not exist: {local_dir}")
 
-    if is_content_digest(expected_value):
-        return _verify_content_digest(local_dir, expected_value, verbose=verbose)
-
-    print(
-        f"Catalog {version} publishes the path identifier {expected_value!r} rather than a content digest; "
-        "verifying against the catalog listing instead."
-    )
     return _verify_against_catalog(version, hash, local_dir, sub_path=sub_path, verbose=verbose)
 
 
