@@ -75,7 +75,20 @@ def test_set_env_var_root():
     os.environ.pop("I4H_ASSET_ENV")
 
 
-def test_retrieve_asset():
+def test_release_catalog_defaults_and_previous_version(monkeypatch):
+    monkeypatch.delenv("I4H_ASSET_VERSION", raising=False)
+    monkeypatch.delenv("I4H_ASSET_SHA256_HASH", raising=False)
+    assert _get_default_version() == "v0.9.0"
+    for environment in ("staging", "production"):
+        monkeypatch.setenv("I4H_ASSET_ENV", environment)
+        assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/c02e5b5e3d71"
+        assert get_i4h_asset_path("0.7.0") == f"{_I4H_ASSET_ROOT[environment]}/0.7.0/724f82e"
+        assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/c02e5b5e3d71"
+
+
+def test_retrieve_asset(monkeypatch):
+    # Exercise downloads against a published catalog even while the next release is staged.
+    monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
         local_dir = retrieve_asset(download_dir=temp_dir, sub_path="Test")
         hash = get_i4h_asset_hash()
@@ -83,7 +96,9 @@ def test_retrieve_asset():
         assert os.path.exists(os.path.join(local_dir, "Test"))
 
 
-def test_retrieve_asset_force_download():
+def test_retrieve_asset_force_download(monkeypatch):
+    # Exercise downloads against a published catalog even while the next release is staged.
+    monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
         # First download
         local_dir = retrieve_asset(download_dir=temp_dir, sub_path="Test")
@@ -132,7 +147,9 @@ def test_retrieve_asset_custom_hash():
             assert "URL entry" not in str(e) or "expects to begin with" not in str(e)
 
 
-def test_class_inheritance():
+def test_class_inheritance(monkeypatch):
+    # Exercise downloads against a published catalog even while the next release is staged.
+    monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     class TestI4HAssets(BaseI4HAssets):
         test = "Test/basic.usda"
 

@@ -29,7 +29,7 @@ def test_cli_retrieve():
     """Test the cli i4h-asset-retrieve."""
     with tempfile.TemporaryDirectory() as temp_dir:
         result = subprocess.run(
-            [*CLI, "--download-dir", temp_dir, "--sub-path", "Test"],
+            [*CLI, "--version", "0.7.0", "--download-dir", temp_dir, "--sub-path", "Test"],
             check=True,
             capture_output=True,
             text=True,

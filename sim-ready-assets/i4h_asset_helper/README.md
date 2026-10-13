@@ -42,6 +42,27 @@ pip install --extra-index-url https://pypi.nvidia.com "isaacsim[all,extscache]"
 
 To download the asset to a local directory `~/.cache/i4h-assets/<SHA256_HASH>`:
 
+### v0.9.0 asset release
+
+The default catalog is `v0.9.0/c02e5b5e3d71`. The leading `v` is part
+of the S3 folder name. This complete catalog includes the corrected OR editor
+icon and repaired organ materials (NVBugs 6646936 and 6657585). The build ID is
+the first 12 characters of the staged catalog's SHA-256 digest; it selects a
+remote prefix, so `--verify` checks the S3 listing, including partial downloads.
+
+Publish the prepared `v0.9.0` folder under `Assets/Isaac/Healthcare/` in staging,
+then production after QA. Its structure is
+`v0.9.0/c02e5b5e3d71/{Props,Robots,Test}/...`; retain the build directory.
+The upload is a prerequisite for this branch's default downloads. Existing
+catalogs remain available with `--version 0.7.0` or `I4H_ASSET_VERSION=0.7.0`.
+
+```bash
+i4h-asset-retrieve --sub-path Props/shared_OR_without_Mark --verify
+```
+
+The staged `main.usd` is already repaired; no local repair command is needed
+for `v0.9.0`. The opt-in utility below remains useful for older catalogs.
+
 ### Python Usage
 
 ```python
@@ -138,11 +159,10 @@ paths before this repair and six afterward. The remaining names are
 Isaac Sim environment supplies these through its MDL search path. Do not ignore
 arbitrary missing `.mdl` files when validating other scenes.
 
-The permanent catalog fix is to clear this same icon default in the authored
-scene and publish the corrected asset in a new catalog revision. The asset
-binaries are hosted outside this repository; this utility does not change the
-published catalog or silently alter downloads. The node will use its fallback
-UI icon; visual validation in Isaac Sim is still recommended before publication.
+The `v0.9.0` release applies this same repair to the authored scene before
+publication. The asset binaries are hosted outside this repository; this utility
+does not upload assets or silently alter downloads. The node uses its fallback
+UI icon. Validate the staged release in Isaac Sim before production publication.
 
 Run the USD regression tests with `usd-core` installed:
 
@@ -166,7 +186,7 @@ python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
 
 #### I4H_ASSET_SHA256_HASH
 
-- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; from `0.5.0` onwards it is the catalog's short commit id, which selects the remote prefix and the local directory name. See [Verification](#verification).
+- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; later versions use a short build identifier (a catalog commit ID or a content-digest prefix), which selects the remote prefix and the local directory name. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
   - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `i4h_asset_helper` package.
