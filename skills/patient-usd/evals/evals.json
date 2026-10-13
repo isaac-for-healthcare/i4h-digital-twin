@@ -1,0 +1,66 @@
+[
+  {
+    "id": "patient-usd-inspect-stage",
+    "question": "What anatomy is in /tmp/s0011.usdc, and what units and up axis does it use?",
+    "expected_skill": "patient-usd",
+    "ground_truth": "Open the stage with pxr.Usd and report the /HumanBody default prim, metersPerUnit, Z-up axis, the anatomy meshes with their anatomy:name and anatomy:kind custom data, and computed visibility, without printing the full CT arrays.",
+    "expected_behavior": [
+      "routes to patient-usd",
+      "opens the stage with pxr.Usd rather than parsing the binary file as text",
+      "reports default prim, metersPerUnit, and up axis",
+      "lists anatomy using anatomy:name custom data and reports visibility",
+      "does not dump large voxel arrays"
+    ]
+  },
+  {
+    "id": "patient-usd-bundle-centerline-frame",
+    "question": "In my patient bundle at ./output/s0011_aorta, what coordinate frame and units are the navigation centerline points in?",
+    "expected_skill": "patient-usd",
+    "ground_truth": "Read patient_twin.yaml and volume.yaml. Schema-2 bundle centerline points and radii use the scan physical frame (RAS or LPS) and units declared in the manifest; CT and masks keep the scan array order. Do not assume ZYX, LPS, or millimeters.",
+    "expected_behavior": [
+      "routes to patient-usd",
+      "reads patient_twin.yaml and volume.yaml",
+      "reports the declared frame and units from the manifest",
+      "does not assume ZYX, LPS, or millimeters"
+    ]
+  },
+  {
+    "id": "patient-usd-read-embedded-ct",
+    "question": "Load the CT embedded in human_body.usdc into a NumPy array with the right shape and affine.",
+    "expected_skill": "patient-usd",
+    "ground_truth": "Read the ct:hu, ct:shape, ct:arrayOrder, and ct:arrayIndexToScan attributes, reshape ct:hu in C order with ct:shape, and use ct:arrayIndexToScan as the array-index-to-scan affine, respecting the recorded frame and units.",
+    "expected_behavior": [
+      "routes to patient-usd",
+      "reads the ct:hu and ct:shape attributes",
+      "reshapes in C order using the recorded shape",
+      "uses ct:arrayIndexToScan as the affine",
+      "reports the array order, frame, and units"
+    ]
+  },
+  {
+    "id": "patient-usd-isaac-sim-view",
+    "question": "Open the s0011 USD export in Isaac Sim headless and save a screenshot to /tmp/s0011.png.",
+    "expected_skill": "patient-usd",
+    "ground_truth": "From patient-digital-twin/, run /path/to/isaac-sim/python.sh examples/isaac_sim.py view /tmp/s0011.usdc --headless --frames 20 --screenshot /tmp/s0011.png. Pillow is required in the Isaac Sim runtime.",
+    "expected_behavior": [
+      "routes to patient-usd",
+      "uses the checked-in examples/isaac_sim.py viewer",
+      "runs it with Isaac Sim's python.sh",
+      "passes --headless, a bounded --frames value, and --screenshot",
+      "does not install a simulator just to inspect metadata"
+    ]
+  },
+  {
+    "id": "patient-usd-world-transforms",
+    "question": "Give me the world-space vertices of the aorta mesh in patient.usdc in meters.",
+    "expected_skill": "patient-usd",
+    "ground_truth": "Use UsdGeom.XformCache to get the full local-to-world transform including /HumanBody, transpose the Gf matrix for the NumPy column-vector convention, apply it to the mesh points, and scale by metersPerUnit without applying a second axis conversion.",
+    "expected_behavior": [
+      "routes to patient-usd",
+      "finds the aorta via anatomy:name custom data",
+      "uses UsdGeom.XformCache for the complete transform",
+      "converts using metersPerUnit",
+      "does not apply a second axis conversion"
+    ]
+  }
+]
