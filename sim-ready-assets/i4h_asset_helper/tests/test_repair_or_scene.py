@@ -5,7 +5,12 @@
 
 import pytest
 
-from i4h_asset_helper.repair_or_scene import BROKEN_ICON, ICON_ATTRIBUTE, clear_broken_icon, main
+from i4h_asset_helper.repair_or_scene import (
+    BROKEN_ICON,
+    ICON_ATTRIBUTE,
+    clear_broken_icon,
+    main,
+)
 
 pytest.importorskip("pxr")
 from pxr import Sdf, UsdUtils  # noqa: E402
