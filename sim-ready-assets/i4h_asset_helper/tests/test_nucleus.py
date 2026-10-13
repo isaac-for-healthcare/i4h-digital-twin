@@ -10,7 +10,11 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from i4h_asset_helper import assets
-from i4h_asset_helper.assets import get_i4h_local_asset_path, retrieve_asset, verify_asset
+from i4h_asset_helper.assets import (
+    get_i4h_local_asset_path,
+    retrieve_asset,
+    verify_asset,
+)
 
 NUCLEUS_ROOT = "omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0"
 CATALOG_FILES = {
