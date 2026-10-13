@@ -253,6 +253,9 @@ def _verify_against_catalog(
 
     print(f"Verifying {local_dir} against catalog listing {remote_path} ...")
     entries = _list_asset_entries(remote_path)
+    if not entries:
+        print("Verification FAILED — the catalog listing contains no files!")
+        return False
 
     missing: List[str] = []
     wrong_size: List[Tuple[str, int, int]] = []
@@ -374,7 +377,9 @@ def _is_url_folder(url_entry: str) -> bool:
 
                 while True:
                     try:
-                        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=key, Delimiter="/", MaxKeys=1)
+                        response = s3_client.list_objects_v2(
+                            Bucket=bucket, Prefix=key + "/", Delimiter="/", MaxKeys=1
+                        )
                         # If CommonPrefixes exist, it's a folder
                         return "CommonPrefixes" in response or response.get("KeyCount", 0) > 0
                     except ClientError as e:
@@ -409,17 +414,27 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
     with the file itself. The size is None when the backend does not report one, which is the case for
     Nucleus / omni.client listings.
     """
-    # If not a folder, just return the url as a list with one entry
-    if not _is_url_folder(url_entry):
+    # Resolve S3 files directly so an exact object is not mistaken for a directory,
+    # and verification gets its size. Preserve the omni.client path for other backends.
+    use_s3 = not _is_import_ready("omni.client") and _is_s3_environment()
+    if not use_s3 and not _is_url_folder(url_entry):
         return [(_unify_path(url_entry), None)]
 
-    if not _is_import_ready("isaacsim.storage.native.nucleus"):
+    if use_s3 or not _is_import_ready("isaacsim.storage.native.nucleus"):
         if not _is_s3_environment():
             raise ValueError("Please start the isaac simulation app before the asset helper.")
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
             s3_client = _get_s3_client()
+
+            if key and not key.endswith("/"):
+                try:
+                    metadata = s3_client.head_object(Bucket=bucket, Key=key)
+                    return [(url_entry, metadata["ContentLength"])]
+                except ClientError as e:
+                    if e.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey", "NotFound"):
+                        raise
 
             # Ensure key ends with '/'
             if key and not key.endswith("/"):
@@ -639,6 +654,8 @@ def retrieve_asset(
         remote_path = remote_path + "/" + sub_path
 
     paths = _list_asset_url(remote_path)
+    if not paths:
+        raise FileNotFoundError(f"No asset files found at {remote_path}")
 
     if force_download:
         url_entries = paths

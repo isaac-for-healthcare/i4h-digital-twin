@@ -17,10 +17,12 @@
 
 import json
 import os
+import sys
 
 import pytest
+from botocore.stub import Stubber
 
-from i4h_asset_helper import assets
+from i4h_asset_helper import assets, cli
 from i4h_asset_helper.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
 
 # Catalog versions whose manifest entry is the catalog's short commit id.
@@ -140,3 +142,118 @@ def test_manifest_versions_are_covered_by_the_tests():
     with open(manifest_path) as handle:
         manifest = json.load(handle)
     assert set(manifest) == set(COMMIT_ID_VERSIONS) | set(ZIP_DIGEST_VERSIONS)
+
+
+@pytest.fixture
+def s3_listing(monkeypatch):
+    """Exercise the real listing code, replacing only the remote S3 responses."""
+    client = assets._get_s3_client()
+    monkeypatch.setattr(assets, "_get_s3_client", lambda: client)
+    monkeypatch.setattr(assets, "_is_import_ready", lambda name: False)
+    with Stubber(client) as stubber:
+        yield stubber
+        stubber.assert_no_pending_responses()
+
+
+@pytest.mark.parametrize("version", ("0.3.0", "0.7.0"))
+@pytest.mark.parametrize("payload", (None, b"truncated", b"complete asset", b""))
+def test_cli_verifies_single_s3_file(tmp_path, monkeypatch, capsys, s3_listing, version, payload):
+    sub_path = "Props/Table/table.usd"
+    local_dir = _local_dir(tmp_path, version)
+    os.makedirs(local_dir)
+    if payload is not None:
+        _write_catalog(local_dir, {sub_path: payload})
+    # An empty remote object is still a file and is valid when it exists locally.
+    remote_size = 0 if payload == b"" else len(b"complete asset")
+    bucket, key = assets._parse_s3_url(f"{get_i4h_asset_path(version)}/{sub_path}")
+    s3_listing.add_response(
+        "head_object", {"ContentLength": remote_size}, {"Bucket": bucket, "Key": key}
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "i4h-asset-retrieve", "--version", version, "--download-dir", str(tmp_path),
+            "--skip-download", "--verify", "--sub-path", sub_path,
+        ],
+    )
+
+    expected = 0 if payload in (b"complete asset", b"") else 1
+    assert cli.retrieve_main() == expected
+    output = capsys.readouterr().out
+    assert "Catalog files: 1" in output
+    assert ("Verification PASSED" in output) == (expected == 0)
+    if payload is None:
+        assert f"missing: {sub_path}" in output
+    elif expected:
+        assert f"wrong size: {sub_path}" in output
+
+
+@pytest.mark.parametrize("sub_path", (None, "Missing", "Empty/"))
+@pytest.mark.parametrize("operation", ("verify", "retrieve"))
+def test_empty_s3_listing_is_rejected(tmp_path, capsys, s3_listing, sub_path, operation):
+    version = "0.3.0"
+    os.makedirs(_local_dir(tmp_path, version))
+    url = get_i4h_asset_path(version)
+    if sub_path is not None:
+        url += "/" + sub_path
+    bucket, key = assets._parse_s3_url(url)
+    if not key.endswith("/"):
+        s3_listing.add_client_error(
+            "head_object", service_error_code="404", http_status_code=404,
+            expected_params={"Bucket": bucket, "Key": key},
+        )
+    prefix = key.rstrip("/") + "/"
+    # Directory marker objects must not turn an otherwise empty listing into a pass.
+    contents = [{"Key": prefix, "Size": 0}] if sub_path == "Empty/" else []
+    s3_listing.add_response(
+        "list_objects_v2", {"Contents": contents, "IsTruncated": False},
+        {"Bucket": bucket, "Prefix": prefix},
+    )
+
+    if operation == "retrieve":
+        with pytest.raises(FileNotFoundError, match="No asset files found"):
+            assets.retrieve_asset(version=version, download_dir=str(tmp_path), sub_path=sub_path)
+        return
+
+    assert verify_asset(version=version, download_dir=str(tmp_path), sub_path=sub_path) is False
+    output = capsys.readouterr().out
+    assert "Verification FAILED" in output
+    assert "Verification PASSED" not in output
+
+
+def test_verify_lists_s3_directory_with_a_slash_boundary(tmp_path, s3_listing):
+    version = "0.3.0"
+    sub_path = "Props/Organs"
+    files = {f"{sub_path}/a.usd": b"a", f"{sub_path}/b.usd": b"bb"}
+    _write_catalog(_local_dir(tmp_path, version), files)
+    bucket, key = assets._parse_s3_url(f"{get_i4h_asset_path(version)}/{sub_path}")
+    s3_listing.add_client_error(
+        "head_object", service_error_code="404", http_status_code=404,
+        expected_params={"Bucket": bucket, "Key": key},
+    )
+    for index, (name, payload) in enumerate(files.items()):
+        response = {
+            "Contents": [{"Key": key + "/" + name.rsplit("/", 1)[1], "Size": len(payload)}],
+            "IsTruncated": index == 0,
+        }
+        params = {"Bucket": bucket, "Prefix": key + "/"}
+        if index == 0:
+            response["NextContinuationToken"] = "next-page"
+        else:
+            params["ContinuationToken"] = "next-page"
+        s3_listing.add_response("list_objects_v2", response, params)
+
+    assert verify_asset(version=version, download_dir=str(tmp_path), sub_path=sub_path) is True
+
+
+def test_s3_listing_preserves_access_errors(s3_listing):
+    url = get_i4h_asset_path("0.3.0") + "/Props/Table/table.usd"
+    bucket, key = assets._parse_s3_url(url)
+    s3_listing.add_client_error(
+        "head_object", service_error_code="403", http_status_code=403,
+        expected_params={"Bucket": bucket, "Key": key},
+    )
+
+    with pytest.raises(ValueError, match="403"):
+        assets._list_asset_entries(url)
