@@ -9,8 +9,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from i4h_asset_helper import assets
-from i4h_asset_helper.assets import (
+from sim_ready_assets import assets
+from sim_ready_assets.assets import (
     get_i4h_local_asset_path,
     retrieve_asset,
     verify_asset,

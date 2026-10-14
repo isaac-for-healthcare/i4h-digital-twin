@@ -14,11 +14,11 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["i4h_asset_helper", "sim_ready_assets"]
+packages = ["sim_ready_assets"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"i4h_asset_helper" = ["*.json"]
+"sim_ready_assets" = ["*.json"]
 
 [project.optional-dependencies]
 ci = ["pytest", "pytest-cov"]
@@ -29,7 +29,7 @@ nucleus = ["omniverseclient; python_version < '3.13'"]
 dev = ["pytest>=8.0", "pytest-cov"]
 
 [project.scripts]
-i4h-asset-retrieve = "i4h_asset_helper.cli:retrieve_main"
+i4h-asset-retrieve = "sim_ready_assets.cli:retrieve_main"
 
 [tool.uv]
 required-environments = [
@@ -48,7 +48,7 @@ py_version = 310
 group_by_package = true
 # Also declared in the repo root .isort.cfg, which is what the pre-commit run over the whole tree
 # reads. Both have to agree or the two invocations demand opposite grouping.
-known_first_party = ["i4h_asset_helper", "sim_ready_assets"]
+known_first_party = ["sim_ready_assets"]
 
 [tool.ruff]
 line-length = 120
@@ -58,4 +58,4 @@ target-version = "py310"
 extend-select = ["E501"]
 
 [tool.pytest.ini_options]
-testpaths = ["i4h_asset_helper/tests"]
+testpaths = ["sim_ready_assets/tests"]

@@ -22,8 +22,8 @@ import sys
 import pytest
 from botocore.stub import Stubber
 
-from i4h_asset_helper import assets, cli
-from i4h_asset_helper.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
+from sim_ready_assets import assets, cli
+from sim_ready_assets.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
 
 # Catalog versions whose manifest entry is the catalog's short commit id.
 COMMIT_ID_VERSIONS = ("0.5.0", "0.6.0", "0.7.0")

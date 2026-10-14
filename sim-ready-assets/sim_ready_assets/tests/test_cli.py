@@ -22,9 +22,9 @@ import subprocess
 import sys
 import tempfile
 
-from i4h_asset_helper.assets import _is_import_ready
+from sim_ready_assets.assets import _is_import_ready
 
-CLI = [sys.executable, "-m", "i4h_asset_helper.cli"]
+CLI = [sys.executable, "-m", "sim_ready_assets.cli"]
 # The public S3 catalog; the default dev Nucleus needs a sign-in.
 PRODUCTION_ENV = {**os.environ, "I4H_ASSET_ENV": "production"}
 

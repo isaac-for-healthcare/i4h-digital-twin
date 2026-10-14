@@ -20,8 +20,8 @@ import sys
 import pytest
 from botocore.exceptions import ClientError
 
-from i4h_asset_helper import assets, cli
-from i4h_asset_helper.assets import retrieve_asset
+from sim_ready_assets import assets, cli
+from sim_ready_assets.assets import retrieve_asset
 
 _BUCKET = "bucket"
 _ROOT = "Assets/0.7.0"

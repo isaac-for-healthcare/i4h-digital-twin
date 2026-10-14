@@ -5,7 +5,7 @@
 
 import pytest
 
-from i4h_asset_helper.repair_or_scene import (
+from sim_ready_assets.repair_or_scene import (
     BROKEN_ICON,
     ICON_ATTRIBUTE,
     clear_broken_icon,

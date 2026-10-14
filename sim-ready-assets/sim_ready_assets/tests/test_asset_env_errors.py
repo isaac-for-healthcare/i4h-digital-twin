@@ -19,7 +19,7 @@
 import pytest
 from botocore.exceptions import ClientError
 
-from i4h_asset_helper import assets
+from sim_ready_assets import assets
 
 URL = "https://omniverse-content-staging.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/0.7.0/724f82e/Robots/Franka"
 

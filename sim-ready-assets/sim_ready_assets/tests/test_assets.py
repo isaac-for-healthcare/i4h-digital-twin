@@ -16,14 +16,14 @@
 import os
 import tempfile
 
-from i4h_asset_helper import (
+from sim_ready_assets import (
     BaseI4HAssets,
     get_i4h_asset_hash,
     get_i4h_asset_path,
     get_i4h_local_asset_path,
     retrieve_asset,
 )
-from i4h_asset_helper.assets import (
+from sim_ready_assets.assets import (
     _I4H_ASSET_ROOT,
     _get_asset_relpath,
     _get_default_version,

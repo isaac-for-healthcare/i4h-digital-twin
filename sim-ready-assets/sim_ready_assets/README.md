@@ -7,7 +7,7 @@
 ### Installation
 
 The helper itself needs Python 3.10+ and does not require Isaac Sim for the
-public S3 catalog (`production`, and the pre-release `staging` mirror). From this directory:
+public S3 catalog (`production`, and the pre-release `staging` mirror). From the `sim-ready-assets` directory:
 
 ```bash
 uv sync
@@ -43,8 +43,8 @@ Alternatively, use conda as described in the [IsaacSim Pip Installation Guide](h
 ```bash
 conda create -n i4h-assets python=3.10
 conda activate i4h-assets
-git clone https://github.com/isaac-for-healthcare/i4h-asset-catalog.git
-cd i4h-asset-catalog
+git clone https://github.com/isaac-for-healthcare/i4h-digital-twin.git
+cd i4h-digital-twin/sim-ready-assets
 pip install -e .
 pip install --extra-index-url https://pypi.nvidia.com "isaacsim[all,extscache]"
 ```
@@ -81,7 +81,7 @@ for `v0.9.0`. The opt-in utility below remains useful for older catalogs.
 ### Python Usage
 
 ```python
-from i4h_asset_helper import BaseI4HAssets
+from sim_ready_assets import BaseI4HAssets
 
 class MyAssets(BaseI4HAssets):
     """Assets manager for the your workflow."""
@@ -161,7 +161,7 @@ Install `usd-core` (validated with `25.11`) or use Isaac Sim's USD runtime:
 ```bash
 uv pip install usd-core==25.11
 scene="$HOME/.cache/i4h-assets/724f82e/Props/shared_OR_without_Mark"
-python -m i4h_asset_helper.repair_or_scene "$scene/main.usd" "$scene/main.repaired.usd"
+python -m sim_ready_assets.repair_or_scene "$scene/main.usd" "$scene/main.repaired.usd"
 ```
 
 Open `main.repaired.usd` to use the corrected scene. Keep it beside `main.usd`
@@ -184,7 +184,7 @@ UI icon. Validate the staged release in Isaac Sim before production publication.
 Run the USD regression tests with `usd-core` installed:
 
 ```bash
-python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
+python -m pytest sim_ready_assets/tests/test_repair_or_scene.py
 ```
 
 ### Environment Variables
@@ -207,4 +207,4 @@ python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
 - Identifies which build of the asset catalog to retrieve, by selecting the remote prefix and the local directory name. Despite the name, it is never a digest of the downloaded files: up to `0.3.0` it is the SHA-256 of the asset ZIP package, from `0.5.0` to `0.7.0` it is the catalog's short commit id, and for `v0.9.0` it is the first 12 characters of the catalog's SHA-256 build identifier. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
-  - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `i4h_asset_helper` package.
+  - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `sim_ready_assets` package.

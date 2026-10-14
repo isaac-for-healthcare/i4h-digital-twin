@@ -24,8 +24,8 @@ import time
 
 import pytest
 
-from i4h_asset_helper import assets, cli
-from i4h_asset_helper.assets import (
+from sim_ready_assets import assets, cli
+from sim_ready_assets.assets import (
     DEFAULT_DOWNLOAD_CONCURRENCY,
     DEFAULT_DOWNLOAD_TIMEOUT,
     retrieve_asset,
@@ -103,7 +103,7 @@ _ENDLESS_S3_DOWNLOAD = textwrap.dedent(
 
     from botocore.stub import Stubber
 
-    from i4h_asset_helper import assets, cli
+    from sim_ready_assets import assets, cli
 
 
     class EndlessBody:

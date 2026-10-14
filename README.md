@@ -61,7 +61,7 @@ See [`robot-digital-twin/README.md`](./robot-digital-twin/README.md).
 
 ## Sim-Ready Assets
 
-Catalog of robots, anatomy, equipment, and hospital environments used across i4h simulations, plus the `i4h_asset_helper` download helper.
+Catalog of robots, anatomy, equipment, and hospital environments used across i4h simulations, plus the `sim_ready_assets` download helper.
 
 See [`sim-ready-assets/README.md`](./sim-ready-assets/README.md).
 
