@@ -1,6 +1,17 @@
 ---
 name: patient-usd
 description: Inspect, display, transform, or consume USD and patient_twin.yaml assets exported by patient_digital_twin, including embedded CT, centerlines, Isaac Sim viewing. Use for this repository's patient USD contract, not general USD authoring.
+license: Apache-2.0
+metadata:
+  author: "Isaac for Healthcare Team <isaac-for-healthcare-support@nvidia.com>"
+  version: "0.9.0"
+  tags:
+    - isaac-for-healthcare
+    - i4h
+    - digital-twin
+    - patient
+    - usd
+    - isaac-sim
 ---
 
 # Patient USD assets
@@ -9,6 +20,19 @@ Read [Working with patient USD files](../../patient-digital-twin/docs/usd.md) fo
 runnable inspection examples and field definitions. Use
 [the patient workflow skill](../patient-digital-twin/SKILL.md) when the task needs
 to create or change the source `HumanBody`. Resolve links relative to this file.
+
+## Purpose
+
+Read, check, view, or carefully edit patient USD stages and bundles without
+changing their coordinate, unit, or visibility meaning.
+
+## Instructions
+
+1. Identify whether the asset is a standalone USD export or a `patient_twin.yaml` bundle.
+2. Open it with `pxr.Usd` and summarize default prim, units, up axis, named meshes, visibility, and CT/centerline metadata.
+3. Compute transforms and visibility through USD APIs, respecting declared frame and units.
+4. Make requested edits in a session layer or a deliberate new output, keeping bundle references valid.
+5. Reopen the result and report what was checked.
 
 ## Identify the asset before using it
 
@@ -79,4 +103,35 @@ expected named meshes, computed visibility and transforms. If relevant, check CT
 shape/affine and centerline alignment without dumping full data. For bundle edits,
 resolve affected artifact and prim paths and verify coordinate units. Test the
 requested runtime behavior when available and distinguish file validation from
-an Isaac Sim session .
+an Isaac Sim session.
+
+## Prerequisites
+
+`usd-core` (the patient package's `usd` or `pipeline` extra) for inspection; NumPy for
+CT and bundle arrays. The interactive viewer needs an installed Isaac Sim runtime
+(`python.sh`); headless screenshots also need Pillow in that runtime.
+
+## Limitations
+
+Stages contain static meshes, materials, optional CT data attributes, and centerline
+attributes. They have no rigs, collisions, dynamics, or CT volume rendering. A
+patient USD cannot be reimported through `SimpleImporter`; re-export from the source
+`HumanBody` instead.
+
+## Troubleshooting
+
+- Anatomy appears offset or scaled: check `metersPerUnit`, the manifest frame/units, and that the transform was not applied twice.
+- A structure is missing in the viewport: compare computed visibility (including ancestors) with prim existence; disabled meshes are invisible, not deleted.
+- CT values look scrambled: reshape `ct:hu` in C order with `ct:shape` and apply `ct:arrayIndexToScan`.
+- The viewer fails to import Kit modules: run `examples/isaac_sim.py` with Isaac Sim's `python.sh`, not the package virtualenv.
+
+## Examples
+
+- `List the anatomy and check the units in human_body.usdc.` → open the stage with `pxr.Usd`, report default prim, `metersPerUnit`, up axis, named meshes and visibility, without dumping arrays.
+- `Is the aorta centerline aligned with the CT in this bundle?` → read `patient_twin.yaml` and `volume.yaml`, map points with the declared frame and units, and compare against the CT affine.
+- `Open the s0011 export in Isaac Sim and save a screenshot.` → run `examples/isaac_sim.py view` headless with `--frames` and `--screenshot` from the Isaac Sim runtime.
+
+## Completion gate
+
+Report the asset type, stage metadata checked, structures and visibility, CT and
+centerline observations, any edit and its output path, and whether Isaac Sim was run.

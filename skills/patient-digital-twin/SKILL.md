@@ -1,6 +1,17 @@
 ---
 name: patient-digital-twin
 description: Import anatomy (segmentations, NV-Segment, NV-Generate, STL/OBJ), attach CT, control visibility, extract vessel centerlines, and export USD or i4h-workflows patient bundles with this repository's patient_digital_twin package. Use for patient package workflows, its CLI, and API changes; use patient-usd for inspecting or consuming exported USD assets.
+license: Apache-2.0
+metadata:
+  author: "Isaac for Healthcare Team <isaac-for-healthcare-support@nvidia.com>"
+  version: "0.9.0"
+  tags:
+    - isaac-for-healthcare
+    - i4h
+    - digital-twin
+    - patient
+    - medical-imaging
+    - usd
 ---
 
 # Patient Digital Twin
@@ -13,6 +24,19 @@ directory; resolve links relative to this file.
 - [Quickstart and options](../../patient-digital-twin/README.md): install, the s0011 walkthrough, DICOM, backends.
 - [Architecture](../../patient-digital-twin/docs/architecture.md): modules, key classes, data flow, coordinate frames. Read before changing the API.
 - [Example scripts](../../patient-digital-twin/examples/README.md) and [USD layout](../../patient-digital-twin/docs/usd.md).
+
+## Purpose
+
+Build a patient digital twin from imaging or meshes and export it for viewing or
+for i4h-workflows, using only the documented `patient_digital_twin` API and CLI.
+
+## Instructions
+
+1. Identify the input (label volume, mask folder, CT/MR for NV-Segment, NV-Generate, or STL/OBJ) and the requested output (arrays, USD, or bundle).
+2. Install only the extras that path needs (below).
+3. Import the named anatomy, wrap it in `HumanBody`, and attach matching CT when the output needs it.
+4. Extract centerlines or request bundle `vessel_names` only for vessels the user asked for.
+5. Export to a new output path, then verify names, empty meshes, CT grid, and manifest paths.
 
 ## Install only what the task needs
 
@@ -70,6 +94,20 @@ All public classes import from `patient_digital_twin`; `scan_volume`, `export`, 
 - `vasculature_digital_twin` (same distribution) is deprecated: do not use it for new work.
   Map its calls to `patient_digital_twin` with the README's "Deprecated" section.
 
+## Prerequisites
+
+Python 3.10+ and the package extras for the chosen path. The s0011 CT is a Git LFS
+file (`git lfs pull`); the s0011 masks need no model inference. NV-Segment and
+NV-Generate need an upstream checkout, model weights, and CUDA-compatible PyTorch.
+Isaac Sim is needed only for interactive viewing.
+
+## Limitations
+
+Exports are static geometry, optional centerlines, and native-HU CT. They are not a
+tissue simulation, a deformable model, or an anonymization step. Sheared CT grids
+need explicit resampling before bundle centerlines. HU-to-attenuation mapping and
+simulator placement belong to the consuming workflow.
+
 ## Verify
 
 Check expected structure names, present versus empty meshes (`structure.is_empty`), the
@@ -85,3 +123,22 @@ Report optional-dependency skips separately from tested behavior. Do not describ
 geometry export as a validated tissue simulation or an anonymization step. If inputs,
 dependencies, or registration are missing, report what is missing instead of switching
 patients or backends.
+
+## Troubleshooting
+
+- Wrong or missing structure names: check that the label dictionary matches the backend that produced the labels, and compare against `canonical_name` output.
+- Export fails because the output exists: choose a new directory (bundles, CLI output); `export_to_usd` replaces only a single file.
+- Bundle vessel mask or centerline errors: confirm the CT shares the segmentation grid and that the requested `vessel_names` were imported.
+- `extract_topology` stores nothing: install `vtk`/`scipy` (`pipeline` extra) and check the meshes are closed.
+- NV model import errors: rerun with `--python` pointing at the environment that has the model dependencies.
+
+## Examples
+
+- `Build a navigation bundle for the s0011 aorta with its CT.` → import the s0011 aorta mask, attach `ct.nii.gz`, call `export_patient_twin(..., vessel_names=["aorta"], ct_exterior=True)` into a new directory, and report the manifest artifacts.
+- `Segment the aorta from my CT with NV-Segment and export a bundle.` → run `python -m patient_digital_twin --source nvsegment --input ct.nii.gz --bundle-root ROOT --classes aorta --format bundle --output NEW_DIR`; report missing weights instead of switching backends.
+- `Hide the liver but keep it in the USD.` → set `enabled = False` on the structure and export; the liver remains as an invisible prim.
+
+## Completion gate
+
+Report the inputs, extras, structures imported (present vs empty), CT attachment and
+frame, output paths, verification performed, and any optional-dependency skips.

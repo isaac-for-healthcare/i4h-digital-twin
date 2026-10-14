@@ -1,0 +1,69 @@
+[
+  {
+    "id": "patient-digital-twin-s0011-aorta-bundle",
+    "question": "Build an i4h-workflows navigation bundle for the aorta from the bundled s0011 sample, with its CT.",
+    "expected_skill": "patient-digital-twin",
+    "ground_truth": "Import the s0011 aorta mask with SegmentationImporter, wrap it in HumanBody, attach ct.nii.gz with scan_volume.from_nifti, and call export_patient_twin into a new directory with vessel_names=[\"aorta\"]. The bundle contains patient_twin.yaml, patient_anatomy.usdc, volume.npy, volume.yaml, vessel_mask.npy, and centerline_*.npy.",
+    "expected_behavior": [
+      "routes to patient-digital-twin",
+      "installs the pipeline extra and fetches the s0011 CT with git lfs pull",
+      "imports only the aorta from patient-digital-twin/examples/data/s0011/segmentations",
+      "attaches the matching s0011 CT before export",
+      "calls export_patient_twin with vessel_names=[\"aorta\"] into a new output directory",
+      "reports the manifest artifacts and verifies the aorta mesh is not empty"
+    ]
+  },
+  {
+    "id": "patient-digital-twin-nvsegment-cli",
+    "question": "Segment the aorta and liver from my CT at ~/data/ct.nii.gz with NV-Segment and export a patient bundle. NV-Segment is checked out at ~/NV-Segment-CTMR.",
+    "expected_skill": "patient-digital-twin",
+    "ground_truth": "Install the pipeline and nvsegment extras, then run python -m patient_digital_twin --source nvsegment --input ~/data/ct.nii.gz --bundle-root pointing at the inner NV-Segment-CTMR bundle directory --classes aorta liver --format bundle --output to a new directory. Model weights must already be present.",
+    "expected_behavior": [
+      "routes to patient-digital-twin",
+      "uses the patient_digital_twin CLI with --source nvsegment",
+      "passes --bundle-root for the inner NV-Segment-CTMR bundle directory",
+      "requests --classes aorta liver and --format bundle",
+      "writes to a new output directory",
+      "reports missing model weights or dependencies instead of switching backends or patients"
+    ]
+  },
+  {
+    "id": "patient-digital-twin-labelmap-usd",
+    "question": "I have a multi-label NIfTI segmentation labels.nii.gz where 1 is liver and 2 is aorta. Turn it into a USD file with both organs.",
+    "expected_skill": "patient-digital-twin",
+    "ground_truth": "Use SegmentationImporter(\"labels.nii.gz\", {1: \"liver\", 2: \"aorta\"}).to_anatomy_collection(), wrap it in HumanBody, and call export_to_usd on a .usdc path. Label IDs must match the segmentation.",
+    "expected_behavior": [
+      "routes to patient-digital-twin",
+      "passes the ID-to-name label dictionary that matches the segmentation",
+      "creates a HumanBody from the imported anatomy",
+      "exports with export_to_usd",
+      "checks both structures are present and non-empty"
+    ]
+  },
+  {
+    "id": "patient-digital-twin-centerlines",
+    "question": "Extract a vessel centerline for the aorta from the s0011 sample and give me the points, edges, and radii.",
+    "expected_skill": "patient-digital-twin",
+    "ground_truth": "Import the s0011 aorta, call body.extract_topology(names=[\"aorta\"], spacing_m=0.0015) with VTK available, and read aorta.centerline.points, edges, and radii. Points and radii are in the mesh's local meters.",
+    "expected_behavior": [
+      "routes to patient-digital-twin",
+      "installs the pipeline extra for VTK and SciPy",
+      "calls extract_topology for the aorta",
+      "reads points, edges, and radii from the stored centerline graph",
+      "states that points and radii are in local meters"
+    ]
+  },
+  {
+    "id": "patient-digital-twin-hide-structure",
+    "question": "Export the s0011 aorta and liver to USD, but hide the liver so only the aorta shows.",
+    "expected_skill": "patient-digital-twin",
+    "ground_truth": "Import both structures, set the liver structure's enabled flag to False (or use set_structure_enabled), and export. The liver is kept as an invisible prim rather than deleted.",
+    "expected_behavior": [
+      "routes to patient-digital-twin",
+      "imports aorta and liver from the s0011 masks",
+      "disables the liver instead of deleting it",
+      "exports the USD to the requested path",
+      "explains that the disabled liver remains as an invisible prim"
+    ]
+  }
+]

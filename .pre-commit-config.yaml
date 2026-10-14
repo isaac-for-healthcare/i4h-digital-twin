@@ -1,3 +1,8 @@
+# NVSkills-generated skill artifacts: skill.oms.sig records per-file digests of
+# BENCHMARK.md and skill-card.md, so a lint fix to these files would break the
+# signature. Keep them out of all hooks.
+exclude: '^skills/[^/]+/(BENCHMARK\.md|skill-card\.md|skill\.oms\.sig)$'
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.7
