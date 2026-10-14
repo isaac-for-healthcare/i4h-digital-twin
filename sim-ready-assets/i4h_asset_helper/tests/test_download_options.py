@@ -15,8 +15,12 @@
 
 """Tests that the download budget is reachable from the CLI. These do not touch the network."""
 
+import os
+import subprocess
 import sys
+import textwrap
 import threading
+import time
 
 import pytest
 
@@ -71,7 +75,7 @@ def test_download_timeout_cancels_the_queued_downloads(tmp_path, monkeypatch):
     started = []
     release = threading.Event()
 
-    def fake_download(url_entry, download_dir, version=None, hash=None):
+    def fake_download(url_entry, download_dir, version=None, hash=None, **kwargs):
         started.append(url_entry)
         # Outlasts the timeout below, but bounded so a regression here fails rather than hangs.
         release.wait(1.0)
@@ -88,6 +92,63 @@ def test_download_timeout_cancels_the_queued_downloads(tmp_path, monkeypatch):
 
     # Left queued, the pool would drain every entry before _download_assets could return.
     assert len(started) < len(url_entries)
+
+
+# Runs the real CLI against a stubbed S3 client whose object stream never ends, like a large file on a slow
+# link. The first file is still in flight when the budget runs out, which is what used to deadlock exit.
+_ENDLESS_S3_DOWNLOAD = textwrap.dedent(
+    """
+    import sys
+    import time
+
+    from botocore.stub import Stubber
+
+    from i4h_asset_helper import assets, cli
+
+
+    class EndlessBody:
+        def read(self, amt=None):
+            time.sleep(0.01)
+            return b"x" * 1024
+
+        def close(self):
+            pass
+
+
+    client = assets._get_s3_client()
+    stubber = Stubber(client)
+    stubber.add_response("head_object", {"ContentLength": 1024})
+    stubber.add_response("get_object", {"Body": EndlessBody()})
+    stubber.activate()
+
+    assets._get_s3_client = lambda: client
+    assets._list_asset_url = lambda url: [f"{url}/a.usd", f"{url}/b.usd"]
+    sys.argv = ["i4h-asset-retrieve", "--download-dir", sys.argv[1], "--concurrency", "1", "--timeout", "0.5"]
+    sys.exit(cli.retrieve_main())
+    """
+)
+
+
+def test_cli_exits_when_the_budget_runs_out_mid_transfer(tmp_path):
+    """The in-flight transfer has to be aborted, or interpreter exit waits on it forever (nvbugs 6921320)."""
+    env = {**os.environ, "I4H_ASSET_ENV": "production"}
+    start = time.monotonic()
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _ENDLESS_S3_DOWNLOAD, str(tmp_path)],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("i4h-asset-retrieve hung after its download budget ran out")
+
+    assert result.returncode != 0
+    assert "budget ran out" in result.stderr
+    assert time.monotonic() - start < 30
+    # The aborted file's partial temp file is removed rather than left next to the finished ones.
+    assert [files for _, _, files in os.walk(tmp_path) if files] == []
 
 
 def test_cli_forwards_the_download_budget_and_sub_path(tmp_path, monkeypatch):

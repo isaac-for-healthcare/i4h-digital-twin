@@ -52,10 +52,7 @@ def retrieve_main():
     parser.add_argument(
         "--verify",
         action="store_true",
-        help=(
-            "Verify the downloaded assets. Versions that publish a content digest are hash-checked; "
-            "the rest are checked against the catalog listing"
-        ),
+        help="Verify the downloaded assets against the catalog listing: every listed file must exist at full size",
     )
     parser.add_argument(
         "--concurrency",

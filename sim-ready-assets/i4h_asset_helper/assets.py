@@ -14,12 +14,12 @@
 # limitations under the License.
 
 import asyncio
-import hashlib
 import importlib
 import json
 import os
-import string
 import sys
+import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -35,9 +35,7 @@ __all__ = [
     "get_i4h_asset_hash",
     "get_i4h_asset_path",
     "get_i4h_local_asset_path",
-    "is_content_digest",
     "retrieve_asset",
-    "sha256_of_folder",
     "verify_asset",
     "BaseI4HAssets",
 ]
@@ -239,81 +237,7 @@ def get_i4h_local_asset_path(
         return os.path.join(download_dir, hash)
 
 
-_SHA256_SKIP_NAMES = {".gitattributes", ".gitignore"}
-_SHA256_SKIP_DIRS = {".git", "__pycache__"}
-
-
-def sha256_of_folder(folder_path: str, verbose: bool = False) -> str:
-    """
-    Compute a deterministic SHA-256 hash of a folder's contents.
-
-    The hash includes both relative file paths and file contents, sorted for
-    determinism. Skips .git/, __pycache__/, .gitattributes, and .gitignore.
-
-    Args:
-        folder_path: Path to the folder to hash.
-        verbose: If True, print each file being hashed.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    sha256 = hashlib.sha256()
-    folder_path = Path(folder_path)
-
-    for root, dirs, files in sorted(os.walk(folder_path)):
-        dirs[:] = sorted(d for d in dirs if d not in _SHA256_SKIP_DIRS)
-        for fname in sorted(files):
-            if fname in _SHA256_SKIP_NAMES:
-                continue
-            file_path = Path(root) / fname
-            relative_path = file_path.relative_to(folder_path).as_posix()
-            sha256.update(relative_path.encode())
-            if verbose:
-                print(f"  Hashing: {relative_path}")
-            with open(file_path, "rb") as f:
-                while chunk := f.read(8192):
-                    sha256.update(chunk)
-
-    return sha256.hexdigest()
-
-
-_CONTENT_DIGEST_LENGTH = 64
 _VERIFY_REPORT_LIMIT = 20
-
-
-def is_content_digest(manifest_value: str) -> bool:
-    """
-    Whether a value from assets_sha256.json is a content digest rather than a path identifier.
-
-    Catalog 0.1.0 through 0.3.0 recorded a real SHA-256 of the published tree. From 0.5.0 onwards the
-    entry holds the catalog's short commit id instead, which names the S3 prefix the assets are served
-    from (``Healthcare/0.7.0/724f82e``) and the local directory they land in. Such a value says where
-    the assets live, not what they contain, so it can never equal a digest of the download.
-
-    Args:
-        manifest_value: A value from assets_sha256.json, or an override passed as ``hash``.
-
-    Returns:
-        True if the value is a full hex SHA-256 digest, in either case.
-    """
-    return len(manifest_value) == _CONTENT_DIGEST_LENGTH and all(c in string.hexdigits for c in manifest_value)
-
-
-def _verify_content_digest(local_dir: str, expected_digest: str, verbose: bool = False) -> bool:
-    """Verify a download whose catalog version publishes a SHA-256 of the whole tree."""
-    print(f"Computing SHA-256 of {local_dir} ...")
-    computed_digest = sha256_of_folder(local_dir, verbose=verbose)
-
-    print(f"  Expected: {expected_digest}")
-    print(f"  Computed: {computed_digest}")
-
-    # Hex is case-insensitive, and is_content_digest() accepts either case, so compare in one case.
-    if computed_digest.lower() == expected_digest.lower():
-        print("Verification PASSED")
-        return True
-
-    print("Verification FAILED — hash mismatch!")
-    return False
 
 
 def _verify_against_catalog(
@@ -326,9 +250,9 @@ def _verify_against_catalog(
     """
     Verify a download against the remote catalog listing.
 
-    Path-addressed catalogs publish no per-file checksums, so the strongest available check is that every
-    object the catalog lists is present locally at its full size. That is also the check that matters in
-    practice, because an interrupted or timed-out download leaves files missing or half-written.
+    No catalog version publishes per-file checksums, so the strongest available check is that every object
+    the catalog lists is present locally at its full size. That is also the check that matters in practice,
+    because an interrupted or timed-out download leaves files missing or half-written.
     """
     remote_path = get_i4h_asset_path(version, hash)
     if sub_path is not None:
@@ -336,6 +260,9 @@ def _verify_against_catalog(
 
     print(f"Verifying {local_dir} against catalog listing {remote_path} ...")
     entries = _list_asset_entries(remote_path)
+    if not entries:
+        print("Verification FAILED — the catalog listing contains no files!")
+        return False
 
     missing: List[str] = []
     wrong_size: List[Tuple[str, int, int]] = []
@@ -382,20 +309,20 @@ def verify_asset(
     verbose: bool = False,
 ) -> bool:
     """
-    Verify a downloaded asset folder against what the catalog publishes for its version.
+    Verify a downloaded asset folder against the catalog listing for its version.
 
-    Versions that publish a SHA-256 of the whole tree are verified by hashing the download. Versions that
-    publish a short path identifier instead carry no checksum to compare against, so those are verified
-    against the catalog listing: every object the catalog holds must exist locally at its full size.
+    Every object the catalog holds under the version's remote prefix must exist locally at its full size.
+    The value in assets_sha256.json only names that prefix and the local directory. From 0.5.0 onwards it
+    is the catalog's short commit id. Up to 0.3.0 it is the SHA-256 of the asset ZIP package the release
+    was built from. That ZIP is not what the S3 catalog serves, so no digest of the download can match it.
 
     Args:
         version: The version of the asset.
         download_dir: The directory where the asset was downloaded.
-        hash: The expected content digest, or the catalog path identifier. If None, looked up from
-            assets_sha256.json.
-        sub_path: Restrict listing verification to the sub path that was downloaded, matching the
-            ``--sub-path`` used to retrieve it. Ignored when the version publishes a content digest,
-            which always covers the whole tree.
+        hash: The catalog identifier that names the remote prefix and local directory. If None, looked
+            up from assets_sha256.json.
+        sub_path: Restrict verification to the sub path that was downloaded, matching the ``--sub-path``
+            used to retrieve it.
         verbose: If True, print per-file progress.
 
     Returns:
@@ -405,22 +332,13 @@ def verify_asset(
         ValueError: If no catalog entry is available or the folder doesn't exist.
     """
     version = version if version is not None else get_i4h_asset_version()
-    expected_value = hash if hash is not None else get_i4h_asset_hash(version=version)
-
-    if expected_value is None:
+    if hash is None and get_i4h_asset_hash(version=version) is None:
         raise ValueError(f"No catalog entry found for version {version}")
 
     local_dir = get_i4h_local_asset_path(version, download_dir, hash)
     if not os.path.isdir(local_dir):
         raise ValueError(f"Asset folder does not exist: {local_dir}")
 
-    if is_content_digest(expected_value):
-        return _verify_content_digest(local_dir, expected_value, verbose=verbose)
-
-    print(
-        f"Catalog {version} publishes the path identifier {expected_value!r} rather than a content digest; "
-        "verifying against the catalog listing instead."
-    )
     return _verify_against_catalog(version, hash, local_dir, sub_path=sub_path, verbose=verbose)
 
 
@@ -504,11 +422,13 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
     with the file itself. The size is None when the backend does not report one, which is the case for
     Nucleus / omni.client listings.
     """
-    # If not a folder, just return the url as a list with one entry
-    if not _is_url_folder(url_entry):
+    # Resolve S3 files directly so an exact object is not mistaken for a directory,
+    # and verification gets its size. Preserve the omni.client path for other backends.
+    use_s3 = not _is_import_ready("omni.client") and _is_s3_environment()
+    if not use_s3 and not _is_url_folder(url_entry):
         return [(_unify_path(url_entry), None)]
 
-    if not _is_import_ready("isaacsim.storage.native.nucleus"):
+    if use_s3 or not _is_import_ready("isaacsim.storage.native.nucleus"):
         if not _is_s3_environment():
             if _is_import_ready("omni.client"):
                 return _list_omni_client_entries(_unify_path(url_entry))
@@ -517,6 +437,14 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
         try:
             bucket, key = _parse_s3_url(url_entry)
             s3_client = _get_s3_client()
+
+            if key and not key.endswith("/"):
+                try:
+                    metadata = s3_client.head_object(Bucket=bucket, Key=key)
+                    return [(url_entry, metadata["ContentLength"])]
+                except ClientError as e:
+                    if e.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey", "NotFound"):
+                        raise
 
             # Ensure key ends with '/'
             if key and not key.endswith("/"):
@@ -622,7 +550,57 @@ def _filter_downloaded_assets(
     return results
 
 
-def _download_individual_asset(url_entry: str, download_dir: str, version: str | None = None, hash: str | None = None):
+class _S3Downloader:
+    """
+    One s3transfer TransferManager shared by the download pool, so that the transfers still in flight when
+    the budget runs out can be aborted rather than abandoned.
+
+    ``s3_client.download_file`` hides its transfer inside a private TransferManager that nothing can cancel.
+    Abandoned there, it deadlocks interpreter exit: ``concurrent.futures`` stops s3transfer's worker threads
+    at exit and then joins the pool thread that is still waiting on them.
+    """
+
+    def __init__(self, concurrency: int):
+        from boto3.s3.transfer import TransferConfig, create_transfer_manager
+
+        # download_file gives every file its own manager with boto3's default of 10 request threads; keep that
+        # per-file headroom now that the manager is shared.
+        config = TransferConfig(max_concurrency=10 * concurrency)
+        self._manager = create_transfer_manager(_get_s3_client(), config)
+        self._futures = []
+        self._cancelled = False
+        self._lock = threading.Lock()
+
+    def download(self, bucket: str, key: str, local_path: str):
+        # Submitting under the lock means cancel() cannot miss a transfer that starts while it runs.
+        with self._lock:
+            if self._cancelled:
+                raise RuntimeError("Download cancelled")
+            future = self._manager.download(bucket, key, local_path)
+            self._futures.append(future)
+        future.result()
+
+    def cancel(self):
+        """Abort the in-flight transfers. s3transfer deletes their partial temp files."""
+        with self._lock:
+            self._cancelled = True
+            for future in self._futures:
+                future.cancel()
+
+    def close(self):
+        """Wait for the transfers to wind down and stop the manager's threads."""
+        # Not shutdown(cancel=True): s3transfer passes its arguments to _shutdown in the wrong order there,
+        # which raises TypeError as soon as a transfer is actually in flight.
+        self._manager.shutdown()
+
+
+def _download_individual_asset(
+    url_entry: str,
+    download_dir: str,
+    version: str | None = None,
+    hash: str | None = None,
+    s3_downloader: _S3Downloader | None = None,
+):
     version = version if version is not None else get_i4h_asset_version()
 
     if url_entry.endswith("/"):
@@ -637,16 +615,29 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
-            s3_client = _get_s3_client()
 
             # Download file directly to local path
             if os.path.exists(local_path):
                 os.remove(local_path)
 
-            s3_client.download_file(bucket, key, local_path)
+            # Both write to a temp file and only rename it into place once the download is complete.
+            if s3_downloader is not None:
+                s3_downloader.download(bucket, key, local_path)
+            else:
+                _get_s3_client().download_file(bucket, key, local_path)
             return local_path
         except Exception as e:
-            raise ValueError(f"Failed to download asset from S3: {url_entry}: {str(e)}")
+            message = f"Failed to download asset from S3: {url_entry}: {str(e)}"
+            env = _get_asset_env()
+            error_code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else None
+            is_not_found = error_code in ("404", "NoSuchKey")
+            if is_not_found and env != "production":
+                # Only production mirrors every published catalog; the other servers hold partial content.
+                message += (
+                    f". The '{env}' asset server may not host this catalog version; "
+                    "unset I4H_ASSET_ENV (or set it to 'production') to use the public production catalog."
+                )
+            raise ValueError(message)
 
     import omni.client
 
@@ -654,11 +645,16 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
     if result != omni.client.Result.OK:
         raise ValueError(f"Failed to download asset: {url_entry}")
 
-    if os.path.exists(local_path):
-        os.remove(local_path)
-
-    with open(local_path, "wb") as f:
-        f.write(file_content)
+    # Write to a temp file and rename it into place, so an interrupted write never leaves a truncated file
+    # under the final name, where it would be skipped as already downloaded.
+    fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(local_path), prefix=f".{os.path.basename(local_path)}.")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(file_content)
+        os.replace(temp_path, local_path)
+    except BaseException:
+        os.remove(temp_path)
+        raise
 
     return local_path
 
@@ -694,12 +690,19 @@ def _download_assets(
     total = len(url_entries)
     completed = 0
 
+    # Only the boto3 fallback can abort an in-flight file; omni.client.read_file cannot be interrupted.
+    use_s3 = not _is_import_ready("omni.client") and _is_s3_environment()
+    s3_downloader = _S3Downloader(concurrency) if use_s3 else None
+    finished = False
+
     # Deliberately not a `with` block: its __exit__ shuts the pool down with wait=True, which on timeout
     # would keep draining the queue and block until every remaining file had downloaded anyway.
     executor = ThreadPoolExecutor(max_workers=concurrency)
     try:
         futures_to_url = {
-            executor.submit(_download_individual_asset, url_entry, download_dir, version, hash): url_entry
+            executor.submit(
+                _download_individual_asset, url_entry, download_dir, version, hash, s3_downloader=s3_downloader
+            ): url_entry
             for url_entry in url_entries
         }
 
@@ -709,6 +712,7 @@ def _download_assets(
                 future.result()
                 completed += 1
                 pbar.update(1)
+        finished = True
     # Only an alias of the builtin from Python 3.11 onwards, so catch it under its own name.
     except FuturesTimeoutError as e:
         raise TimeoutError(
@@ -719,6 +723,12 @@ def _download_assets(
         # cancel_futures drops the downloads still queued so as_completed's timeout ends the transfer
         # instead of only ending the wait for it.
         executor.shutdown(wait=False, cancel_futures=True)
+        if s3_downloader is not None:
+            # The files already in flight have to be aborted too. Left running, their pool threads would
+            # block interpreter exit forever once concurrent.futures stops s3transfer's workers.
+            if not finished:
+                s3_downloader.cancel()
+            s3_downloader.close()
 
 
 def retrieve_asset(
@@ -757,7 +767,7 @@ def retrieve_asset(
     paths = _list_asset_url(remote_path)
     if not paths:
         # Reporting success with nothing downloaded hides a mistyped or unsupported sub-path from scripts.
-        raise FileNotFoundError(f"No assets match {sub_path if sub_path is not None else remote_path}")
+        raise FileNotFoundError(f"No asset files found at {remote_path}")
 
     if force_download:
         url_entries = paths

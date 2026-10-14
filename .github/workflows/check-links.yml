@@ -24,8 +24,11 @@ jobs:
         run: npm install -g markdown-link-check
 
       - name: Check for broken links
+        # NVSkills-generated skill reports are kept verbatim to match their signatures.
         run: |
           find . -name "*.md" \
+            -not -path "./skills/*/BENCHMARK.md" \
+            -not -path "./skills/*/skill-card.md" \
             -not -path "./.git/*" \
             -not -path "*/.venv/*" \
             -not -path "*/venv/*" \

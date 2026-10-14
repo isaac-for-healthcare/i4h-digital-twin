@@ -18,6 +18,7 @@
 import sys
 
 import pytest
+from botocore.exceptions import ClientError
 
 from i4h_asset_helper import assets, cli
 from i4h_asset_helper.assets import retrieve_asset
@@ -33,7 +34,13 @@ _KEYS = [
 
 
 class _FakeS3:
-    """The two list_objects_v2 behaviours the helper relies on: prefix matching and delimiter grouping."""
+    """The S3 calls the helper lists with: head_object on exact keys, and list_objects_v2 prefix matching and
+    delimiter grouping."""
+
+    def head_object(self, Bucket, Key):
+        if Key not in _KEYS:
+            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        return {"ContentLength": 1}
 
     def list_objects_v2(self, Bucket, Prefix, Delimiter=None, MaxKeys=1000):
         matches = sorted(key for key in _KEYS if key.startswith(Prefix))
@@ -93,7 +100,7 @@ def test_retrieve_a_folder_sub_path_downloads_its_files(tmp_path, fake_s3):
 def test_retrieve_an_empty_listing_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(assets, "_list_asset_url", lambda url: [])
 
-    with pytest.raises(FileNotFoundError, match="No assets match Props/Missing"):
+    with pytest.raises(FileNotFoundError, match="No asset files found at .*Props/Missing"):
         retrieve_asset(version="0.7.0", download_dir=str(tmp_path), sub_path="Props/Missing")
 
 
@@ -106,5 +113,5 @@ def test_cli_exits_non_zero_when_nothing_matches(tmp_path, monkeypatch, capsys):
 
     assert cli.retrieve_main() == 1
     captured = capsys.readouterr()
-    assert "No assets match Props/Missing" in captured.err
+    assert "No asset files found at" in captured.err and "Props/Missing" in captured.err
     assert "Assets downloaded to:" not in captured.out

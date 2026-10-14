@@ -7,7 +7,7 @@
 ### Installation
 
 The helper itself needs Python 3.10+ and does not require Isaac Sim for the
-public S3 catalogs (`staging` / `production`). From this directory:
+public S3 catalog (`production`, and the pre-release `staging` mirror). From this directory:
 
 ```bash
 uv sync
@@ -137,10 +137,12 @@ i4h-asset-retrieve --skip-download --verify --sub-path Robots
 
 ##### Verification
 
-What `--verify` can check depends on what the catalog version publishes in `assets_sha256.json`:
+`--verify` checks the download against the catalog listing: every object the catalog holds must be present locally at its full size. The catalogs publish no per-file checksums, and the value in `assets_sha256.json` is not a digest of the published tree for any version, so there is nothing to hash the download against:
 
-- Versions up to `0.3.0` publish a SHA-256 of the whole published tree, so the download is hashed and compared against it.
-- Versions from `0.5.0` onwards publish the catalog's short commit id instead (for example `724f82e`), which names the S3 prefix the assets are served from and the local directory they land in. That value describes where the assets live, not what they contain, so there is no digest to compare against. These versions are instead verified against the catalog listing: every object the catalog holds must be present locally at its full size.
+- Versions up to `0.3.0` record the SHA-256 of the asset ZIP package the release was built from. The S3 catalog serves the extracted files under that value, not the ZIP, so the download never hashes to it.
+- Versions from `0.5.0` onwards record the catalog's short commit id instead (for example `724f82e`).
+
+In both cases the value names the S3 prefix the assets are served from and the local directory they land in.
 
 Listing verification needs network access and is the check that catches a partial download, which is the usual failure when a fetch is interrupted or exceeds `--timeout`. Pass `--sub-path` alongside `--verify` to scope it to the sub path you downloaded; without it, verification expects the entire catalog.
 
@@ -197,11 +199,12 @@ python -m pytest i4h_asset_helper/tests/test_repair_or_scene.py
 
 - There are three different asset server environments: `dev`, `staging`, and `production`. `staging` and `production` are publicly accessible and `dev` is only accessible by the internal team. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
 - The current default environment is `dev`, which serves the `v0.9.0` catalog. Set `I4H_ASSET_ENV=production` for the public S3 catalogs, including all versions before `v0.9.0`.
+- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of a version, or a different build hash, so downloads can fail with a 404. Use it only when you have been asked to test pre-release content.
 - The `dev` environment needs `omni.client`, from the `nucleus` extra or Isaac Sim. On the first run, open the printed device-login URL in a web browser and enter the code to authenticate.
 
 #### I4H_ASSET_SHA256_HASH
 
-- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; later versions use a short build identifier (a catalog commit ID or a content-digest prefix), which selects the remote prefix and the local directory name. See [Verification](#verification).
+- Identifies which build of the asset catalog to retrieve, by selecting the remote prefix and the local directory name. Despite the name, it is never a digest of the downloaded files: up to `0.3.0` it is the SHA-256 of the asset ZIP package, from `0.5.0` to `0.7.0` it is the catalog's short commit id, and for `v0.9.0` it is the first 12 characters of the catalog's SHA-256 build identifier. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
   - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `i4h_asset_helper` package.
