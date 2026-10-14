@@ -139,7 +139,8 @@ def _is_import_ready(package_name: str):
 
 def _get_asset_env() -> str:
     """Get the current configuration of the asset root."""
-    return os.getenv("I4H_ASSET_ENV", "dev")
+    # Staging is the default while v0.9.0 is in QA there; switch to production once it is published.
+    return os.getenv("I4H_ASSET_ENV", "staging")
 
 
 def _get_download_dir() -> str:
@@ -635,7 +636,7 @@ def _download_individual_asset(
                 # Only production mirrors every published catalog; the other servers hold partial content.
                 message += (
                     f". The '{env}' asset server may not host this catalog version; "
-                    "unset I4H_ASSET_ENV (or set it to 'production') to use the public production catalog."
+                    "set I4H_ASSET_ENV=production to use the public production catalog."
                 )
             raise ValueError(message)
 

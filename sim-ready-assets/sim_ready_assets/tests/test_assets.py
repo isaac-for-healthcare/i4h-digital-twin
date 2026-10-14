@@ -83,6 +83,8 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
     monkeypatch.delenv("I4H_ASSET_SHA256_HASH", raising=False)
     assert _get_default_version() == "v0.9.0"
     monkeypatch.delenv("I4H_ASSET_ENV", raising=False)
+    assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['staging']}/v0.9.0/c53fff9"
+    monkeypatch.setenv("I4H_ASSET_ENV", "dev")
     assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['dev']}/v0.9.0"
     assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/v0.9.0"
     for environment in ("staging", "production"):
@@ -93,7 +95,7 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
 
 
 def test_retrieve_asset(monkeypatch):
-    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    # Exercise downloads against the production S3 catalog; the default staging mirror is partial.
     monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -104,7 +106,7 @@ def test_retrieve_asset(monkeypatch):
 
 
 def test_retrieve_asset_force_download(monkeypatch):
-    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    # Exercise downloads against the production S3 catalog; the default staging mirror is partial.
     monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -157,7 +159,7 @@ def test_retrieve_asset_custom_hash(monkeypatch):
 
 
 def test_class_inheritance(monkeypatch):
-    # Exercise downloads against the public S3 catalog; the default dev Nucleus needs a sign-in.
+    # Exercise downloads against the production S3 catalog; the default staging mirror is partial.
     monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setenv("I4H_ASSET_VERSION", "0.7.0")
     class TestI4HAssets(BaseI4HAssets):

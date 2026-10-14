@@ -77,7 +77,7 @@ def retrieve_main():
             if not _is_import_ready("omni.client"):
                 raise ImportError(
                     "Isaac Sim or omni.client is required for Nucleus / omni.client downloads "
-                    "(the default `I4H_ASSET_ENV=dev`, or `--force_omni_client`). Install "
+                    "(`I4H_ASSET_ENV=dev`, or `--force_omni_client`). Install "
                     "`sim-ready-assets[nucleus]`, or Isaac Sim with `uv pip install --extra-index-url "
                     "https://pypi.nvidia.com isaacsim[all,extscache]` on Linux x86_64 Python 3.10."
                 ) from exc

@@ -25,7 +25,7 @@ import tempfile
 from sim_ready_assets.assets import _is_import_ready
 
 CLI = [sys.executable, "-m", "sim_ready_assets.cli"]
-# The public S3 catalog; the default dev Nucleus needs a sign-in.
+# The production S3 catalog; the default staging mirror only holds pre-release content.
 PRODUCTION_ENV = {**os.environ, "I4H_ASSET_ENV": "production"}
 
 

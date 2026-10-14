@@ -17,8 +17,9 @@ That installs `boto3`, `tqdm`, `requests`, and pytest. On Linux aarch64 (for
 example DGX Spark) this is the supported path: Isaac Sim has no ARM64 pip
 wheels.
 
-The default catalog is on the internal dev Nucleus server (`I4H_ASSET_ENV=dev`),
-which needs `omni.client`. Install the `nucleus` extra to get the standalone
+The default catalog is on the public `staging` S3 mirror, which needs nothing
+extra. The internal dev Nucleus server (`I4H_ASSET_ENV=dev`) needs
+`omni.client`. Install the `nucleus` extra to get the standalone
 `omniverseclient` package (Python 3.10–3.12; NVIDIA proprietary license):
 
 ```bash
@@ -51,22 +52,26 @@ pip install --extra-index-url https://pypi.nvidia.com "isaacsim[all,extscache]"
 
 ### Usage
 
-To download the asset to a local directory `~/.cache/i4h-assets/<VERSION>` (dev Nucleus) or
-`~/.cache/i4h-assets/<SHA256_HASH>` (S3):
+To download the asset to a local directory `~/.cache/i4h-assets/<SHA256_HASH>` (S3, the default) or
+`~/.cache/i4h-assets/<VERSION>` (dev Nucleus):
 
 ### v0.9.0 asset release
 
-The default catalog is `v0.9.0` on the dev Nucleus server:
+The default catalog is `v0.9.0` on the staging S3 mirror, for pre-release QA:
+`https://omniverse-content-staging.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/v0.9.0/c53fff9/{Props,Robots,Test}/...`.
+It downloads to `~/.cache/i4h-assets/c53fff9`. This complete catalog includes
+the corrected OR editor icon and repaired organ materials (NVBugs 6646936 and
+6657585). Once it is published to production, the default switches to
+`production`.
+
+The same catalog is on the dev Nucleus server (`I4H_ASSET_ENV=dev`):
 `omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0/{Props,Robots,Test}/...`,
-with no build directory. It downloads to `~/.cache/i4h-assets/v0.9.0`. This
-complete catalog includes the corrected OR editor icon and repaired organ
-materials (NVBugs 6646936 and 6657585).
+with no build directory. It downloads to `~/.cache/i4h-assets/v0.9.0`.
 
 `assets_sha256.json` records the build ID `c53fff9`, the first 7
 characters of the catalog's SHA-256 digest, matching the earlier catalogs. It is not a content digest, so
-`--verify` checks the download against the Nucleus listing, including partial
-downloads. If the catalog is later published to S3 under that build directory,
-`I4H_ASSET_ENV=production` selects `v0.9.0/c53fff9`.
+`--verify` checks the download against the catalog listing, including partial
+downloads.
 
 Older catalogs are on S3: use `I4H_ASSET_ENV=production` with `--version 0.7.0`
 or `I4H_ASSET_VERSION=0.7.0`.
@@ -193,13 +198,13 @@ python -m pytest sim_ready_assets/tests/test_repair_or_scene.py
 
 - You can set the `I4H_ASSET_DOWNLOAD_DIR` environment variable to the directory to download assets to.
 - The default directory is `~/.cache/i4h-assets`.
-- A subfolder named after the version (dev Nucleus) or the hash of the asset (S3) will be created in this directory.
+- A subfolder named after the hash of the asset (S3, the default) or the version (dev Nucleus) will be created in this directory.
 
 #### I4H_ASSET_ENV
 
 - There are three different asset server environments: `dev`, `staging`, and `production`. `staging` and `production` are publicly accessible and `dev` is only accessible by the internal team. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
-- The current default environment is `dev`, which serves the `v0.9.0` catalog. Set `I4H_ASSET_ENV=production` for the public S3 catalogs, including all versions before `v0.9.0`.
-- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of a version, or a different build hash, so downloads can fail with a 404. Use it only when you have been asked to test pre-release content.
+- The current default environment is `staging`, which serves the `v0.9.0` catalog for pre-release QA. The default will switch to `production` once `v0.9.0` is published there.
+- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of an older version, or a different build hash, so downloads of versions before `v0.9.0` can fail with a 404. Set `I4H_ASSET_ENV=production` for those.
 - The `dev` environment needs `omni.client`, from the `nucleus` extra or Isaac Sim. On the first run, open the printed device-login URL in a web browser and enter the code to authenticate.
 
 #### I4H_ASSET_SHA256_HASH

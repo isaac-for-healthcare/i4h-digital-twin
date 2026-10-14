@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The default dev Nucleus catalog through the standalone omni.client. These do not touch the network."""
+"""The dev Nucleus catalog through the standalone omni.client. These do not touch the network."""
 
 import os
 import sys
@@ -53,7 +53,8 @@ def nucleus(monkeypatch):
     monkeypatch.setitem(sys.modules, "omni", omni)
     monkeypatch.setitem(sys.modules, "omni.client", client)
     monkeypatch.setattr(assets, "_is_import_ready", lambda name: name == "omni.client")
-    for name in ("I4H_ASSET_ENV", "I4H_ASSET_VERSION", "I4H_ASSET_SHA256_HASH"):
+    monkeypatch.setenv("I4H_ASSET_ENV", "dev")
+    for name in ("I4H_ASSET_VERSION", "I4H_ASSET_SHA256_HASH"):
         monkeypatch.delenv(name, raising=False)
 
 
