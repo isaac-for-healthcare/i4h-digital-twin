@@ -101,10 +101,12 @@ i4h-asset-retrieve --skip-download --verify --sub-path Robots
 
 ##### Verification
 
-What `--verify` can check depends on what the catalog version publishes in `assets_sha256.json`:
+`--verify` checks the download against the catalog listing: every object the catalog holds must be present locally at its full size. The catalogs publish no per-file checksums, and the value in `assets_sha256.json` is not a digest of the published tree for any version, so there is nothing to hash the download against:
 
-- Versions up to `0.3.0` publish a SHA-256 of the whole published tree, so the download is hashed and compared against it.
-- Versions from `0.5.0` onwards publish the catalog's short commit id instead (for example `724f82e`), which names the S3 prefix the assets are served from and the local directory they land in. That value describes where the assets live, not what they contain, so there is no digest to compare against. These versions are instead verified against the catalog listing: every object the catalog holds must be present locally at its full size.
+- Versions up to `0.3.0` record the SHA-256 of the asset ZIP package the release was built from. The S3 catalog serves the extracted files under that value, not the ZIP, so the download never hashes to it.
+- Versions from `0.5.0` onwards record the catalog's short commit id instead (for example `724f82e`).
+
+In both cases the value names the S3 prefix the assets are served from and the local directory they land in.
 
 Listing verification needs network access and is the check that catches a partial download, which is the usual failure when a fetch is interrupted or exceeds `--timeout`. Pass `--sub-path` alongside `--verify` to scope it to the sub path you downloaded; without it, verification expects the entire catalog.
 
@@ -124,7 +126,7 @@ Listing verification needs network access and is the check that catches a partia
 
 #### I4H_ASSET_SHA256_HASH
 
-- Identifies which build of the asset catalog to retrieve. Despite the name, this is a SHA-256 digest only for versions up to `0.3.0`; from `0.5.0` onwards it is the catalog's short commit id, which selects the remote prefix and the local directory name. See [Verification](#verification).
+- Identifies which build of the asset catalog to retrieve, by selecting the remote prefix and the local directory name. Despite the name, it is never a digest of the downloaded files: up to `0.3.0` it is the SHA-256 of the asset ZIP package, and from `0.5.0` onwards it is the catalog's short commit id. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
   - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `i4h_asset_helper` package.
