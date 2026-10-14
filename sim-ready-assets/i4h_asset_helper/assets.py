@@ -20,6 +20,8 @@ import json
 import os
 import string
 import sys
+import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -593,7 +595,57 @@ def _filter_downloaded_assets(
     return results
 
 
-def _download_individual_asset(url_entry: str, download_dir: str, version: str | None = None, hash: str | None = None):
+class _S3Downloader:
+    """
+    One s3transfer TransferManager shared by the download pool, so that the transfers still in flight when
+    the budget runs out can be aborted rather than abandoned.
+
+    ``s3_client.download_file`` hides its transfer inside a private TransferManager that nothing can cancel.
+    Abandoned there, it deadlocks interpreter exit: ``concurrent.futures`` stops s3transfer's worker threads
+    at exit and then joins the pool thread that is still waiting on them.
+    """
+
+    def __init__(self, concurrency: int):
+        from boto3.s3.transfer import TransferConfig, create_transfer_manager
+
+        # download_file gives every file its own manager with boto3's default of 10 request threads; keep that
+        # per-file headroom now that the manager is shared.
+        config = TransferConfig(max_concurrency=10 * concurrency)
+        self._manager = create_transfer_manager(_get_s3_client(), config)
+        self._futures = []
+        self._cancelled = False
+        self._lock = threading.Lock()
+
+    def download(self, bucket: str, key: str, local_path: str):
+        # Submitting under the lock means cancel() cannot miss a transfer that starts while it runs.
+        with self._lock:
+            if self._cancelled:
+                raise RuntimeError("Download cancelled")
+            future = self._manager.download(bucket, key, local_path)
+            self._futures.append(future)
+        future.result()
+
+    def cancel(self):
+        """Abort the in-flight transfers. s3transfer deletes their partial temp files."""
+        with self._lock:
+            self._cancelled = True
+            for future in self._futures:
+                future.cancel()
+
+    def close(self):
+        """Wait for the transfers to wind down and stop the manager's threads."""
+        # Not shutdown(cancel=True): s3transfer passes its arguments to _shutdown in the wrong order there,
+        # which raises TypeError as soon as a transfer is actually in flight.
+        self._manager.shutdown()
+
+
+def _download_individual_asset(
+    url_entry: str,
+    download_dir: str,
+    version: str | None = None,
+    hash: str | None = None,
+    s3_downloader: _S3Downloader | None = None,
+):
     version = version if version is not None else get_i4h_asset_version()
 
     if url_entry.endswith("/"):
@@ -608,13 +660,16 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
-            s3_client = _get_s3_client()
 
             # Download file directly to local path
             if os.path.exists(local_path):
                 os.remove(local_path)
 
-            s3_client.download_file(bucket, key, local_path)
+            # Both write to a temp file and only rename it into place once the download is complete.
+            if s3_downloader is not None:
+                s3_downloader.download(bucket, key, local_path)
+            else:
+                _get_s3_client().download_file(bucket, key, local_path)
             return local_path
         except Exception as e:
             raise ValueError(f"Failed to download asset from S3: {url_entry}: {str(e)}")
@@ -625,11 +680,16 @@ def _download_individual_asset(url_entry: str, download_dir: str, version: str |
     if result != omni.client.Result.OK:
         raise ValueError(f"Failed to download asset: {url_entry}")
 
-    if os.path.exists(local_path):
-        os.remove(local_path)
-
-    with open(local_path, "wb") as f:
-        f.write(file_content)
+    # Write to a temp file and rename it into place, so an interrupted write never leaves a truncated file
+    # under the final name, where it would be skipped as already downloaded.
+    fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(local_path), prefix=f".{os.path.basename(local_path)}.")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(file_content)
+        os.replace(temp_path, local_path)
+    except BaseException:
+        os.remove(temp_path)
+        raise
 
     return local_path
 
@@ -665,12 +725,19 @@ def _download_assets(
     total = len(url_entries)
     completed = 0
 
+    # Only the boto3 fallback can abort an in-flight file; omni.client.read_file cannot be interrupted.
+    use_s3 = not _is_import_ready("omni.client") and _is_s3_environment()
+    s3_downloader = _S3Downloader(concurrency) if use_s3 else None
+    finished = False
+
     # Deliberately not a `with` block: its __exit__ shuts the pool down with wait=True, which on timeout
     # would keep draining the queue and block until every remaining file had downloaded anyway.
     executor = ThreadPoolExecutor(max_workers=concurrency)
     try:
         futures_to_url = {
-            executor.submit(_download_individual_asset, url_entry, download_dir, version, hash): url_entry
+            executor.submit(
+                _download_individual_asset, url_entry, download_dir, version, hash, s3_downloader=s3_downloader
+            ): url_entry
             for url_entry in url_entries
         }
 
@@ -680,6 +747,7 @@ def _download_assets(
                 future.result()
                 completed += 1
                 pbar.update(1)
+        finished = True
     # Only an alias of the builtin from Python 3.11 onwards, so catch it under its own name.
     except FuturesTimeoutError as e:
         raise TimeoutError(
@@ -690,6 +758,12 @@ def _download_assets(
         # cancel_futures drops the downloads still queued so as_completed's timeout ends the transfer
         # instead of only ending the wait for it.
         executor.shutdown(wait=False, cancel_futures=True)
+        if s3_downloader is not None:
+            # The files already in flight have to be aborted too. Left running, their pool threads would
+            # block interpreter exit forever once concurrent.futures stops s3transfer's workers.
+            if not finished:
+                s3_downloader.cancel()
+            s3_downloader.close()
 
 
 def retrieve_asset(
