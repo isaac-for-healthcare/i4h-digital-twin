@@ -24,12 +24,18 @@ import time
 
 import pytest
 
-from i4h_asset_helper import assets, cli
-from i4h_asset_helper.assets import (
+from sim_ready_assets import assets, cli
+from sim_ready_assets.assets import (
     DEFAULT_DOWNLOAD_CONCURRENCY,
     DEFAULT_DOWNLOAD_TIMEOUT,
     retrieve_asset,
 )
+
+
+@pytest.fixture(autouse=True)
+def production_env(monkeypatch):
+    # These model the S3 catalogs; the CLI would otherwise reach for omni.client.
+    monkeypatch.setenv("I4H_ASSET_ENV", "production")
 
 
 def _capture_download(monkeypatch):
@@ -97,7 +103,7 @@ _ENDLESS_S3_DOWNLOAD = textwrap.dedent(
 
     from botocore.stub import Stubber
 
-    from i4h_asset_helper import assets, cli
+    from sim_ready_assets import assets, cli
 
 
     class EndlessBody:

@@ -259,6 +259,14 @@
 │   │   │       │   ├── Back_muscles_topo_blender_geometryNormal.1001.png
 │   │   │       │   ├── Back_muscles_topo_blender_specularReflectionRoughness.1001.png
 │   │   │       │   └── Back_muscles_topo_blender_subsurfaceWeight.1001.png
+│   │   │       ├── Bladder
+│   │   │       │   ├── Bladder_topo_blender_diffuseReflectionColor.1001.png
+│   │   │       │   ├── Bladder_topo_blender_geometryNormal.1001.png
+│   │   │       │   ├── Bladder_topo_blender_specularReflectionRoughness.1001.png
+│   │   │       │   ├── Bladder_topo_blender_subsurfaceWeight.1001.png
+│   │   │       │   ├── generation-prompts.json
+│   │   │       │   ├── LICENSE
+│   │   │       │   └── PROVENANCE.txt
 │   │   │       ├── Body
 │   │   │       │   ├── Body_topo_ambientocclusion.1001.png
 │   │   │       │   ├── Body_topo_curvature.1001.png
@@ -2795,6 +2803,29 @@
 │   │   └── End_effector
 │   │       ├── HD3C3 Endeffector.step
 │   │       └── LICENSE
+│   ├── Kinova
+│   │   └── KIMA
+│   │       ├── config
+│   │       │   └── joint_names_L3M_URDF_P1.yaml
+│   │       ├── meshes
+│   │       │   ├── base_link.STL
+│   │       │   ├── link_J1_J2.STL
+│   │       │   ├── link_J2_J3.STL
+│   │       │   ├── link_J3_J4.STL
+│   │       │   ├── link_J4_J5.STL
+│   │       │   ├── link_J5_J6.STL
+│   │       │   ├── link_J6_J7.STL
+│   │       │   └── link_J7_TIF.STL
+│   │       ├── urdf
+│   │       │   └── L3M.urdf
+│   │       └── USD
+│   │           └── L3M
+│   │               ├── configuration
+│   │               │   ├── L3M_base.usd
+│   │               │   ├── L3M_physics.usd
+│   │               │   ├── L3M_robot.usd
+│   │               │   └── L3M_sensor.usd
+│   │               └── L3M.usd
 │   ├── KUKA_LBR
 │   │   ├── LBR14
 │   │   │   ├── URDF
@@ -2906,29 +2937,6 @@
 │   │       │   ├── MF.stp
 │   │       │   └── MF_structur.stp
 │   │       └── LBR7Med.urdf
-│   ├── Kinova
-│   │   └── KIMA
-│   │       ├── config
-│   │       │   └── joint_names_L3M_URDF_P1.yaml
-│   │       ├── meshes
-│   │       │   ├── base_link.STL
-│   │       │   ├── link_J1_J2.STL
-│   │       │   ├── link_J2_J3.STL
-│   │       │   ├── link_J3_J4.STL
-│   │       │   ├── link_J4_J5.STL
-│   │       │   ├── link_J5_J6.STL
-│   │       │   ├── link_J6_J7.STL
-│   │       │   └── link_J7_TIF.STL
-│   │       ├── urdf
-│   │       │   └── L3M.urdf
-│   │       └── USD
-│   │           └── L3M
-│   │               ├── configuration
-│   │               │   ├── L3M_base.usd
-│   │               │   ├── L3M_physics.usd
-│   │               │   ├── L3M_robot.usd
-│   │               │   └── L3M_sensor.usd
-│   │               └── L3M.usd
 │   ├── MIRA
 │   │   ├── mira-bipo-size-experiment-smoothing.usd
 │   │   ├── suture-needle.usd
@@ -3178,4 +3186,4 @@
 └── Test
     └── basic.usda
 
-538 directories, 2636 files
+540 directories, 2643 files

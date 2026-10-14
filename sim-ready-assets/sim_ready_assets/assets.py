@@ -47,6 +47,11 @@ _I4H_ASSET_ROOT = {
 }
 
 
+_NUCLEUS_CLIENT_REQUIRED = (
+    "Nucleus downloads need omni.client: install `sim-ready-assets[nucleus]` or start the Isaac Sim app "
+    "before the asset helper."
+)
+
 # S3 bucket mapping
 _S3_BUCKETS = {
     "staging": "omniverse-content-staging",
@@ -134,7 +139,8 @@ def _is_import_ready(package_name: str):
 
 def _get_asset_env() -> str:
     """Get the current configuration of the asset root."""
-    return os.getenv("I4H_ASSET_ENV", "production")
+    # Staging is the default while v0.9.0 is in QA there; switch to production once it is published.
+    return os.getenv("I4H_ASSET_ENV", "staging")
 
 
 def _get_download_dir() -> str:
@@ -363,16 +369,17 @@ def _is_url_folder(url_entry: str) -> bool:
 
     if not _is_import_ready("omni.client"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
             s3_client = _get_s3_client()
 
             # For S3, a folder is indicated by a key that ends with a '/'
-            # If key doesn't end with '/', check if objects exist with this prefix
+            # If key doesn't end with '/', check if objects exist under "<key>/"
             if not key.endswith("/"):
-                # List objects with this prefix to see if it's a folder
+                # The bare key is not a usable prefix: a file's own key matches it, and so does a sibling such as
+                # "NuRec" for "Nu". Only objects below "<key>/" make it a folder.
                 max_retries = 5
                 retry_count = 0
                 backoff_time = 1  # Start with 1 second
@@ -424,7 +431,9 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
 
     if use_s3 or not _is_import_ready("isaacsim.storage.native.nucleus"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            if _is_import_ready("omni.client"):
+                return _list_omni_client_entries(_unify_path(url_entry))
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
@@ -486,6 +495,25 @@ def _list_asset_entries(url_entry: str) -> List[Tuple[str, int | None]]:
     # _list_files is an async function
     _, nucleus_entries = asyncio.run(_list_files(url_entry))
     return [(entry, None) for entry in nucleus_entries]
+
+
+def _list_omni_client_entries(folder_url: str) -> List[Tuple[str, int | None]]:
+    """List every file under a Nucleus folder with the standalone omni.client, outside Isaac Sim."""
+    import omni.client
+
+    result, items = omni.client.list(folder_url)
+    if result != omni.client.Result.OK:
+        raise ValueError(f"Failed to list {folder_url}: {result}")
+
+    entries: List[Tuple[str, int | None]] = []
+    for item in items:
+        item_url = f"{folder_url.rstrip('/')}/{item.relative_path}"
+        is_file = item.flags & omni.client.ItemFlags.READABLE_FILE
+        if item.flags & omni.client.ItemFlags.CAN_HAVE_CHILDREN and not is_file:
+            entries.extend(_list_omni_client_entries(item_url))
+        else:
+            entries.append((item_url, item.size))
+    return entries
 
 
 def _list_asset_url(url_entry: str) -> List[str]:
@@ -584,7 +612,7 @@ def _download_individual_asset(
 
     if not _is_import_ready("omni.client"):
         if not _is_s3_environment():
-            raise ValueError("Please start the isaac simulation app before the asset helper.")
+            raise ValueError(_NUCLEUS_CLIENT_REQUIRED)
         # Fallback for S3 environments: boto3
         try:
             bucket, key = _parse_s3_url(url_entry)
@@ -608,7 +636,7 @@ def _download_individual_asset(
                 # Only production mirrors every published catalog; the other servers hold partial content.
                 message += (
                     f". The '{env}' asset server may not host this catalog version; "
-                    "unset I4H_ASSET_ENV (or set it to 'production') to use the public production catalog."
+                    "set I4H_ASSET_ENV=production to use the public production catalog."
                 )
             raise ValueError(message)
 
@@ -739,6 +767,7 @@ def retrieve_asset(
 
     paths = _list_asset_url(remote_path)
     if not paths:
+        # Reporting success with nothing downloaded hides a mistyped or unsupported sub-path from scripts.
         raise FileNotFoundError(f"No asset files found at {remote_path}")
 
     if force_download:

@@ -22,13 +22,15 @@ import sys
 import pytest
 from botocore.stub import Stubber
 
-from i4h_asset_helper import assets, cli
-from i4h_asset_helper.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
+from sim_ready_assets import assets, cli
+from sim_ready_assets.assets import get_i4h_asset_hash, get_i4h_asset_path, verify_asset
 
 # Catalog versions whose manifest entry is the catalog's short commit id.
 COMMIT_ID_VERSIONS = ("0.5.0", "0.6.0", "0.7.0")
 # Catalog versions whose manifest entry is the SHA-256 of the asset ZIP package, not of the served tree.
 ZIP_DIGEST_VERSIONS = ("0.1.0ea", "0.1.0", "0.2.0", "0.3.0")
+# Catalog versions whose manifest entry is a 12-character prefix of the catalog's SHA-256 build identifier.
+CATALOG_DIGEST_VERSIONS = ("v0.9.0",)
 
 CATALOG_FILES = {
     "Props/Organs/organs.usd": b"organs",
@@ -61,14 +63,14 @@ def _local_dir(tmp_path, version):
     return os.path.join(str(tmp_path), get_i4h_asset_hash(version=version))
 
 
-@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS)
+@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS + CATALOG_DIGEST_VERSIONS)
 def test_manifest_value_names_the_remote_prefix(version):
     """Every manifest value, digest-shaped or not, says where the assets live rather than what they contain."""
     value = get_i4h_asset_hash(version=version)
     assert get_i4h_asset_path(version).endswith(f"/{version}/{value}")
 
 
-@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS)
+@pytest.mark.parametrize("version", COMMIT_ID_VERSIONS + ZIP_DIGEST_VERSIONS + CATALOG_DIGEST_VERSIONS)
 def test_verify_passes_for_complete_download(tmp_path, monkeypatch, capsys, version):
     """Regression test for NVBugs 6646790 (0.5.0+) and 6921218 (0.3.0 and earlier).
 
@@ -141,7 +143,7 @@ def test_manifest_versions_are_covered_by_the_tests():
     manifest_path = os.path.join(os.path.dirname(assets.__file__), "assets_sha256.json")
     with open(manifest_path) as handle:
         manifest = json.load(handle)
-    assert set(manifest) == set(COMMIT_ID_VERSIONS) | set(ZIP_DIGEST_VERSIONS)
+    assert set(manifest) == set(COMMIT_ID_VERSIONS) | set(ZIP_DIGEST_VERSIONS) | set(CATALOG_DIGEST_VERSIONS)
 
 
 @pytest.fixture
