@@ -7,7 +7,7 @@
 ### Installation
 
 The helper itself needs Python 3.10+ and does not require Isaac Sim for the
-public S3 catalogs (`staging` / `production`). From this directory:
+public S3 catalog (`production`, and the pre-release `staging` mirror). From this directory:
 
 ```bash
 uv sync
@@ -120,8 +120,10 @@ Listing verification needs network access and is the check that catches a partia
 
 #### I4H_ASSET_ENV
 
-- There are three different asset server environments: `dev`, `staging`, and `production`. `staging` and `production` are publicly accessible and `dev` is only accessible by the internal team. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
-- The current default environment is `production`.
+- There are three different asset server environments: `dev`, `staging`, and `production`. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
+- The current default environment is `production`. It is the supported public source for the published catalog.
+- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of a version, or a different build hash, so downloads can fail with a 404. Use it only when you have been asked to test pre-release content; otherwise leave `I4H_ASSET_ENV` unset.
+- `dev` is only accessible by the internal team.
 - If you use the `dev` environment, i.e. `export I4H_ASSET_ENV=dev`, you must have a display (either physical or virtual) and a web browser (e.g. Chrome) to authenticate in the first run.
 
 #### I4H_ASSET_SHA256_HASH

@@ -600,7 +600,17 @@ def _download_individual_asset(
                 _get_s3_client().download_file(bucket, key, local_path)
             return local_path
         except Exception as e:
-            raise ValueError(f"Failed to download asset from S3: {url_entry}: {str(e)}")
+            message = f"Failed to download asset from S3: {url_entry}: {str(e)}"
+            env = _get_asset_env()
+            error_code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else None
+            is_not_found = error_code in ("404", "NoSuchKey")
+            if is_not_found and env != "production":
+                # Only production mirrors every published catalog; the other servers hold partial content.
+                message += (
+                    f". The '{env}' asset server may not host this catalog version; "
+                    "unset I4H_ASSET_ENV (or set it to 'production') to use the public production catalog."
+                )
+            raise ValueError(message)
 
     import omni.client
 
