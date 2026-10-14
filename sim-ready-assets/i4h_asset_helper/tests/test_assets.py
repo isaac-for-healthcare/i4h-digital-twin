@@ -87,9 +87,9 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
     assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/v0.9.0"
     for environment in ("staging", "production"):
         monkeypatch.setenv("I4H_ASSET_ENV", environment)
-        assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/c02e5b5e3d71"
+        assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/c53fff96fcbb"
         assert get_i4h_asset_path("0.7.0") == f"{_I4H_ASSET_ROOT[environment]}/0.7.0/724f82e"
-        assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/c02e5b5e3d71"
+        assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/c53fff96fcbb"
 
 
 def test_retrieve_asset(monkeypatch):

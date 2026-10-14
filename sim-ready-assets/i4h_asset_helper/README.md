@@ -62,11 +62,11 @@ with no build directory. It downloads to `~/.cache/i4h-assets/v0.9.0`. This
 complete catalog includes the corrected OR editor icon and repaired organ
 materials (NVBugs 6646936 and 6657585).
 
-`assets_sha256.json` records the build ID `c02e5b5e3d71`, the first 12
+`assets_sha256.json` records the build ID `c53fff96fcbb`, the first 12
 characters of the catalog's SHA-256 digest. It is not a content digest, so
 `--verify` checks the download against the Nucleus listing, including partial
 downloads. If the catalog is later published to S3 under that build directory,
-`I4H_ASSET_ENV=production` selects `v0.9.0/c02e5b5e3d71`.
+`I4H_ASSET_ENV=production` selects `v0.9.0/c53fff96fcbb`.
 
 Older catalogs are on S3: use `I4H_ASSET_ENV=production` with `--version 0.7.0`
 or `I4H_ASSET_VERSION=0.7.0`.
