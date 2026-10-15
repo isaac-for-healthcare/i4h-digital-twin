@@ -83,15 +83,15 @@ def test_release_catalog_defaults_and_previous_version(monkeypatch):
     monkeypatch.delenv("I4H_ASSET_SHA256_HASH", raising=False)
     assert _get_default_version() == "v0.9.0"
     monkeypatch.delenv("I4H_ASSET_ENV", raising=False)
-    assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['staging']}/v0.9.0/c53fff9"
+    assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['staging']}/v0.9.0/7cf86a1"
     monkeypatch.setenv("I4H_ASSET_ENV", "dev")
     assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT['dev']}/v0.9.0"
     assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/v0.9.0"
     for environment in ("staging", "production"):
         monkeypatch.setenv("I4H_ASSET_ENV", environment)
-        assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/c53fff9"
+        assert get_i4h_asset_path() == f"{_I4H_ASSET_ROOT[environment]}/v0.9.0/7cf86a1"
         assert get_i4h_asset_path("0.7.0") == f"{_I4H_ASSET_ROOT[environment]}/0.7.0/724f82e"
-        assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/c53fff9"
+        assert get_i4h_local_asset_path(download_dir="/tmp/releases") == "/tmp/releases/7cf86a1"
 
 
 def test_retrieve_asset(monkeypatch):

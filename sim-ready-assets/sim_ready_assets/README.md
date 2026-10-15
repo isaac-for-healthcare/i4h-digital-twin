@@ -58,17 +58,24 @@ To download the asset to a local directory `~/.cache/i4h-assets/<SHA256_HASH>` (
 ### v0.9.0 asset release
 
 The default catalog is `v0.9.0` on the staging S3 mirror, for pre-release QA:
-`https://omniverse-content-staging.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/v0.9.0/c53fff9/{Props,Robots,Test}/...`.
-It downloads to `~/.cache/i4h-assets/c53fff9`. This complete catalog includes
+`https://omniverse-content-staging.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/v0.9.0/7cf86a1/{Props,Robots,Test}/...`.
+It downloads to `~/.cache/i4h-assets/7cf86a1`. This complete catalog includes
 the corrected OR editor icon and repaired organ materials (NVBugs 6646936 and
-6657585). Once it is published to production, the default switches to
-`production`.
+6657585). Collector metadata, local paths and internal URLs are stripped from
+the package; runtime content is unchanged. Once it is published to production,
+the default switches to `production`.
 
-The same catalog is on the dev Nucleus server (`I4H_ASSET_ENV=dev`):
-`omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0/{Props,Robots,Test}/...`,
-with no build directory. It downloads to `~/.cache/i4h-assets/v0.9.0`.
+The same catalog is on the dev Nucleus server (`I4H_ASSET_ENV=dev`) in its own
+folder, `omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0-7cf86a1/{Props,Robots,Test}/...`,
+with no build directory. Select it with `--version v0.9.0-7cf86a1`; it
+downloads to `~/.cache/i4h-assets/v0.9.0-7cf86a1`. That folder name has no
+entry in `assets_sha256.json`, so add `--hash 7cf86a1` when using `--verify`:
 
-`assets_sha256.json` records the build ID `c53fff9`, the first 7
+```bash
+I4H_ASSET_ENV=dev i4h-asset-retrieve --version v0.9.0-7cf86a1 --hash 7cf86a1 --verify
+```
+
+`assets_sha256.json` records the build ID `7cf86a1`, the first 7
 characters of the catalog's SHA-256 digest, matching the earlier catalogs. It is not a content digest, so
 `--verify` checks the download against the catalog listing, including partial
 downloads.

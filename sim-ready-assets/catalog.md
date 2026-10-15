@@ -2778,7 +2778,6 @@
 │   ├── Table
 │   │   └── table.usd
 │   ├── UltrasoundCameraFixture
-│   │   ├── collect.mapping.json
 │   │   └── fixture.usda
 │   └── VentionTable
 │       ├── Basic
@@ -3186,4 +3185,4 @@
 └── Test
     └── basic.usda
 
-540 directories, 2643 files
+540 directories, 2642 files
