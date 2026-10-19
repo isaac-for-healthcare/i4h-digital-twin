@@ -64,7 +64,7 @@ class _FakeS3:
 
 @pytest.fixture
 def fake_s3(monkeypatch):
-    # Pin production: the default staging mirror may not hold every catalog version.
+    # Pin the production S3 catalog even if the caller set I4H_ASSET_ENV.
     monkeypatch.setenv("I4H_ASSET_ENV", "production")
     monkeypatch.setattr(assets, "_is_import_ready", lambda name: False)
     monkeypatch.setattr(assets, "_is_s3_environment", lambda: True)
