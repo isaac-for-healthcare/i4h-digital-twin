@@ -17,7 +17,7 @@ That installs `boto3`, `tqdm`, `requests`, and pytest. On Linux aarch64 (for
 example DGX Spark) this is the supported path: Isaac Sim has no ARM64 pip
 wheels.
 
-The default catalog is on the public `staging` S3 mirror, which needs nothing
+The default catalog is on the public `production` S3 bucket, which needs nothing
 extra. The internal dev Nucleus server (`I4H_ASSET_ENV=dev`) needs
 `omni.client`. Install the `nucleus` extra to get the standalone
 `omniverseclient` package (Python 3.10–3.12; NVIDIA proprietary license):
@@ -57,13 +57,12 @@ To download the asset to a local directory `~/.cache/i4h-assets/<SHA256_HASH>` (
 
 ### v0.9.0 asset release
 
-The default catalog is `v0.9.0` on the staging S3 mirror, for pre-release QA:
-`https://omniverse-content-staging.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/v0.9.0/7cf86a1/{Props,Robots,Test}/...`.
+The default catalog is `v0.9.0` on the production S3 bucket:
+`https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/Healthcare/v0.9.0/7cf86a1/{Props,Robots,Test}/...`.
 It downloads to `~/.cache/i4h-assets/7cf86a1`. This complete catalog includes
 the corrected OR editor icon and repaired organ materials (NVBugs 6646936 and
 6657585). Collector metadata, local paths and internal URLs are stripped from
-the package; runtime content is unchanged. Once it is published to production,
-the default switches to `production`.
+the package; runtime content is unchanged.
 
 The same catalog is on the dev Nucleus server (`I4H_ASSET_ENV=dev`) in its own
 folder, `omniverse://isaac-dev.ov.nvidia.com/Library/IsaacHealthcare/v0.9.0-7cf86a1/{Props,Robots,Test}/...`,
@@ -80,14 +79,14 @@ characters of the catalog's SHA-256 digest, matching the earlier catalogs. It is
 `--verify` checks the download against the catalog listing, including partial
 downloads.
 
-Older catalogs are on S3: use `I4H_ASSET_ENV=production` with `--version 0.7.0`
-or `I4H_ASSET_VERSION=0.7.0`.
+Older catalogs are on the same S3 bucket: use `--version 0.7.0` or
+`I4H_ASSET_VERSION=0.7.0`.
 
 ```bash
 i4h-asset-retrieve --sub-path Props/shared_OR_without_Mark --verify
 ```
 
-The staged `main.usd` is already repaired; no local repair command is needed
+The published `main.usd` is already repaired; no local repair command is needed
 for `v0.9.0`. The opt-in utility below remains useful for older catalogs.
 
 ### Python Usage
@@ -210,13 +209,13 @@ python -m pytest sim_ready_assets/tests/test_repair_or_scene.py
 #### I4H_ASSET_ENV
 
 - There are three different asset server environments: `dev`, `staging`, and `production`. `staging` and `production` are publicly accessible and `dev` is only accessible by the internal team. You can set the `I4H_ASSET_ENV` environment variable to `dev`, `staging`, or `production` to use the corresponding asset server.
-- The current default environment is `staging`, which serves the `v0.9.0` catalog for pre-release QA. The default will switch to `production` once `v0.9.0` is published there.
-- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of an older version, or a different build hash, so downloads of versions before `v0.9.0` can fail with a 404. Set `I4H_ASSET_ENV=production` for those.
+- The default environment is `production`, which serves the `v0.9.0` catalog and every earlier published catalog.
+- `staging` is publicly readable but is a pre-release mirror, not a copy of the published catalog: it may hold only part of a version, or a different build hash, so downloads can fail with a 404. Use it only when you have been asked to test pre-release content.
 - The `dev` environment needs `omni.client`, from the `nucleus` extra or Isaac Sim. On the first run, open the printed device-login URL in a web browser and enter the code to authenticate.
 
 #### I4H_ASSET_SHA256_HASH
 
-- Identifies which build of the asset catalog to retrieve, by selecting the remote prefix and the local directory name. Despite the name, it is never a digest of the downloaded files: up to `0.3.0` it is the SHA-256 of the asset ZIP package, from `0.5.0` to `0.7.0` it is the catalog's short commit id, and for `v0.9.0` it is the first 12 characters of the catalog's SHA-256 build identifier. See [Verification](#verification).
+- Identifies which build of the asset catalog to retrieve, by selecting the remote prefix and the local directory name. Despite the name, it is never a digest of the downloaded files: up to `0.3.0` it is the SHA-256 of the asset ZIP package, from `0.5.0` to `0.7.0` it is the catalog's short commit id, and for `v0.9.0` it is the first 7 characters of the catalog's SHA-256 build identifier. See [Verification](#verification).
 - You can set the `I4H_ASSET_SHA256_HASH` environment variable to the identifier of the asset to retrieve.
 - When you use the CLI, you can use the `--hash` argument to specify the identifier.
   - Priority order: CLI argument > environment variable > `assets_sha256.json` file in the `sim_ready_assets` package.

@@ -139,8 +139,7 @@ def _is_import_ready(package_name: str):
 
 def _get_asset_env() -> str:
     """Get the current configuration of the asset root."""
-    # Staging is the default while v0.9.0 is in QA there; switch to production once it is published.
-    return os.getenv("I4H_ASSET_ENV", "staging")
+    return os.getenv("I4H_ASSET_ENV", "production")
 
 
 def _get_download_dir() -> str:
