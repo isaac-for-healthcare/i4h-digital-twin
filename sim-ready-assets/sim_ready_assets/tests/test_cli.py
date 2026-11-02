@@ -54,3 +54,29 @@ def test_force_omni_client():
             return
 
         subprocess.run(cmd, check=True, env=PRODUCTION_ENV)
+
+
+def test_cli_version_from_env():
+    """I4H_ASSET_VERSION selects the catalog when --version is not given (README: I4H_ASSET_VERSION=0.7.0)."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        result = subprocess.run(
+            [*CLI, "--download-dir", temp_dir, "--sub-path", "Test", "--skip-download"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**PRODUCTION_ENV, "I4H_ASSET_VERSION": "0.7.0"},
+        )
+        assert "version: 0.7.0" in result.stdout
+
+
+def test_cli_version_flag_overrides_env():
+    """An explicit --version wins over I4H_ASSET_VERSION."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        result = subprocess.run(
+            [*CLI, "--version", "0.7.0", "--download-dir", temp_dir, "--sub-path", "Test", "--skip-download"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**PRODUCTION_ENV, "I4H_ASSET_VERSION": "0.6.0"},
+        )
+        assert "version: 0.7.0" in result.stdout
