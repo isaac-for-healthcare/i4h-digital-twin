@@ -19,10 +19,10 @@ import sys
 from .assets import (
     DEFAULT_DOWNLOAD_CONCURRENCY,
     DEFAULT_DOWNLOAD_TIMEOUT,
-    _get_default_version,
     _get_download_dir,
     _is_import_ready,
     _is_s3_environment,
+    get_i4h_asset_version,
     retrieve_asset,
     verify_asset,
 )
@@ -34,7 +34,7 @@ def retrieve_main():
     parser = argparse.ArgumentParser(
         description="Isaac for Healthcare Asset Helper", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--version", type=str, default=_get_default_version(), help="Asset version to retrieve")
+    parser.add_argument("--version", type=str, default=get_i4h_asset_version(), help="Asset version to retrieve")
     parser.add_argument("--force", action="store_true", help="Force download even if assets already exist")
     parser.add_argument("--download-dir", type=str, default=_get_download_dir(), help="Directory to download assets to")
     parser.add_argument(
