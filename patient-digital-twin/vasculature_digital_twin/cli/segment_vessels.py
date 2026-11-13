@@ -14,7 +14,12 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-from vasculature_digital_twin import PreprocessingSettings, VolumePreprocessor
+from vasculature_digital_twin import (
+    PreprocessingSettings,
+    VolumePreprocessor,
+    affine_to_lps,
+    to_canonical_lps,
+)
 from vasculature_digital_twin.vasculature import get_vessel_mask
 
 
@@ -80,7 +85,13 @@ def _load_ts_gt_masks(
     gt_dir: str,
     labels: list[str],
     expected_shape_zyx: tuple[int, int, int],
+    reorient: bool = False,
 ) -> np.ndarray:
+    """Union of the TotalSegmentator label masks in the CT cache's axes.
+
+    With ``reorient`` (a cache written in the canonical LPS frame) each mask is permuted and
+    flipped from its own affine exactly as ``vdt-preprocess-ct`` did for the CT.
+    """
     import nibabel as nib
 
     gt = Path(gt_dir).expanduser()
@@ -89,7 +100,12 @@ def _load_ts_gt_masks(
         path = gt / f"{name}.nii.gz"
         if not path.is_file():
             continue
-        arr = np.transpose(np.asarray(nib.load(str(path)).dataobj), (2, 1, 0)) > 0
+        image = nib.load(str(path))
+        arr = np.transpose(np.asarray(image.dataobj), (2, 1, 0)) > 0
+        if reorient:
+            direction, spacing_ijk, _ = affine_to_lps(image.affine)
+            spacing_zyx = (spacing_ijk[2], spacing_ijk[1], spacing_ijk[0])
+            arr = to_canonical_lps(arr.astype(np.uint8), direction, spacing_zyx).hu_zyx > 0
         if arr.shape != expected_shape_zyx:
             raise ValueError(f"GT mask '{name}' shape {arr.shape} != volume shape {expected_shape_zyx}.")
         union = arr if union is None else (union | arr)
@@ -191,7 +207,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.ts_gt_dir:
         labels = [s.strip() for s in args.ts_labels.split(",") if s.strip()]
-        mask = _load_ts_gt_masks(args.ts_gt_dir, labels, shape_zyx)
+        # A reoriented cache records its frame; its masks need the same reorientation as the CT.
+        mask = _load_ts_gt_masks(args.ts_gt_dir, labels, shape_zyx, reorient=meta.get("anatomical_frame") is not None)
     else:
         hu_zyx = _load_hu(args, shape_zyx)
         result = get_vessel_mask(
