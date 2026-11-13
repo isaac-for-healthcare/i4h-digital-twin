@@ -20,8 +20,8 @@ from pxr import Usd
 
 
 def main():
-    assert torch.__version__.split("+")[0] == "2.7.1", torch.__version__
-    assert torch.version.cuda == "12.8", torch.version.cuda
+    assert torch.__version__.split("+")[0] == "2.13.0", torch.__version__
+    assert torch.version.cuda == "13.0", torch.version.cuda
     assert torch.cuda.is_available()
     print("GPU:", torch.cuda.get_device_name(), flush=True)
     print("PyTorch:", torch.__version__, "CUDA:", torch.version.cuda, flush=True)
@@ -65,8 +65,9 @@ def main():
             sys.executable, "-u", "train.py", "--config-name", "apps/colmap_3dgut_mcmc.yaml",
             f"path={root / 'colmap'}", f"out_dir={root / 'out'}", "experiment_name=gpu_smoke",
             "n_iterations=10", "num_workers=0", "enable_writer=false", "test_last=false",
-            "compute_extra_metrics=false", "export_ingp.enabled=false",
-            "export_usdz.enabled=true", "export_usdz.apply_normalizing_transform=true",
+            "compute_extra_metrics=false",
+            "export_usd.enabled=true", "export_usd.format=nurec", "export_usd.path=export_last.usdz",
+            "export_usd.apply_normalizing_transform=true",
         ], check=True)
         exports = list((root / "out").rglob("export_last.usdz"))
         assert len(exports) == 1, exports

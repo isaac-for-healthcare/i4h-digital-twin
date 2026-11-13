@@ -149,7 +149,7 @@ def main() -> int:
     grut_repo = repo_root / "3dgrut"
     grut_dockerfile = repo_root / "Dockerfile.3dgrut"
 
-    if not (grut_repo / "install_env.sh").is_file():
+    if not (grut_repo / "install_env_uv.sh").is_file():
         raise SystemExit(f"3dgrut repository not found at {grut_repo}\nPlease follow README step 2.")
 
     # 1) Run COLMAP to generate sparse reconstruction
@@ -235,7 +235,7 @@ def main() -> int:
     # 2) Train Dense 3D Reconstruction with 3DGUT
 
     # Use our pinned CUDA/PyTorch image recipe with the cloned 3dgrut build context
-    image_tag = "i4h-3dgrut:cu128"
+    image_tag = "i4h-3dgrut:cu130"
     subprocess.run(
         [
             "docker",
@@ -253,12 +253,7 @@ def main() -> int:
     # Refer to 3dgrut repo for more parameters
     data_root = "/data"
     train_cmd = [
-        "conda",
-        "run",
-        "--no-capture-output",  # Prevent conda from buffering output
-        "-n",
-        "3dgrut",
-        "python",
+        "/workspace/.venv/bin/python",  # the image's uv environment
         "-u",  # Unbuffered Python output
         "train.py",
         "--config-name",
@@ -266,8 +261,12 @@ def main() -> int:
         f"path={data_root}/{colmap_root_rel}",
         f"out_dir={data_root}/{args.out_dir.strip('/').strip()}",
         f"experiment_name={args.experiment_name}",
-        "export_usdz.enabled=true",
-        "export_usdz.apply_normalizing_transform=true",
+        # 3dgrut dfd3d54 export_usd (configs/base_gs.yaml): the NuRec USDZ that Isaac Sim loads as a
+        # UsdVolVolume, written to <out>/.../export_last.usdz as before (README.md "Expected Output").
+        "export_usd.enabled=true",
+        "export_usd.format=nurec",
+        "export_usd.path=export_last.usdz",
+        "export_usd.apply_normalizing_transform=true",
     ]
 
     run_docker(
