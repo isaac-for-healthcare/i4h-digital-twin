@@ -80,6 +80,8 @@ python scripts/reconstruct.py --work-dir your-work-dir/
 
 The pipeline builds `i4h-3dgrut:cu130` using this directory's `Dockerfile.3dgrut` and the cloned `3dgrut/` as its build context. The same recipe builds on x86_64 and aarch64; the first build compiles Kaolin and the 3DGUT CUDA extensions and takes longer. The image checks the PyTorch version, its CUDA version and the USD runtime during the build, so a later install cannot silently replace the tested stack.
 
+COLMAP 3.13.0 runs from `colmap/colmap:20251107.4118` on x86_64. That image is amd64-only, so on aarch64 the pipeline first builds the same COLMAP release as `i4h-colmap:3.13.0` from this directory's `Dockerfile.colmap` (OpenBLAS in place of Intel MKL, which has no arm64 packages); the first build takes a while.
+
 **Expected work-dir structure:**
 
 ```text
