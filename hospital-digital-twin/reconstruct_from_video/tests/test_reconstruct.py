@@ -43,6 +43,27 @@ class ReconstructionBuildTest(unittest.TestCase):
         self.assertIn("/workspace/.venv/bin/python", training)
         self.assertIn("export_usdz.enabled=true", training)
 
+    def test_x86_uses_the_published_colmap_image(self):
+        (self.root / "colmap/sparse/0").rmdir()
+        (self.root / "images").mkdir()
+        with patch.object(reconstruct.platform, "machine", return_value="x86_64"), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            self.assertEqual(reconstruct.main(), 0)
+        colmap = run.call_args_list[0].args[0]
+        self.assertIn("colmap/colmap:20251107.4118", colmap)
+
+    def test_aarch64_builds_colmap_before_running_it(self):
+        (self.root / "colmap/sparse/0").rmdir()
+        (self.root / "images").mkdir()
+        (self.root / "Dockerfile.colmap").write_text("FROM scratch\n")
+        with patch.object(reconstruct.platform, "machine", return_value="aarch64"), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            self.assertEqual(reconstruct.main(), 0)
+        build, colmap = run.call_args_list[0].args[0], run.call_args_list[1].args[0]
+        self.assertEqual(build, ["docker", "build", "-t", "i4h-colmap:3.13.0", "-"])
+        self.assertIn("i4h-colmap:3.13.0", colmap)
+        self.assertNotIn("colmap/colmap:20251107.4118", colmap)
+
     def test_failed_build_prevents_training(self):
         error = subprocess.CalledProcessError(1, ["docker", "build"])
         with patch.object(reconstruct.subprocess, "run", side_effect=error) as run:

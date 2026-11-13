@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import argparse
+import platform
 import shlex
 import subprocess
 from pathlib import Path
@@ -68,6 +69,24 @@ def run_docker(step_name: str, docker_args: List[str], cleanup_on_success: bool 
             print(f"  docker rm {container_name}")
             print(f"{'='*70}\n")
         raise
+
+
+# colmap/colmap images are amd64-only; this tag is the COLMAP 3.13.0 release.
+COLMAP_IMAGE = "colmap/colmap:20251107.4118"
+# On aarch64 the same release is built locally from Dockerfile.colmap.
+COLMAP_LOCAL_IMAGE = "i4h-colmap:3.13.0"
+
+
+def colmap_image(repo_root: Path) -> str:
+    """Return the COLMAP image for this machine, building it first on aarch64."""
+    if platform.machine().lower() not in ("aarch64", "arm64"):
+        return COLMAP_IMAGE
+    dockerfile = repo_root / "Dockerfile.colmap"
+    print(f"[pipeline] aarch64: building {COLMAP_LOCAL_IMAGE} from {dockerfile} (first build takes a while)")
+    # The Dockerfile copies nothing from a context, so send it alone on stdin.
+    with dockerfile.open("rb") as f:
+        subprocess.run(["docker", "build", "-t", COLMAP_LOCAL_IMAGE, "-"], stdin=f, check=True)
+    return COLMAP_LOCAL_IMAGE
 
 
 def ensure_colmap_images_layout(work_dir: Path) -> None:
@@ -206,6 +225,7 @@ def main() -> int:
             use_gpu_matching=args.use_gpu_matching,
         )
 
+        image = colmap_image(repo_root)
         run_docker(
             "COLMAP Pipeline",
             [
@@ -220,7 +240,7 @@ def main() -> int:
                 f"{work_dir}:{working}",
                 "-w",
                 working,
-                "colmap/colmap:20251107.4118",
+                image,
                 "bash",
                 "-lc",
                 cmd,
