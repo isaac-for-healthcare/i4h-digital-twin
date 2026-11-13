@@ -1,40 +1,50 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Based on nv-tlabs/3dgrut Dockerfile at 38664dde3b0a4a35d2baf91ebee11f3de3eae8c3.
+# Based on the nv-tlabs/3dgrut Dockerfile at dfd3d54c8c612003fb7948443edf7778f2bcd5ec.
 # Build context: the recursive checkout of that revision.
-FROM ubuntu:24.04
+# One recipe for x86_64 and aarch64: the nvidia/cuda base is multi-arch and the
+# upstream uv installer picks the matching PyTorch, Kaolin and slangc builds.
+ARG CUDA_VERSION=13.0.2
+ARG UBUNTU_VERSION=24.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 
-ARG CUDA_VERSION=12.8.1
+ARG CUDA_VERSION
 ENV CUDA_VERSION=${CUDA_VERSION}
 ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility
+ENV EGL_PLATFORM=surfaceless
+ENV XDG_DATA_HOME="/usr/local/share/uv"
+ENV XDG_BIN_HOME="/usr/local/bin"
+ENV UV_INSTALL_DIR="/usr/local/bin"
+ENV UV_SYSTEM_PYTHON=1
+ENV FORCE_CUDA=1
+
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-unauthenticated ca-certificates \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-    wget git \
-    curl \
+    && apt-get install -y --allow-unauthenticated ca-certificates \
+    && apt-get install -y -qq --no-install-recommends \
     build-essential \
-    gcc-11 g++-11 \
+    wget git curl \
     libgl1-mesa-dev \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-py311_25.1.1-2-Linux-x86_64.sh && \
-    bash ~/miniconda.sh -b -p /opt/conda && \
-    rm ~/miniconda.sh && \
-    /opt/conda/bin/conda install -y python=3.11 && \
-    /opt/conda/bin/conda clean -ya
-ENV PATH=/opt/conda/bin:$PATH
-RUN conda init
-
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
-ENV FORCE_CUDA=1
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 WORKDIR /workspace
 COPY . .
 
-# Keep every pip install (including transitive dependencies) on the tested stack.
-RUN printf '%s\n' 'torch==2.7.1' 'torchvision==0.22.1' 'torchaudio==2.7.1' 'numpy<2' > /tmp/torch-constraints.txt \
-    && PIP_CONSTRAINT=/tmp/torch-constraints.txt CUDA_VERSION=$CUDA_VERSION bash ./install_env.sh 3dgrut WITH_GCC11 \
-    && conda run --no-capture-output -n 3dgrut python -c "import torch; import kaolin; assert torch.__version__.split('+')[0] == '2.7.1'; assert torch.version.cuda == '12.8'; print(torch.__version__, torch.version.cuda)"
-RUN echo "conda activate 3dgrut" >> ~/.bashrc
+# The upstream installer maps CUDA 13.0 to PyTorch 2.13.0 (scripts/cuda_helper.sh) and
+# builds Kaolin from source for CUDA 13; it installs into /workspace/.venv.
+RUN bash ./install_env_uv.sh
+
+# upstream installs usd-core (pxr, needed by the USDZ export) on x86_64 only;
+# usd-core 26.11 is the first release with a Linux aarch64 wheel.
+RUN if [ "$(uname -m)" = "aarch64" ]; then \
+        uv pip install --python /workspace/.venv/bin/python "usd-core==26.11"; \
+    fi
+
+# Keep the image on the tested stack: fail the build if PyTorch, its CUDA or USD drifted.
+RUN /workspace/.venv/bin/python -c "import torch, kaolin; from pxr import Usd; assert torch.__version__.split('+')[0] == '2.13.0', torch.__version__; assert torch.version.cuda == '13.0', torch.version.cuda; print(torch.__version__, torch.version.cuda, Usd.GetVersion())"
+
+ENV PATH=/workspace/.venv/bin:$PATH

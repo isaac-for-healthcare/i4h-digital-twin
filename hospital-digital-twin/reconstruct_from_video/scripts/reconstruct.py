@@ -149,7 +149,7 @@ def main() -> int:
     grut_repo = repo_root / "3dgrut"
     grut_dockerfile = repo_root / "Dockerfile.3dgrut"
 
-    if not (grut_repo / "install_env.sh").is_file():
+    if not (grut_repo / "install_env_uv.sh").is_file():
         raise SystemExit(f"3dgrut repository not found at {grut_repo}\nPlease follow README step 2.")
 
     # 1) Run COLMAP to generate sparse reconstruction
@@ -235,7 +235,7 @@ def main() -> int:
     # 2) Train Dense 3D Reconstruction with 3DGUT
 
     # Use our pinned CUDA/PyTorch image recipe with the cloned 3dgrut build context
-    image_tag = "i4h-3dgrut:cu128"
+    image_tag = "i4h-3dgrut:cu130"
     subprocess.run(
         [
             "docker",
@@ -253,12 +253,7 @@ def main() -> int:
     # Refer to 3dgrut repo for more parameters
     data_root = "/data"
     train_cmd = [
-        "conda",
-        "run",
-        "--no-capture-output",  # Prevent conda from buffering output
-        "-n",
-        "3dgrut",
-        "python",
+        "/workspace/.venv/bin/python",  # the image's uv environment
         "-u",  # Unbuffered Python output
         "train.py",
         "--config-name",

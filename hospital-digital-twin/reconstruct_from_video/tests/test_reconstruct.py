@@ -21,7 +21,7 @@ class ReconstructionBuildTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / "scripts").mkdir()
         (self.root / "3dgrut").mkdir()
-        (self.root / "3dgrut/install_env.sh").touch()
+        (self.root / "3dgrut/install_env_uv.sh").touch()
         (self.root / "colmap/sparse/0").mkdir(parents=True)
         self.file_patch = patch.object(reconstruct, "__file__", str(self.root / "scripts/reconstruct.py"))
         self.file_patch.start()
@@ -36,10 +36,11 @@ class ReconstructionBuildTest(unittest.TestCase):
         build = run.call_args_list[0].args[0]
         self.assertEqual(build, [
             "docker", "build", "-f", str(self.root / "Dockerfile.3dgrut"),
-            "-t", "i4h-3dgrut:cu128", str(self.root / "3dgrut"),
+            "-t", "i4h-3dgrut:cu130", str(self.root / "3dgrut"),
         ])
         training = run.call_args_list[1].args[0]
-        self.assertIn("i4h-3dgrut:cu128", training)
+        self.assertIn("i4h-3dgrut:cu130", training)
+        self.assertIn("/workspace/.venv/bin/python", training)
         self.assertIn("export_usdz.enabled=true", training)
 
     def test_failed_build_prevents_training(self):

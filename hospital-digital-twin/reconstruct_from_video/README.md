@@ -17,7 +17,7 @@ The output is a USDZ file that can be loaded in Isaac Sim, enabling rapid protot
 
 - **OS**: Linux
 - **GPU**: NVIDIA GPU with CUDA support; RTX series with Ray Tracing (RT) cores recommended
-- **Container CUDA**: 12.8.1 with PyTorch 2.7.1 (includes Blackwell support). The host needs a compatible NVIDIA driver and NVIDIA Container Toolkit; a host CUDA toolkit is not required.
+- **Container CUDA**: 13.0.2 with PyTorch 2.13.0, on both x86_64 and aarch64 (DGX Station, DGX Spark). The host needs an NVIDIA driver that supports CUDA 13 (R580 or newer) and the NVIDIA Container Toolkit; a host CUDA toolkit is not required.
 - **Python**: 3.10+ for host scripts (`reconstruct.py`, `video_to_images.py`)
 - **Python packages** (for `video_to_images.py` only): `opencv-python`
 
@@ -65,7 +65,7 @@ Clone the 3DGUT repository and checkout to the tested commit:
 cd hospital-digital-twin/reconstruct_from_video/
 git clone --recursive https://github.com/nv-tlabs/3dgrut.git
 cd 3dgrut
-git checkout 38664dde3b0a4a35d2baf91ebee11f3de3eae8c3
+git checkout dfd3d54c8c612003fb7948443edf7778f2bcd5ec
 git submodule update --init --recursive
 cd ..
 ```
@@ -78,7 +78,7 @@ The `reconstruct.py` script automates the entire pipeline: COLMAP sparse reconst
 python scripts/reconstruct.py --work-dir your-work-dir/
 ```
 
-The pipeline builds `i4h-3dgrut:cu128` using this directory's `Dockerfile.3dgrut` and the cloned `3dgrut/` as its build context. The image pins PyTorch and its companion packages throughout installation and checks their CUDA version during the build. This prevents later pip installs from silently replacing the CUDA-compatible stack.
+The pipeline builds `i4h-3dgrut:cu130` using this directory's `Dockerfile.3dgrut` and the cloned `3dgrut/` as its build context. The same recipe builds on x86_64 and aarch64; the first build compiles Kaolin and the 3DGUT CUDA extensions and takes longer. The image checks the PyTorch version, its CUDA version and the USD runtime during the build, so a later install cannot silently replace the tested stack.
 
 **Expected work-dir structure:**
 
@@ -103,8 +103,8 @@ After building the image, run this from `hospital-digital-twin/reconstruct_from_
 
 ```bash
 docker run --rm --gpus all --runtime=nvidia --ipc=host \
-  -v "$PWD/tests:/tests:ro" i4h-3dgrut:cu128 \
-  conda run --no-capture-output -n 3dgrut python /tests/gpu_smoke.py
+  -v "$PWD/tests:/tests:ro" i4h-3dgrut:cu130 \
+  python /tests/gpu_smoke.py
 ```
 
 The test checks CUDA forward/backward computation, runs ten 3DGUT training steps
