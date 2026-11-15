@@ -1,3 +1,3 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Optional agent and Blender adapters; core patient APIs remain independent."""
+"""Optional Blender asset handoff; core patient APIs remain independent."""
