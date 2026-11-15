@@ -17,7 +17,6 @@ walkthrough see the [quickstart](../README.md); for the exported USD layout see 
 | [`export.py`](../patient_digital_twin/export.py) | `export_to_usd`, `export_patient_twin`, `write_artifacts` | `geometry`, OpenUSD (lazy) |
 | [`scan_volume.py`](../patient_digital_twin/scan_volume.py) | `ScanVolume`, `Conversion`, NIfTI/DICOM readers, `export_ct`, `replay` | NumPy, PyYAML, nibabel/SimpleITK (lazy) |
 | [`__main__.py`](../patient_digital_twin/__main__.py) | `run_pipeline`, the `python -m patient_digital_twin` CLI | `importers`, `body`, `scan_volume` |
-| [`agent/`](../patient_digital_twin/agent) (optional) | Patient MCP tools, managed Blender process, validated edit application | Patient API, MCP, external Blender |
 
 `scan_volume.py` is shared byte-for-byte with sensor-simulation and is not edited here.
 The separate, deprecated `vasculature_digital_twin` package ships in the same distribution
@@ -26,9 +25,10 @@ for migration only; nothing in `patient_digital_twin` imports it. See the
 Heavy optional dependencies (OpenUSD, VTK, MONAI/PyTorch, SimpleITK, trimesh) are imported
 only inside the functions that need them, so `import patient_digital_twin` stays light.
 
-The [Blender MCP layer](blender.md) keeps `HumanBody` as the source of patient data.
-Blender edits are previews until explicitly applied. The apply step validates
-geometry and rigid poses, preserves CT registration, and clears affected centerlines.
+The optional [`patient_digital_twin.agent`](agents.md) layer edits exported
+assets through upstream Blender MCP and Claude/Codex. It merges geometry and
+materials back into the original USD contract, retaining CT metadata and bundle
+references. Generation and the core patient APIs remain independent of agents.
 
 ## Key classes
 

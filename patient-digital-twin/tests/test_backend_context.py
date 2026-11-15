@@ -48,10 +48,12 @@ import sys
 import importlib.abc
 class NoInference(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, *args):
-        if fullname.split('.')[0] in {'torch', 'monai', 'ignite', 'einops', 'huggingface_hub'}:
+        if fullname.split('.')[0] in {'torch', 'monai', 'ignite', 'einops', 'huggingface_hub',
+                                    'mcp', 'openai_codex', 'claude_agent_sdk', 'bpy'}:
             raise AssertionError('Optional inference imported: ' + fullname)
 sys.meta_path.insert(0, NoInference())
 from patient_digital_twin import HumanBody, NVGenerateImporter, NVSegmentImporter
+from patient_digital_twin.agent.assets import prepare, finalize
 """],
         capture_output=True, text=True, check=False,
     )

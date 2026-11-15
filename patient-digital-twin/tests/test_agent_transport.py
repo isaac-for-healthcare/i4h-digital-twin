@@ -1,40 +1,70 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Real MCP transport checks; model services are never called."""
+"""SDK adapter contracts; model services are never called."""
 import asyncio
 import sys
-from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 
-def test_stdio_mcp_load_edit_export(tmp_path):
-    pytest.importorskip('mcp')
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+def test_codex_streams_actual_sdk_notification_shape(monkeypatch, tmp_path, capsys):
+    sdk = pytest.importorskip('openai_codex')
+    from patient_digital_twin.agent.__main__ import mcp_config, run_codex
+    captured = {}
 
-    sample = Path(__file__).resolve().parents[1] / 'examples/data/s0011/segmentations'
+    class Turn:
+        def stream(self):
+            yield SimpleNamespace(method='item/agentMessage/delta', payload=SimpleNamespace(delta='done'))
+            yield SimpleNamespace(method='turn/completed', payload=SimpleNamespace(turn=SimpleNamespace(status='completed')))
 
-    async def scenario():
-        params = StdioServerParameters(command=sys.executable, args=[
-            '-m', 'patient_digital_twin.agent.server', '--workspace', str(tmp_path),
-        ])
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as client:
-                await client.initialize()
-                tools = await client.list_tools()
-                assert {'load_patient', 'blender_show', 'blender_apply_edits', 'blender_screenshot'} <= {x.name for x in tools.tools}
-                result = await client.call_tool('load_patient', {'source': 'segmentation',
-                                                'input_path': str(sample), 'names': ['aorta']})
-                assert not result.isError, result
-                result = await client.call_tool('set_visibility', {'names': ['aorta'], 'enabled': False})
-                assert not result.isError
-                result = await client.call_tool('export_patient', {'path': 'hidden.usdc'})
-                assert not result.isError, result
-                result = await client.call_tool('export_patient', {'path': 'hidden.usdc'})
-                assert result.isError
-        from pxr import Usd, UsdGeom
-        stage = Usd.Stage.Open(str(tmp_path / 'hidden.usdc'))
-        assert UsdGeom.Imageable(stage.GetPrimAtPath('/HumanBody/Anatomy/aorta')).ComputeVisibility() == 'invisible'
+        def interrupt(self):
+            captured['interrupted'] = True
 
-    asyncio.run(scenario())
+    class FakeCodex:
+        def __init__(self, config):
+            captured['config'] = config
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            captured['closed'] = True
+
+        def thread_start(self, **kwargs):
+            captured['thread'] = kwargs
+            return SimpleNamespace(turn=lambda prompt: Turn())
+
+    monkeypatch.setattr(sdk, 'Codex', FakeCodex)
+    monkeypatch.setenv('DISPLAY', ':77')
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'never-forward-this')
+    config = mcp_config()
+    assert 'ANTHROPIC_API_KEY' not in config['env']
+    run_codex('inspect anatomy', tmp_path, config, None)
+    assert 'done' in capsys.readouterr().out
+    assert captured['closed']
+    assert 'interrupted' not in captured
+    assert captured['thread']['sandbox'] == sdk.Sandbox.workspace_write
+    assert any('mcp_servers.blender.command' in item for item in captured['config'].config_overrides)
+    assert any('mcp_servers.blender.args=' in item for item in captured['config'].config_overrides)
+    assert 'mcp_servers.blender.tools.get_viewport_screenshot.approval_mode="approve"' in captured['config'].config_overrides
+    assert not any('default_tools_approval_mode' in item for item in captured['config'].config_overrides)
+
+
+def test_claude_receives_blender_tools(monkeypatch, tmp_path):
+    sdk = pytest.importorskip('claude_agent_sdk')
+    from patient_digital_twin.agent.__main__ import run_claude
+    captured = {}
+
+    async def query(**kwargs):
+        captured.update(kwargs)
+        yield sdk.ResultMessage(subtype='success', duration_ms=1, duration_api_ms=1,
+                                is_error=False, num_turns=1, session_id='test')
+
+    monkeypatch.setattr(sdk, 'query', query)
+    asyncio.run(run_claude('inspect anatomy', tmp_path, {'command': sys.executable, 'args': []}, None, 3, 1.))
+    options = captured['options']
+    assert options.tools == []
+    assert 'mcp__blender__execute_blender_code' in options.allowed_tools
+    assert options.mcp_servers['blender']['command'] == sys.executable
+    assert options.max_turns == 3 and options.max_budget_usd == 1.

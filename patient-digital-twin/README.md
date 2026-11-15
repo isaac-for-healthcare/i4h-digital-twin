@@ -29,7 +29,7 @@ pip install -e './patient-digital-twin[pipeline]'
 The `pipeline` extra supplies USD and skeleton-centerline dependencies for the segmentation and export
 examples below. For mesh extraction alone, install `./patient-digital-twin`.
 
-For agent-controlled viewing and editing, see the optional [Blender MCP integration](docs/blender.md).
+For optional geometry, material and texture editing, see [Claude/Codex with Blender MCP](docs/agents.md).
 
 ## 1. Load a segmentation and extract meshes
 

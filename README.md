@@ -18,8 +18,8 @@ i4h-digital-twin/
 
 Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD meshes.
 
-Optional [Blender MCP tools](patient-digital-twin/docs/blender.md) let agents view
-and edit anatomy through the existing patient API.
+[Optional Claude/Codex asset editing with Blender MCP](patient-digital-twin/docs/agents.md)
+modifies exported geometry, materials and textures while preserving the patient asset contract.
 
 | Component | Status | Purpose |
 | --- | --- | --- |
