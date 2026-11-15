@@ -11,8 +11,12 @@ import os
 import tempfile
 from pathlib import Path
 
+from .runtime import MCP_PACKAGE, blender_session
+
+BLENDER_TOOLS = ('execute_blender_code', 'get_scene_info', 'look')
+
 INSTRUCTIONS = """Edit the supplied I4H scene using Blender MCP. Inspect the scene and a
-viewport screenshot before and after changes. Only edit this session's scene.
+viewport screenshot before and after changes (use look for images). Only edit this session's scene.
 Keep the existing mesh objects and their mesh-data i4h_path properties: adding,
 deleting, splitting or joining objects is unsupported. Geometry edits, modifiers,
 UVs and USD Preview Surface compatible materials/textures are supported. Use
@@ -23,8 +27,8 @@ or modify source files: the application validates and publishes the result.
 
 
 def mcp_config() -> dict:
-    """Use the upstream server and the user's already-running Blender add-on."""
-    return {"command": "uvx", "args": ["mcp-for-blender"],
+    """Use the pinned upstream server; runtime selects an existing or managed Blender."""
+    return {"command": "uvx", "args": ["--from", MCP_PACKAGE, "mcp-for-blender"],
             "env": {"BLENDER_MCP_DISABLE_TELEMETRY": "true",
                     **{key: os.environ[key] for key in ("BLENDER_HOST", "BLENDER_PORT") if key in os.environ}}}
 
@@ -56,7 +60,7 @@ async def run_claude(prompt: str, workspace: Path, config: dict, model: str | No
 
     options = ClaudeAgentOptions(
         cwd=str(workspace), system_prompt=INSTRUCTIONS, model=model,
-        tools=[], allowed_tools=["mcp__blender__" + name for name in ("execute_blender_code", "get_scene_info", "get_object_info", "get_viewport_screenshot")], mcp_servers={"blender": cast(McpStdioServerConfig, config)},
+        tools=[], allowed_tools=["mcp__blender__" + name for name in BLENDER_TOOLS], mcp_servers={"blender": cast(McpStdioServerConfig, config)},
         setting_sources=[], max_turns=max_turns, max_budget_usd=budget_usd,
     )
     finished = False
@@ -86,9 +90,8 @@ def run_codex(prompt: str, workspace: Path, config: dict, model: str | None, tim
     # These are the capabilities exposed by this application (the same set
     # Claude permits through allowed_tools). Do not change user/global policy
     # or grant access to unrelated MCP servers or future unlisted tools.
-    blender_tools = ('execute_blender_code', 'get_scene_info', 'get_object_info', 'get_viewport_screenshot')
-    overrides += (f'mcp_servers.blender.enabled_tools={json.dumps(blender_tools)}',)
-    overrides += tuple(f'mcp_servers.blender.tools.{name}.approval_mode="approve"' for name in blender_tools)
+    overrides += (f'mcp_servers.blender.enabled_tools={json.dumps(BLENDER_TOOLS)}',)
+    overrides += tuple(f'mcp_servers.blender.tools.{name}.approval_mode="approve"' for name in BLENDER_TOOLS)
     with Codex(config=CodexConfig(cwd=str(workspace), config_overrides=overrides)) as codex:
         thread = codex.thread_start(cwd=str(workspace), model=model,
                                     developer_instructions=INSTRUCTIONS,
@@ -132,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--input', type=Path, required=True, help='Pipeline USD or patient_twin.yaml')
     parser.add_argument('--output', type=Path, required=True, help='New final asset directory')
     parser.add_argument('--mcp-config', type=Path, help='JSON stdio server config overriding upstream uvx default')
+    parser.add_argument('--blender-mode', choices=('auto', 'virtual', 'existing'),
+                        help='Default: reuse/start Blender; virtual starts a private Xvfb GUI; existing never launches')
     parser.add_argument('--vessel-names', nargs='+', help='Vessels used to regenerate existing navigation arrays')
     parser.add_argument('--model')
     parser.add_argument('--timeout', type=float, default=600)
@@ -145,21 +150,25 @@ def main(argv: list[str] | None = None) -> int:
     if output.exists():
         parser.error('Use a new output directory')
     output.parent.mkdir(parents=True, exist_ok=True)
+    mode = args.blender_mode or ('existing' if args.mcp_config else 'auto')
+    if args.mcp_config and mode != 'existing':
+        parser.error('--mcp-config requires --blender-mode existing')
     config = json.loads(args.mcp_config.read_text()) if args.mcp_config else mcp_config()
     # Same host/filesystem as Blender; the temporary files never replace the input.
     with tempfile.TemporaryDirectory(prefix='.asset-edit-', dir=output.parent) as temp:
         workspace = Path(temp)
         settings = prepare(args.input, workspace)
-        asyncio.run(blender_call(config, 'open_asset', workspace))
-        prompt = f"Edit scene I4H {settings['token']}.\n{args.prompt}"
-        if args.backend == 'claude':
-            async def bounded():
-                await asyncio.wait_for(run_claude(prompt, workspace, config, args.model,
-                                                 args.max_turns, args.budget_usd), args.timeout)
-            asyncio.run(bounded())
-        else:
-            run_codex(prompt, workspace, config, args.model, args.timeout)
-        asyncio.run(blender_call(config, 'export_asset', workspace))
+        with blender_session(workspace, config, mode) as config:
+            asyncio.run(blender_call(config, 'open_asset', workspace))
+            prompt = f"Edit scene I4H {settings['token']}.\n{args.prompt}"
+            if args.backend == 'claude':
+                async def bounded():
+                    await asyncio.wait_for(run_claude(prompt, workspace, config, args.model,
+                                                     args.max_turns, args.budget_usd), args.timeout)
+                asyncio.run(bounded())
+            else:
+                run_codex(prompt, workspace, config, args.model, args.timeout)
+            asyncio.run(blender_call(config, 'export_asset', workspace))
         print(finalize(workspace, output, vessel_names=args.vessel_names))
     return 0
 

@@ -47,7 +47,7 @@ def test_codex_streams_actual_sdk_notification_shape(monkeypatch, tmp_path, caps
     assert captured['thread']['sandbox'] == sdk.Sandbox.workspace_write
     assert any('mcp_servers.blender.command' in item for item in captured['config'].config_overrides)
     assert any('mcp_servers.blender.args=' in item for item in captured['config'].config_overrides)
-    assert 'mcp_servers.blender.tools.get_viewport_screenshot.approval_mode="approve"' in captured['config'].config_overrides
+    assert 'mcp_servers.blender.tools.look.approval_mode="approve"' in captured['config'].config_overrides
     assert not any('default_tools_approval_mode' in item for item in captured['config'].config_overrides)
 
 
