@@ -17,6 +17,7 @@ def open_asset(directory):
     bpy.ops.wm.usd_import(filepath=str(folder / 'input.usdc'), import_visible_only=False,
                           property_import_mode='ALL', merge_parent_xform=False)
     from mathutils import Matrix
+
     # Bake import unit/parent transforms so mesh editing coordinates are meters.
     for obj in scene.objects:
         if obj.type == 'MESH':

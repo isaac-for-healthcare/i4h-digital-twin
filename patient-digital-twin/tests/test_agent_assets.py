@@ -7,11 +7,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade
-
-from patient_digital_twin import HumanBody, SegmentationImporter, CenterlineGraph
-from patient_digital_twin.agent.assets import prepare, finalize
+from patient_digital_twin import CenterlineGraph, HumanBody, SegmentationImporter
+from patient_digital_twin.agent.assets import finalize, prepare
 from patient_digital_twin.scan_volume import from_array
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade
 
 
 @pytest.fixture
@@ -38,6 +37,11 @@ def test_commit_preserves_ct_texture_and_invalidates_changed_graph(asset, tmp_pa
         points = mesh.GetPointsAttr().Get()
         points[0] += Gf.Vec3f(1, 0, 0)
         mesh.GetPointsAttr().Set(points)
+    else:
+        # Blender float32 rounding must not replace otherwise unchanged geometry.
+        points = mesh.GetPointsAttr().Get()
+        points[0] += Gf.Vec3f(1e-6, 0, 0)
+        mesh.GetPointsAttr().Set(points)
     texture = work / 'color.png'
     texture.write_bytes(b'texture-dependency')
     material = UsdShade.MaterialBindingAPI(mesh).ComputeBoundMaterial()[0]
@@ -58,6 +62,9 @@ def test_commit_preserves_ct_texture_and_invalidates_changed_graph(asset, tmp_pa
     prim = stage.GetPrimAtPath('/HumanBody/Anatomy/liver')
     assert prim.GetCustomDataByKey('anatomy:name') == 'liver'
     assert bool(prim.GetAttribute('centerline:points')) != deform
+    if not deform:
+        np.testing.assert_array_equal(prim.GetAttribute('points').Get(),
+                                      original.GetPrimAtPath(prim.GetPath()).GetAttribute('points').Get())
     material = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()[0]
     assert material
     path = stage.GetPrimAtPath(material.GetPath().AppendChild('Texture')).GetAttribute('inputs:file').Get()
@@ -133,6 +140,8 @@ def test_bundle_regenerates_navigation_on_original_ct_grid(tmp_path):
     body = HumanBody(SegmentationImporter(labels, {1: 'aorta'}).to_anatomy_collection())
     body.attach_scan(from_array(labels.transpose(2, 1, 0), np.eye(4), world_unit='mm'))
     source = body.export_patient_twin(tmp_path / 'source', vessel_names=['aorta'])
+    for name in ('human_body.usdc', 'view.png', 'inference_summary.json'):
+        (source.parent / name).write_bytes(b'stale output from the original run')
     work = tmp_path / 'work'
     prepare(source, work)
     edited = Usd.Stage.Open(str(work / 'input.usdc'))
@@ -144,6 +153,8 @@ def test_bundle_regenerates_navigation_on_original_ct_grid(tmp_path):
         finalize(work, tmp_path / 'incomplete')
     assert not (tmp_path / 'incomplete').exists()
     output = finalize(work, tmp_path / 'final', vessel_names=['aorta'])
+    assert not any((output.parent / name).exists() for name in
+                   ('human_body.usdc', 'view.png', 'inference_summary.json'))
     assert (output.parent / 'volume.npy').read_bytes() == (source.parent / 'volume.npy').read_bytes()
     assert (output.parent / 'volume.yaml').read_bytes() == (source.parent / 'volume.yaml').read_bytes()
     np.testing.assert_allclose(np.load(output.parent / 'centerline_points.npy')[:, 0], 13., atol=1e-6)

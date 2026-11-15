@@ -30,9 +30,10 @@ def mcp_config() -> dict:
 
 
 async def blender_call(config: dict, function: str, workspace: Path) -> None:
+    from datetime import timedelta
+
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
-    from datetime import timedelta
 
     worker = Path(__file__).with_name('blender.py')
     code = f"exec(compile(open({str(worker)!r}).read(), {str(worker)!r}, 'exec')); {function}({str(workspace)!r})"
@@ -48,9 +49,10 @@ async def blender_call(config: dict, function: str, workspace: Path) -> None:
 async def run_claude(prompt: str, workspace: Path, config: dict, model: str | None,
                      max_turns: int, budget_usd: float) -> None:
     """Stream a bounded Claude Agent SDK session using its normal authentication."""
+    from typing import cast
+
     from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
     from claude_agent_sdk.types import McpStdioServerConfig
-    from typing import cast
 
     options = ClaudeAgentOptions(
         cwd=str(workspace), system_prompt=INSTRUCTIONS, model=model,
@@ -72,8 +74,9 @@ async def run_claude(prompt: str, workspace: Path, config: dict, model: str | No
 
 def run_codex(prompt: str, workspace: Path, config: dict, model: str | None, timeout_s: float = 600) -> None:
     """Stream the Codex Python SDK; credentials/config remain owned by Codex."""
-    from openai_codex import ApprovalMode, Codex, CodexConfig, Sandbox
     from threading import Timer
+
+    from openai_codex import ApprovalMode, Codex, CodexConfig, Sandbox
 
     overrides = (
         f'mcp_servers.blender.command={json.dumps(config["command"])}',
@@ -122,7 +125,7 @@ def run_codex(prompt: str, workspace: Path, config: dict, model: str | None, tim
 
 def main(argv: list[str] | None = None) -> int:
     """Optionally edit an existing pipeline output; generation itself is unchanged."""
-    from .assets import prepare, finalize
+    from .assets import finalize, prepare
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('claude', 'codex'), required=True)
