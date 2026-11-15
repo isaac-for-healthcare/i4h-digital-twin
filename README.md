@@ -20,6 +20,7 @@ Convert clinical or synthetic imaging into vessel/anatomy artifacts and OpenUSD 
 
 [Blender asset editing](patient-digital-twin/docs/blender.md)
 modifies exported geometry, materials and textures while preserving the patient asset contract.
+[Claude/Codex orchestration](patient-digital-twin/docs/agents.md) automates this editing step.
 
 | Component | Status | Purpose |
 | --- | --- | --- |

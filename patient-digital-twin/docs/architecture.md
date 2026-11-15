@@ -28,6 +28,8 @@ only inside the functions that need them, so `import patient_digital_twin` stays
 The optional [Blender editing layer](blender.md) prepares exported assets for
 editing and merges geometry/material changes into the original USD contract.
 It retains CT metadata and bundle references and has no agent SDK dependency.
+The optional [agent CLI](agents.md) wraps this handoff with Claude/Codex and upstream
+Blender MCP, leaving asset validation and export in the editing layer.
 
 ## Key classes
 
