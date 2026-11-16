@@ -68,6 +68,9 @@ def test_real_virtual_desktop_and_cleanup_on_failure(tmp_path, monkeypatch):
         with runtime.blender_session(tmp_path, config, 'virtual') as connection:
             ready = json.loads((tmp_path / 'blender-ready.json').read_text())
             assert runtime._responding('127.0.0.1', ready['port'])
+            with monkeypatch.context() as incompatible:
+                incompatible.setattr(runtime, 'MCP_PROTOCOL', -1)
+                assert not runtime._responding('127.0.0.1', ready['port'])
             display = Path('/tmp/.X11-unix/X' + ready['display'].split(':')[-1].split('.')[0])
             assert display.exists()
             with runtime.blender_session(tmp_path, connection) as reused:

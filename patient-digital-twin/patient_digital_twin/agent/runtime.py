@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import json
 import os
@@ -20,6 +21,7 @@ import urllib.request
 from pathlib import Path
 
 MCP_PACKAGE = 'mcp-for-blender==2.3.0'
+MCP_PROTOCOL = 16  # Protocol shipped with the pinned server/add-on.
 BLENDER_VERSION = '5.1.2'
 BLENDER_URL = f'https://download.blender.org/release/Blender5.1/blender-{BLENDER_VERSION}-linux-x64.tar.xz'
 BLENDER_SHA256 = 'aaccb355f50183979b698bcce7467103a76261b5fa59f4972295842662a285fb'
@@ -68,8 +70,9 @@ def ensure_blender() -> str:
                 package.extractall(unpacked)
         try:
             (unpacked / destination.name).rename(destination)
-        except OSError:
-            if not (destination / 'blender').is_file():
+        except OSError as error:
+            # Another installer may have published the same version first.
+            if error.errno not in {errno.EEXIST, errno.ENOTEMPTY} or not (destination / 'blender').is_file():
                 raise
     return str(destination / 'blender')
 
@@ -91,7 +94,11 @@ def _responding(host: str, port: int) -> bool:
                     continue
                 if not isinstance(response, dict) or not isinstance(response.get('result'), dict):
                     return False
-                return response.get('status') == 'success' and 'execute_code' in response['result'].get('capabilities', [])
+                info = response['result']
+                capabilities = info.get('capabilities')
+                return (response.get('status') == 'success' and info.get('protocol_version') == MCP_PROTOCOL
+                        and isinstance(capabilities, list)
+                        and all(name in capabilities for name in ('execute_code', 'get_scene_info')))
     except OSError:
         pass
     return False
@@ -122,18 +129,25 @@ def blender_session(workspace: Path, config: dict, mode: str = 'auto'):
     subprocess.run(['uvx', '--from', MCP_PACKAGE, 'python', '-c',
                     'import shutil; from blender_mcp.addon_manager import get_bundled_addon_path; '
                     f'shutil.copyfile(get_bundled_addon_path(), {str(addon)!r})'], check=True, timeout=180)
-    ready = workspace / 'blender-ready.json'
-    ready.unlink(missing_ok=True)
-    log_path = workspace / 'blender.log'
     env = {key: value for key, value in os.environ.items() if key not in {'PYTHONHOME', 'PYTHONPATH'}}
     env.update(BLENDERMCP_NO_UPDATE_CHECK='1', BLENDER_MCP_DISABLE_TELEMETRY='true')
     if virtual:
         env.pop('WAYLAND_DISPLAY', None)
         env.pop('WAYLAND_SOCKET', None)
+    command = prefix + [executable, '--factory-startup', '--python', str(Path(__file__).resolve()),
+                        '--', str(addon), str(workspace / 'blender-ready.json')]
+    with _running_blender(command, env, workspace) as port:
+        yield {**config, 'env': {**config.get('env', {}), 'BLENDER_HOST': '127.0.0.1', 'BLENDER_PORT': str(port)}}
+
+
+@contextlib.contextmanager
+def _running_blender(command: list[str], env: dict[str, str], workspace: Path):
+    """Own startup, readiness and cleanup; the caller only receives a ready port."""
+    ready = workspace / 'blender-ready.json'
+    ready.unlink(missing_ok=True)
+    log_path = workspace / 'blender.log'
     with log_path.open('w') as log:
-        process = subprocess.Popen(prefix + [executable, '--factory-startup', '--python', str(Path(__file__).resolve()),
-                                             '--', str(addon), str(ready)],
-                                   stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                    env=env, start_new_session=(os.name == 'posix'))
     blender_pid = None
     try:
@@ -143,33 +157,37 @@ def blender_session(workspace: Path, config: dict, mode: str = 'auto'):
                 info = json.loads(ready.read_text())
                 port, blender_pid = info['port'], info['pid']
                 if _responding('127.0.0.1', port):
-                    yield {**config, 'env': {**config.get('env', {}), 'BLENDER_HOST': '127.0.0.1', 'BLENDER_PORT': str(port)}}
+                    yield port
                     return
             time.sleep(.1)
         raise RuntimeError('Blender failed to become ready:\n' + log_path.read_text(errors='replace')[-4000:])
     finally:
-        with contextlib.suppress(ProcessLookupError):
-            if os.name != 'posix':
-                process.terminate()
-            elif blender_pid is not None:
-                # Let xvfb-run reap Blender and remove its display before stopping the wrapper.
-                os.kill(blender_pid, signal.SIGTERM)
-            else:
-                os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-        finally:
-            if os.name == 'posix':
-                with contextlib.suppress(ProcessLookupError):
-                    # xvfb-run signals Xvfb on exit but does not wait for its cleanup.
-                    deadline = time.monotonic() + 2
-                    while time.monotonic() < deadline:
-                        os.killpg(process.pid, 0)
-                        time.sleep(.05)
-                    os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
+        _stop_blender(process, blender_pid)
+
+
+def _stop_blender(process: subprocess.Popen, blender_pid: int | None) -> None:
+    """Stop Blender first so xvfb-run can reap it and clean up its display."""
+    with contextlib.suppress(ProcessLookupError):
+        if os.name != 'posix':
+            process.terminate()
+        elif blender_pid is not None:
+            os.kill(blender_pid, signal.SIGTERM)
+        else:
+            os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    finally:
+        if os.name == 'posix':
+            with contextlib.suppress(ProcessLookupError):
+                # xvfb-run signals Xvfb on exit but does not wait for its cleanup.
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    os.killpg(process.pid, 0)
+                    time.sleep(.05)
+                os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
 
 
 def _start_addon() -> None:
