@@ -5,13 +5,13 @@ name: Patient Digital Twin CI
 
 on:
   push:
-    branches: [main, "dev/**"]
+    branches: [main, "dev/**", "devel/**"]
     paths:
       - "patient-digital-twin/**"
       - "pyproject.toml"
       - ".github/workflows/patient_digital_twin-ci.yml"
   pull_request:
-    branches: [main, "dev/**"]
+    branches: [main, "dev/**", "devel/**"]
     paths:
       - "patient-digital-twin/**"
       - "pyproject.toml"
