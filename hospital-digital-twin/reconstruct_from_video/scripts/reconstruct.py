@@ -15,9 +15,12 @@
 
 import argparse
 import shlex
+import struct
 import subprocess
 from pathlib import Path
 from typing import List
+
+COLMAP_IMAGE = "colmap/colmap:20251107.4118"
 
 
 def run_docker(step_name: str, docker_args: List[str], cleanup_on_success: bool = True) -> None:
@@ -68,6 +71,54 @@ def run_docker(step_name: str, docker_args: List[str], cleanup_on_success: bool 
             print(f"  docker rm {container_name}")
             print(f"{'='*70}\n")
         raise
+
+
+def _model_size(model_dir: Path) -> tuple:
+    """(registered images, 3D points) of a binary COLMAP model; (0, 0) when unreadable.
+
+    images.bin and points3D.bin both start with their entry count as a uint64.
+    """
+    counts = []
+    for name in ("images.bin", "points3D.bin"):
+        try:
+            with (model_dir / name).open("rb") as f:
+                counts.append(struct.unpack("<Q", f.read(8))[0])
+        except (OSError, struct.error):
+            counts.append(0)
+    return tuple(counts)
+
+
+def select_largest_model(sparse_dir: Path) -> None:
+    """Make sparse/0 the largest COLMAP model.
+
+    The mapper can split a scene into several models (sparse/0, sparse/1, ...) whose
+    numbers do not follow their size, and 3dgrut always reads sparse/0. Swap the model
+    with the most registered images (then the most points) into sparse/0.
+    """
+    models = sorted(p for p in sparse_dir.iterdir() if p.is_dir() and p.name.isdigit()) if sparse_dir.is_dir() else []
+    if len(models) < 2:
+        return
+    sizes = {p: _model_size(p) for p in models}
+    for p in models:
+        print(f"[pipeline] COLMAP model {p.name}: {sizes[p][0]} registered images, {sizes[p][1]} points")
+    first = sparse_dir / "0"
+    largest = max(models, key=lambda p: (sizes[p], -int(p.name)))
+    if largest == first:
+        return
+    try:
+        tmp = sparse_dir / "_swap"
+        first.rename(tmp)
+        largest.rename(first)
+        tmp.rename(largest)
+    except PermissionError:
+        # The COLMAP container writes sparse/ as root; swap inside the same image instead.
+        swap = f"mv /sparse/0 /sparse/_swap && mv /sparse/{largest.name} /sparse/0 && mv /sparse/_swap /sparse/{largest.name}"
+        subprocess.run(
+            ["docker", "run", "--rm", "-v", f"{sparse_dir.resolve()}:/sparse", COLMAP_IMAGE, "bash", "-c", swap],
+            check=True,
+        )
+    print(f"[pipeline] using the largest COLMAP model: moved model {largest.name} to sparse/0 "
+          f"(the former sparse/0 is now sparse/{largest.name})")
 
 
 def ensure_colmap_images_layout(work_dir: Path) -> None:
@@ -220,12 +271,15 @@ def main() -> int:
                 f"{work_dir}:{working}",
                 "-w",
                 working,
-                "colmap/colmap:20251107.4118",
+                COLMAP_IMAGE,
                 "bash",
                 "-lc",
                 cmd,
             ],
         )
+
+    # 3dgrut reads colmap/sparse/0; make it the largest model (also for a reused colmap/)
+    select_largest_model(colmap_root / "sparse")
 
     # Stop here if skip-train is set
     if args.skip_train:

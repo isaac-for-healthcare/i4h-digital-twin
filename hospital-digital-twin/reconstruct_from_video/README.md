@@ -93,7 +93,7 @@ You must place all your extracted or captured images in `your-work-dir/images/` 
 
 **What the script does:**
 
-1. Runs COLMAP for structure-from-motion (feature extraction, matching, and sparse reconstruction)
+1. Runs COLMAP for structure-from-motion (feature extraction, matching, and sparse reconstruction). When COLMAP splits the scene into several models (`colmap/sparse/0`, `sparse/1`, ...), the script moves the model with the most registered images to `sparse/0`, the one 3DGUT reads, and prints the size of each. A reused `colmap/` folder is checked the same way.
 2. Trains the neural reconstruction model using 3DGUT
 3. Exports the result as a USDZ file to `your-work-dir/out/.../export_last.usdz`
 
