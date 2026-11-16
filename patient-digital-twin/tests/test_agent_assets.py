@@ -81,7 +81,8 @@ def test_missing_mesh_never_publishes(asset, tmp_path):
     assert not (tmp_path / 'final').exists()
 
 
-def test_real_blender_geometry_and_textured_material(asset, tmp_path):
+@pytest.mark.parametrize('hidden', [False, True])
+def test_real_blender_geometry_and_textured_material(asset, tmp_path, hidden):
     blender = os.environ.get('I4H_TEST_BLENDER')
     if not blender:
         pytest.skip('Set I4H_TEST_BLENDER to exercise an installed Blender')
@@ -111,6 +112,9 @@ image.file_format = 'PNG'
 image.save()
 texture.image = image
 material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
+obj.hide_render = {hidden!r}
+obj.hide_viewport = {hidden!r}
+obj.hide_set({hidden!r})
 export_asset({str(work)!r})
 ''')
     subprocess.run([blender, '-b', '--factory-startup', '--python-exit-code', '1', '--python', str(script)], check=True, capture_output=True, text=True)
@@ -118,6 +122,7 @@ export_asset({str(work)!r})
     stage = Usd.Stage.Open(str(output))
     original = Usd.Stage.Open(str(source))
     prim = stage.GetPrimAtPath('/HumanBody/Anatomy/liver')
+    assert UsdGeom.Imageable(prim).ComputeVisibility() == ('invisible' if hidden else 'inherited')
     old = original.GetPrimAtPath(prim.GetPath())
     delta = np.asarray(prim.GetAttribute('points').Get()) - np.asarray(old.GetAttribute('points').Get())
     assert delta[0, 0] == pytest.approx(1., abs=1e-4)

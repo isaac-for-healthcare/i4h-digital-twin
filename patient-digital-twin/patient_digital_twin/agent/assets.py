@@ -66,6 +66,8 @@ def finalize(workspace: Path, output: Path, *, vessel_names: list[str] | None = 
         while prim and not prim.GetAttribute('userProperties:i4h_path'):
             prim = prim.GetParent()
         paths.append(str(prim.GetAttribute('userProperties:i4h_path').Get()) if prim else '')
+        if prim and prim.GetAttribute('userProperties:i4h_hidden').Get():
+            UsdGeom.Imageable(mesh).MakeInvisible()
     if len(paths) != len(set(paths)) or set(paths) != set(settings['paths']):
         raise ValueError('Edited USD must contain each original mesh identity exactly once')
     changed = [_merge_mesh(original.GetPrimAtPath(path), mesh) for path, mesh in zip(paths, meshes)]

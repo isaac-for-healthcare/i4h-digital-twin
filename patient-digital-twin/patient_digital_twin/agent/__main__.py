@@ -8,6 +8,8 @@ import asyncio
 import contextlib
 import json
 import os
+import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -155,8 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('--mcp-config requires --blender-mode existing')
     config = json.loads(args.mcp_config.read_text()) if args.mcp_config else mcp_config()
     # Same host/filesystem as Blender; the temporary files never replace the input.
-    with tempfile.TemporaryDirectory(prefix='.asset-edit-', dir=output.parent) as temp:
-        workspace = Path(temp)
+    workspace = Path(tempfile.mkdtemp(prefix='.asset-edit-', dir=output.parent))
+    try:
         settings = prepare(args.input, workspace)
         with blender_session(workspace, config, mode) as config:
             asyncio.run(blender_call(config, 'open_asset', workspace))
@@ -170,6 +172,11 @@ def main(argv: list[str] | None = None) -> int:
                 run_codex(prompt, workspace, config, args.model, args.timeout)
             asyncio.run(blender_call(config, 'export_asset', workspace))
         print(finalize(workspace, output, vessel_names=args.vessel_names))
+    except BaseException:
+        print(f'Edit failed; recovery files retained at {workspace}', file=sys.stderr)
+        raise
+    else:
+        shutil.rmtree(workspace)
     return 0
 
 
