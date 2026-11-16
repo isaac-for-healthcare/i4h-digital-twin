@@ -43,13 +43,14 @@ async def blender_call(config: dict, function: str, workspace: Path) -> None:
 
     worker = Path(__file__).with_name('blender.py')
     code = f"exec(compile(open({str(worker)!r}).read(), {str(worker)!r}, 'exec')); {function}({str(workspace)!r})"
-    async with stdio_client(StdioServerParameters(**config)) as (read, write):
-        async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=120)) as client:
-            await client.initialize()
-            result = await client.call_tool('execute_blender_code', {'code': code})
-            marker = workspace / ('opened' if function == 'open_asset' else 'edited.usdc')
-            if result.isError or not marker.is_file():
-                raise RuntimeError(f'Blender {function} failed: {result.content}')
+    with (workspace / 'mcp.log').open('a') as log:
+        async with stdio_client(StdioServerParameters(**config), errlog=log) as (read, write):
+            async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=120)) as client:
+                await client.initialize()
+                result = await client.call_tool('execute_blender_code', {'code': code})
+                marker = workspace / ('opened' if function == 'open_asset' else 'edited.usdc')
+                if result.isError or not marker.is_file():
+                    raise RuntimeError(f'Blender {function} failed: {result.content}')
 
 
 async def run_claude(prompt: str, workspace: Path, config: dict, model: str | None,
@@ -160,8 +161,10 @@ def main(argv: list[str] | None = None) -> int:
     workspace = Path(tempfile.mkdtemp(prefix='.asset-edit-', dir=output.parent))
     try:
         settings = prepare(args.input, workspace)
+        print('Connecting to Blender…', flush=True)
         with blender_session(workspace, config, mode) as config:
             asyncio.run(blender_call(config, 'open_asset', workspace))
+            print('Editing asset…', flush=True)
             prompt = f"Edit scene I4H {settings['token']}.\n{args.prompt}"
             if args.backend == 'claude':
                 async def bounded():
@@ -170,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                 asyncio.run(bounded())
             else:
                 run_codex(prompt, workspace, config, args.model, args.timeout)
+            print('Exporting edited asset…', flush=True)
             asyncio.run(blender_call(config, 'export_asset', workspace))
         print(finalize(workspace, output, vessel_names=args.vessel_names))
     except BaseException:

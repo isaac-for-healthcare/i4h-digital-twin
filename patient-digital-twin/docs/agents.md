@@ -33,7 +33,7 @@ existing Blender sessions and preferences are left intact. `--blender-mode exist
 disables installation/startup and is the default when using `--mcp-config`.
 
 Failed runs retain their workspace (including the pre-export `edited.blend`
-checkpoint); the error prints its path. Successful runs remove temporary files.
+checkpoint and import/export diagnostics in `mcp.log`); the error prints its path. Successful runs remove temporary files.
 
 The returned USD or manifest is the new Isaac input; source and CT data are
 preserved. For Claude, install the `claude` extra and use `--backend claude`.
