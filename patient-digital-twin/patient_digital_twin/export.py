@@ -176,7 +176,7 @@ def write_usd(
     try:
         from pxr import Gf, Sdf, Tf, Usd, UsdGeom, UsdShade, Vt
     except ImportError as exc:
-        raise ImportError("USD export is optional; install with: pip install usd-core") from exc
+        raise ImportError("USD export is optional; install with: uv pip install './patient-digital-twin[pipeline]'") from exc
     path = Path(path)
     if path.suffix.lower() not in USD_SUFFIXES:
         raise ValueError("Use a .usd, .usda, or .usdc output file")
