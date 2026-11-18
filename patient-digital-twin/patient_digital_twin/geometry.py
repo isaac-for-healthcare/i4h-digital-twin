@@ -138,7 +138,7 @@ def voxelize_mesh(
             vtk_to_numpy,
         )
     except ImportError as exc:
-        raise ImportError("Mesh skeletonization requires VTK: pip install vtk") from exc
+        raise ImportError("Mesh skeletonization requires VTK: uv pip install './patient-digital-twin[pipeline]'") from exc
     shape, spacing = np.asarray(shape_zyx), np.asarray(spacing_zyx_m, dtype=float)
     v, f = validate_triangles(vertices, faces)
     t = v[f]

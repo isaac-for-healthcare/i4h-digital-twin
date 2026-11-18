@@ -33,7 +33,7 @@ for i4h-workflows, using only the documented `patient_digital_twin` API and CLI.
 ## Instructions
 
 1. Identify the input (label volume, mask folder, CT/MR for NV-Segment, NV-Generate, or STL/OBJ) and the requested output (arrays, USD, or bundle).
-2. Install only the extras that path needs (below).
+2. Install only the extras that path needs (below), into the Python environment that will run the code. If `vtk`, `scipy` or `pxr` fails to import, install the extra; do not switch to another call to work around it.
 3. Import the named anatomy, wrap it in `HumanBody`, and attach matching CT when the output needs it.
 4. Extract centerlines or request bundle `vessel_names` only for vessels the user asked for.
 5. Export to a new output path, then verify names, empty meshes, CT grid, and manifest paths.
@@ -63,10 +63,10 @@ the same extras prefixed with `patient-`. `usd-core` does not install Isaac Sim.
 | Attach CT | `body.attach_scan(scan_volume.from_nifti("ct.nii.gz"))` (or `from_dicom`, `load_artifact`) |
 | Hide / show | `structure.enabled = False`, `body.anatomy.set_structure_enabled / set_system_enabled / set_enabled` |
 | Query | `body.anatomy.structures[name]`, `body.anatomy.select(kind=Kind.VESSEL, include_empty=False)` |
-| Vessel centerlines | `body.extract_topology(names=["aorta"], spacing_m=0.0015)` |
+| Vessel centerlines (`pipeline` extra) | `body.extract_topology(names=["aorta"], spacing_m=0.0015)`; read `structure.centerline` points, edges, radii (mesh-local meters) |
 | Standalone USD | `body.export_to_usd("patient.usdc")` |
 | i4h-workflows bundle | `body.export_patient_twin("bundle", vessel_names=["aorta"], ct_exterior=True)` |
-| CT + vessel arrays only | `export.write_artifacts(scan, "out", vessel_mask=mask)` |
+| CT + vessel arrays only | `export.write_artifacts(scan, "out", vessel_mask=mask)` (CT-grid arrays in the scan's units, e.g. mm; not a replacement for `extract_topology`) |
 | End-to-end inference CLI | `python -m patient_digital_twin --source nvsegment --input ct.nii.gz --bundle-root ROOT --classes aorta --format bundle --output out` |
 
 All public classes import from `patient_digital_twin`; `scan_volume`, `export`, and
