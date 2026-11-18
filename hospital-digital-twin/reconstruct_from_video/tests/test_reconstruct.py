@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib.util
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,88 @@ reconstruct = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reconstruct)
 
 
+def write_model(model_dir, images, points):
+    model_dir.mkdir(parents=True)
+    (model_dir / "images.bin").write_bytes(struct.pack("<Q", images))
+    (model_dir / "points3D.bin").write_bytes(struct.pack("<Q", points))
+
+
+class SelectLargestModelTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.sparse = Path(self.temp.name) / "sparse"
+        self.repo = Path(self.temp.name) / "repo"
+
+    def size(self, name):
+        return reconstruct._model_size(self.sparse / name)
+
+    def test_fragment_in_sparse0_is_swapped_out(self):
+        write_model(self.sparse / "0", 3, 12)
+        write_model(self.sparse / "1", 600, 400000)
+        reconstruct.select_largest_model(self.sparse, self.repo)
+        self.assertEqual(self.size("0"), (600, 400000))
+        self.assertEqual(self.size("1"), (3, 12))
+
+    def test_largest_among_three_moves_to_sparse0(self):
+        write_model(self.sparse / "0", 10, 50)
+        write_model(self.sparse / "1", 20, 90)
+        write_model(self.sparse / "2", 500, 300000)
+        reconstruct.select_largest_model(self.sparse, self.repo)
+        self.assertEqual(self.size("0"), (500, 300000))
+        self.assertEqual(self.size("2"), (10, 50))
+        self.assertEqual(self.size("1"), (20, 90))
+
+    def test_single_or_already_largest_is_unchanged(self):
+        write_model(self.sparse / "0", 600, 400000)
+        reconstruct.select_largest_model(self.sparse, self.repo)
+        self.assertEqual(self.size("0"), (600, 400000))
+        write_model(self.sparse / "1", 3, 12)
+        reconstruct.select_largest_model(self.sparse, self.repo)
+        self.assertEqual(self.size("0"), (600, 400000))
+        self.assertEqual(self.size("1"), (3, 12))
+
+    def test_root_owned_sparse_is_swapped_in_the_colmap_image(self):
+        write_model(self.sparse / "0", 3, 12)
+        write_model(self.sparse / "1", 600, 400000)
+        with patch.object(reconstruct.platform, "machine", return_value="x86_64"), \
+                patch.object(Path, "rename", side_effect=PermissionError), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            reconstruct.select_largest_model(self.sparse, self.repo)
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[:4], ["docker", "run", "--rm", "-v"])
+        self.assertEqual(cmd[4], f"{self.sparse.resolve()}:/sparse")
+        self.assertEqual(cmd[5], reconstruct.COLMAP_IMAGE)
+        self.assertEqual(cmd[-1], "mv /sparse/0 /sparse/_swap && mv /sparse/1 /sparse/0 && mv /sparse/_swap /sparse/1")
+        self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_root_owned_sparse_on_aarch64_is_swapped_in_the_local_colmap_image(self):
+        write_model(self.sparse / "0", 3, 12)
+        write_model(self.sparse / "1", 600, 400000)
+        self.repo.mkdir()
+        (self.repo / "Dockerfile.colmap").write_text("FROM scratch\n")
+        with patch.object(reconstruct.platform, "machine", return_value="aarch64"), \
+                patch.object(Path, "rename", side_effect=PermissionError), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            reconstruct.select_largest_model(self.sparse, self.repo)
+        build, swap = (c.args[0] for c in run.call_args_list)
+        self.assertEqual(build, ["docker", "build", "-t", reconstruct.COLMAP_LOCAL_IMAGE, "-"])
+        self.assertEqual(swap[5], reconstruct.COLMAP_LOCAL_IMAGE)
+
+    def test_reused_work_dir_is_repaired_before_training(self):
+        root = Path(self.temp.name) / "nurec"
+        (root / "scripts").mkdir(parents=True)
+        (root / "3dgrut").mkdir()
+        (root / "3dgrut/install_env_uv.sh").touch()
+        write_model(root / "colmap/sparse/0", 3, 12)
+        write_model(root / "colmap/sparse/1", 600, 400000)
+        with patch.object(reconstruct, "__file__", str(root / "scripts/reconstruct.py")), \
+                patch("sys.argv", [str(SCRIPT), "--work-dir", str(root)]), \
+                patch.object(reconstruct.subprocess, "run"):
+            self.assertEqual(reconstruct.main(), 0)
+        self.assertEqual(reconstruct._model_size(root / "colmap/sparse/0"), (600, 400000))
+
+
 class ReconstructionBuildTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -21,7 +104,7 @@ class ReconstructionBuildTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / "scripts").mkdir()
         (self.root / "3dgrut").mkdir()
-        (self.root / "3dgrut/install_env.sh").touch()
+        (self.root / "3dgrut/install_env_uv.sh").touch()
         (self.root / "colmap/sparse/0").mkdir(parents=True)
         self.file_patch = patch.object(reconstruct, "__file__", str(self.root / "scripts/reconstruct.py"))
         self.file_patch.start()
@@ -36,11 +119,36 @@ class ReconstructionBuildTest(unittest.TestCase):
         build = run.call_args_list[0].args[0]
         self.assertEqual(build, [
             "docker", "build", "-f", str(self.root / "Dockerfile.3dgrut"),
-            "-t", "i4h-3dgrut:cu128", str(self.root / "3dgrut"),
+            "-t", "i4h-3dgrut:cu130", str(self.root / "3dgrut"),
         ])
         training = run.call_args_list[1].args[0]
-        self.assertIn("i4h-3dgrut:cu128", training)
-        self.assertIn("export_usdz.enabled=true", training)
+        self.assertIn("i4h-3dgrut:cu130", training)
+        self.assertIn("/workspace/.venv/bin/python", training)
+        self.assertIn("export_usd.enabled=true", training)
+        self.assertIn("export_usd.format=nurec", training)
+        self.assertIn("export_usd.path=export_last.usdz", training)
+        self.assertFalse([a for a in training if a.startswith(("export_usdz.", "export_ingp."))])
+
+    def test_x86_uses_the_published_colmap_image(self):
+        (self.root / "colmap/sparse/0").rmdir()
+        (self.root / "images").mkdir()
+        with patch.object(reconstruct.platform, "machine", return_value="x86_64"), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            self.assertEqual(reconstruct.main(), 0)
+        colmap = run.call_args_list[0].args[0]
+        self.assertIn("colmap/colmap:20251107.4118", colmap)
+
+    def test_aarch64_builds_colmap_before_running_it(self):
+        (self.root / "colmap/sparse/0").rmdir()
+        (self.root / "images").mkdir()
+        (self.root / "Dockerfile.colmap").write_text("FROM scratch\n")
+        with patch.object(reconstruct.platform, "machine", return_value="aarch64"), \
+                patch.object(reconstruct.subprocess, "run") as run:
+            self.assertEqual(reconstruct.main(), 0)
+        build, colmap = run.call_args_list[0].args[0], run.call_args_list[1].args[0]
+        self.assertEqual(build, ["docker", "build", "-t", "i4h-colmap:3.13.0", "-"])
+        self.assertIn("i4h-colmap:3.13.0", colmap)
+        self.assertNotIn("colmap/colmap:20251107.4118", colmap)
 
     def test_failed_build_prevents_training(self):
         error = subprocess.CalledProcessError(1, ["docker", "build"])
