@@ -165,3 +165,20 @@ def test_bundle_centerline_uses_ct_grid_and_preserves_structure_graph(
         prim.GetAttribute("centerline:points").Get(), graph.points * 1000, rtol=1e-6
     )
     np.testing.assert_array_equal(prim.GetAttribute("centerline:edges").Get(), graph.edges)
+
+
+def test_cli_reports_an_unreadable_input_image_in_one_line(tmp_path, capsys):
+    """An un-fetched Git LFS pointer in place of the CT ends in one error line, not a traceback."""
+    ct = tmp_path / "ct.nii.gz"
+    ct.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:0\nsize 1\n")
+    argv = ["--source", "nvsegment", "--input", str(ct), "--classes", "aorta",
+            "--format", "bundle", "--output", str(tmp_path / "out")]
+
+    assert main.main(argv) == 1
+
+    err = capsys.readouterr().err
+    assert err.startswith("error: cannot read the input image:")
+    assert "ct.nii.gz" in err
+    assert "Git LFS" in err
+    assert err.count("\n") == 1
+    assert not (tmp_path / "out").exists()
