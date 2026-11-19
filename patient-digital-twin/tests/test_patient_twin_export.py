@@ -72,7 +72,7 @@ def test_bundle_preserves_native_grid_and_oblique_scan_geometry(tmp_path, angle)
     voxel = points @ inverse[:3, :3].T + inverse[:3, 3]
     indices = np.rint(voxel).astype(int)[:, ::-1]
     assert mask[tuple(indices.T)].all()
-    assert "world_from_patient_m" not in manifest["transforms"]
+    assert "world_from_scan_m" not in manifest["transforms"]
     stage = Usd.Stage.Open(str(target.parent / "patient_anatomy.usdc"))
     prim = stage.GetPrimAtPath("/HumanBody/Anatomy/aorta")
     xf = UsdGeom.XformCache().GetLocalToWorldTransform(prim)
@@ -141,3 +141,19 @@ def test_navigation_mask_follows_attached_registration(tmp_path, shift_mm):
     np.testing.assert_allclose(x, 11.0 + shift_mm, atol=1e-6)
     mask = np.load(manifest.parent / "vessel_mask.npy")  # Native IJK order from from_array.
     assert mask[int(9 + shift_mm):int(14 + shift_mm)].any() and mask.sum() == labels.sum()
+
+
+def test_placement_hint_is_written_as_world_from_scan_m(tmp_path):
+    """The hint is applied to scan-frame meters, so its key names the scan frame."""
+    mask = np.zeros((8, 8, 8), dtype=np.uint8)
+    mask[2:6, 2:6, 2:6] = 1
+    affine_m = np.diag([0.001, 0.001, 0.001, 1.0])
+    body = HumanBody(SegmentationImporter(mask, {1: "aorta"}, affine_xyz_to_imaging_m=affine_m).to_anatomy_collection())
+    placement = np.eye(4)
+    placement[:3, 3] = [0.1, 0.2, 0.3]
+
+    target = body.export_patient_twin(tmp_path / "bundle", world_from_scan_m=placement)
+
+    transforms = yaml.safe_load(target.read_text())["transforms"]
+    assert "world_from_patient_m" not in transforms
+    np.testing.assert_allclose(transforms["world_from_scan_m"], placement)

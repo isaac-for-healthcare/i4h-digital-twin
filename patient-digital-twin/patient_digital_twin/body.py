@@ -134,7 +134,7 @@ class HumanBody:
         *,
         patient_id: str | None = None,
         vessel_names: Iterable[str] = (),
-        world_from_patient_m: ArrayLike | None = None,
+        world_from_scan_m: ArrayLike | None = None,
         ct_exterior: bool = False,
         skin_opacity: float = 0.15,
     ) -> Path:
@@ -145,7 +145,7 @@ class HumanBody:
             vessel_names: Vessels to rasterize on the CT grid with navigation centerlines
                 (requires attached CT).
             ct_exterior: Add a CT-derived skin envelope (requires attached CT).
-            patient_id / world_from_patient_m / skin_opacity: Optional manifest metadata,
+            patient_id / world_from_scan_m / skin_opacity: Optional manifest metadata,
                 simulator placement hint, and envelope opacity.
 
         Example:
@@ -155,7 +155,7 @@ class HumanBody:
 
         return export_patient_twin(
             self, output, patient_id=patient_id, vessel_names=tuple(vessel_names),
-            world_from_patient_m=world_from_patient_m, ct_exterior=ct_exterior, skin_opacity=skin_opacity,
+            world_from_scan_m=world_from_scan_m, ct_exterior=ct_exterior, skin_opacity=skin_opacity,
         )
 
     def extract_topology(
