@@ -65,8 +65,8 @@ See the [export steps](../README.md#4-export) and [USD guide](../docs/usd.md).
 
 ## Small implementation, direct controls
 
-`scan_volume.py` stays byte-identical with sensor-simulation; its hash is recorded
-in every artifact.
+`scan_volume.py` re-exports `xray_simulator.scan_volume`, the single implementation
+shared with sensor-simulation. Artifacts record its format version and dependency versions.
 
 There is no YAML configuration policy or `configuration=` argument. Set
 `structure.enabled` directly, or use `body.anatomy.set_structure_enabled`,
