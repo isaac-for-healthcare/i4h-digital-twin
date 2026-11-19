@@ -138,7 +138,7 @@ The CLI accepts a DICOM directory (and `--series-uid` when it contains multiple
 series), or an existing `volume.yaml`, in place of the NIfTI input below.
 DICOM CLI export keeps the acquisition grid in LPS millimeters and KJI array order.
 
-The small `scan_volume` helper is also shipped in sensor-simulation. Use it
+The small `scan_volume` helper is implemented in sensor-simulation (`xray_simulator.scan_volume`) and re-exported here. Use it
 explicitly when a consumer needs a chosen frame, units, axes, or voxel spacing.
 This separate example requires your own regular CT series in `dicom/` and the
 `dicom` extra; s0011 is supplied as NIfTI:

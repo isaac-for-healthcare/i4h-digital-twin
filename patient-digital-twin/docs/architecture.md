@@ -18,7 +18,7 @@ walkthrough see the [quickstart](../README.md); for the exported USD layout see 
 | [`scan_volume.py`](../patient_digital_twin/scan_volume.py) | `ScanVolume`, `Conversion`, NIfTI/DICOM readers, `export_ct`, `replay` | NumPy, PyYAML, nibabel/SimpleITK (lazy) |
 | [`__main__.py`](../patient_digital_twin/__main__.py) | `run_pipeline`, the `python -m patient_digital_twin` CLI | `importers`, `body`, `scan_volume` |
 
-`scan_volume.py` is shared byte-for-byte with sensor-simulation and is not edited here.
+`scan_volume.py` re-exports `xray_simulator.scan_volume`; edit the implementation in sensor-simulation.
 The separate, deprecated `vasculature_digital_twin` package ships in the same distribution
 for migration only; nothing in `patient_digital_twin` imports it. See the
 [README section](../README.md#deprecated-vasculature_digital_twin) for its API and replacements.
