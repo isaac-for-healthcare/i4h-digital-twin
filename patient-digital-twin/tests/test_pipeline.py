@@ -198,7 +198,7 @@ def test_simple_stl_pipeline_without_imaging(pipeline, tmp_path):
     )
     manifest = yaml.safe_load(target.read_text())
     assert manifest["coordinate_frame"] == "body"
-    assert "world_from_patient_m" not in manifest["transforms"]
+    assert "world_from_scan_m" not in manifest["transforms"]
     assert manifest["anatomy"]["exterior"] is None
     assert set(manifest["artifacts"]) == {"anatomy_usd"}
     stage = Usd.Stage.Open(str(target.parent / "human_body.usdc"))

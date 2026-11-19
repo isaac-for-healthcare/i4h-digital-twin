@@ -279,7 +279,7 @@ def export_patient_twin(
     *,
     patient_id: str | None = None,
     vessel_names: Sequence[str] = (),
-    world_from_patient_m: ArrayLike | None = None,
+    world_from_scan_m: ArrayLike | None = None,
     ct_exterior: bool = False,
     skin_opacity: float = 0.15,
 ) -> Path:
@@ -293,7 +293,9 @@ def export_patient_twin(
         output: New directory (must not exist).
         patient_id: Manifest ID; defaults to the CT source folder name or ``"geometry"``.
         vessel_names: Vessels to rasterize on the CT grid, with navigation centerline arrays.
-        world_from_patient_m: Optional rigid simulator placement hint stored in the manifest.
+        world_from_scan_m: Optional rigid simulator placement hint stored in the manifest. It maps
+            scan-frame meters (scan coordinates times ``meters_per_unit``, in the scan's own
+            RAS or LPS frame) to the simulator world, whatever ``spatial_unit`` is.
         ct_exterior: Add a CT-derived skin envelope at ``/HumanBody/Exterior/CT``.
         skin_opacity: Envelope opacity in [0, 1].
 
@@ -352,8 +354,8 @@ def export_patient_twin(
             "transforms": {} if scan is None else {"voxel_to_scan": scan.ijk_to_world.tolist()},
             "artifacts": artifacts,
         }
-        if world_from_patient_m is not None:
-            manifest["transforms"]["world_from_patient_m"] = rigid_transform(world_from_patient_m).tolist()
+        if world_from_scan_m is not None:
+            manifest["transforms"]["world_from_scan_m"] = rigid_transform(world_from_scan_m).tolist()
         (folder / "patient_twin.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
 
     return _publish(output, ".patient-twin-", write) / "patient_twin.yaml"

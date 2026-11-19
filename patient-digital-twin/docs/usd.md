@@ -42,8 +42,10 @@ axis conversion to an exported stage.
 Schema-2 bundle anatomy is authored in the scan's `RAS` or `LPS` physical frame
 and `spatial_unit`. `transforms.voxel_to_scan` maps IJK indices to scan coordinates.
 Simulator world placement is chosen downstream. An explicit optional
-`transforms.world_from_patient_m` is a column-vector placement matrix in meters;
-apply it once after converting scan units to meters.
+`transforms.world_from_scan_m` is a rigid column-vector placement matrix from the
+scan frame (`coordinate_frame`, not converted to LPS) in meters to the simulator
+world. It is in meters whatever `spatial_unit` is: multiply scan coordinates by
+`meters_per_unit` first, then apply it once.
 
 Bundles omit an exterior by default. A CT envelope requires `ct_exterior=True`
 and attached CT. Standalone exports do not generate a CT envelope.
