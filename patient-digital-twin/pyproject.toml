@@ -11,8 +11,8 @@ requires-python = ">=3.10"
 authors = [{ name = "i4h" }]
 dependencies = [
     "numpy>=1.24", "nibabel>=5.0", "PyYAML>=6.0", "scikit-image>=0.22",
-    # Owns scan_volume. Pinned to the head of i4h-sensor-simulation PR #72; repin to the merge commit.
-    "xray_simulator @ git+https://github.com/isaac-for-healthcare/i4h-sensor-simulation.git@9270f75129ee17e10ab030c75d775c0853abf087#subdirectory=xray-simulator",
+    # Owns scan_volume. Pinned to the i4h-sensor-simulation merge commit of PR #72.
+    "xray_simulator @ git+https://github.com/isaac-for-healthcare/i4h-sensor-simulation.git@d7d3f2976ab306a531730772c1d4fa221d6e2247#subdirectory=xray-simulator",
 ]
 
 [project.optional-dependencies]
