@@ -20,11 +20,13 @@ Main functions:
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
+from nibabel.filebasedimages import ImageFileError
 
 from .anatomy import CATALOG, canonical_name, is_vessel
 from .body import HumanBody
@@ -163,10 +165,18 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point: run the pipeline and print the output path; option errors exit with status 2."""
+    """CLI entry point: run the pipeline and print the output path.
+
+    Option errors exit with status 2 (argparse). An input image that cannot be read, such as an
+    un-fetched Git LFS pointer, ends in one ``error:`` line and status 1 instead of a traceback.
+    """
     cli = parser()
     try:
         result = run_pipeline(**vars(cli.parse_args(argv)))
+    except ImageFileError as exc:
+        print(f"error: cannot read the input image: {exc} (a Git LFS pointer or an interrupted download?)",
+              file=sys.stderr)
+        return 1
     except (ValueError, FileNotFoundError, FileExistsError, ImportError) as exc:
         cli.error(str(exc))
     print(result)
