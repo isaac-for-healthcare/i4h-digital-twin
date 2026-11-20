@@ -176,6 +176,16 @@ Inference runs through Python imports in the current process by default. See the
 [NV-Generate](https://github.com/NVIDIA-Medtech/NV-Generate-CTMR) setup guides.
 As upstream, NV-Generate reads its `datasets/` files from `$MONAI_DATA_DIRECTORY`; set it
 to reuse downloaded data, otherwise each run downloads the datasets to a temporary directory.
+Runs conditioned on patient demographics (below) need only the model weights.
+
+`NVGenerateImporter` is tested with NV-Generate-CTMR commit `f6362e4`
+(`patient_digital_twin.importers.NV_GENERATE_COMMIT`); another checkout still runs but
+warns. Check out the tested commit:
+
+```bash
+git clone https://github.com/NVIDIA-Medtech/NV-Generate-CTMR
+git -C NV-Generate-CTMR checkout f6362e4d0bc572e387f35b522369f0f15b27dade
+```
 
 Example: segment the aorta from `s0011/ct.nii.gz` in the
 [TotalSegmentator small dataset v201](https://zenodo.org/records/10047263), using
@@ -193,6 +203,20 @@ python -m patient_digital_twin \
   --classes aorta liver --format usd --output ./output/generated.usdc
 ```
 
+NV-Generate can also generate a patient with given characteristics. Its body-mask
+model is conditioned on age (years), sex (`M`/`F`), and BMI (kg/m²) or weight (kg),
+not both; it was not trained on height. `--seed` makes a run repeatable:
+
+```bash
+python -m patient_digital_twin \
+  --source nvgenerate --source-root /path/to/NV-Generate-CTMR \
+  --demographics age=62 sex=F bmi=31.5 --seed 7 \
+  --classes aorta liver --format usd --output ./output/generated_bmi31.usdc
+```
+
+To sample whole cohorts from population distributions and quality-check every twin,
+see the [cohort generation tutorial](tutorials/cohort_generation/README.md).
+
 The import API uses the same backends (requires the indicated model checkout and weights):
 
 ```python
@@ -202,10 +226,11 @@ anatomy = NVSegmentImporter(
     sample / "ct.nii.gz", bundle_root="/path/to/NV-Segment-CTMR/NV-Segment-CTMR"
 ).to_anatomy_collection(names=["aorta"])
 
-# Alternative: generate paired anatomy and CT.
-generator = NVGenerateImporter(source_root="/path/to/NV-Generate-CTMR")
+# Alternative: generate paired anatomy and CT, optionally for given characteristics.
+generator = NVGenerateImporter(source_root="/path/to/NV-Generate-CTMR",
+                               demographics={"age": 62, "sex": "F", "bmi": 31.5}, seed=7)
 anatomy = generator.to_anatomy_collection(names=["aorta"])
-# Matching source CT: generator.ct_scan (attach with body.attach_scan).
+# Matching source CT: generator.ct_scan (attach with body.attach_scan); labels: generator.label_image.
 ```
 
 An explicit `--python /model/env/bin/python` (or `python_executable=` in Python)

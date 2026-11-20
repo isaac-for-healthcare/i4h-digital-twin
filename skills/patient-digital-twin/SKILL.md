@@ -57,7 +57,7 @@ the same extras prefixed with `patient-`. `usd-core` does not install Isaac Sim.
 | Mesh a folder of binary masks | `SegmentationImporter("masks/", names=["aorta"]).to_anatomy_collection()` (filenames are names) |
 | Mesh a NumPy ZYX label array | `SegmentationImporter(labels_zyx, {1: "liver"}, affine_xyz_to_imaging_m=affine)` |
 | Segment a CT/MR with NV-Segment | `NVSegmentImporter("ct.nii.gz", bundle_root=root).to_anatomy_collection(names=["aorta"])` |
-| Generate a synthetic patient | `gen = NVGenerateImporter(source_root=root)`; `gen.to_anatomy_collection(names=[...])`; CT is `gen.ct_scan` |
+| Generate a synthetic patient | `gen = NVGenerateImporter(source_root=root, demographics={"age": 62, "sex": "F", "bmi": 31.5})` (optional; bmi or weight, no height); `gen.to_anatomy_collection(names=[...])`; CT is `gen.ct_scan`, labels `gen.label_image` |
 | Import STL/OBJ meshes | `SimpleImporter({"liver": "liver.stl"}, mesh_to_body={...}).to_anatomy_collection()` |
 | Wrap anatomy | `body = HumanBody(anatomy)` |
 | Attach CT | `body.attach_scan(scan_volume.from_nifti("ct.nii.gz"))` (or `from_dicom`, `load_artifact`) |

@@ -7,7 +7,9 @@
 --bundle-root <bundle> --format bundle --output out/`` segments a CT (NIfTI, DICOM
 directory, or ``volume.yaml``), meshes only the requested classes, extracts missing
 vessel centerlines, attaches the CT, and writes a USD file or a schema-2 bundle.
-``--source nvgenerate`` synthesizes the CT instead. Run with ``--help`` for all options.
+``--source nvgenerate`` synthesizes the CT instead, optionally for given patient
+characteristics (``--demographics age=55 sex=F bmi=31``) and ``--seed``. Run with
+``--help`` for all options.
 
 Main functions:
 
@@ -15,14 +17,16 @@ Main functions:
   i4h-workflows); raises ``ValueError``/``FileExistsError`` before inference for bad options.
 - ``parser`` / ``main``: the argparse front end.
 - ``class_names``: parse and validate ``--classes`` values into catalog names.
+- ``demographic``: parse one ``--demographics`` ``KEY=VALUE`` item.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import nibabel as nib
 import numpy as np
@@ -48,6 +52,23 @@ def class_names(values: str | Iterable[str]) -> tuple[str, ...]:
     if unknown := set(names) - CATALOG.keys():
         raise ValueError(f"Unknown anatomical classes: {sorted(unknown)}")
     return names
+
+
+def demographic(text: str) -> tuple[str, str | float]:
+    """Parse one ``--demographics`` item: ``sex=F`` stays text, other values become numbers.
+
+    Example:
+        ``demographic("bmi=24.5") == ("bmi", 24.5)``
+    """
+    key, separator, value = (part.strip() for part in text.partition("="))
+    if not separator or not key or not value:
+        raise argparse.ArgumentTypeError(f"expected KEY=VALUE, got {text!r}")
+    if key.lower() == "sex":
+        return "sex", value
+    try:
+        return key.lower(), float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{key} must be a number, got {value!r}") from None
 
 
 def _load_scan(input: Path, series_uid: str | None) -> ScanVolume:
@@ -77,6 +98,8 @@ def run_pipeline(
     python_executable: str | Path | None = None,
     centerline_spacing_mm: float = 1.5,
     series_uid: str | None = None,
+    demographics: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
+    seed: int | None = None,
 ) -> Path:
     """Run NV-Segment or NV-Generate and export only the requested anatomy.
 
@@ -90,6 +113,8 @@ def run_pipeline(
         bundle_root / source_root / python_executable: backend checkout and optional interpreter.
         centerline_spacing_mm: Voxel size for vessel centerline extraction.
         series_uid: DICOM series to use when a directory contains several.
+        demographics / seed: nvgenerate only. Patient characteristics such as
+            ``{"age": 55, "sex": "F", "bmi": 31}`` (see ``NVGenerateImporter``) and a fixed seed.
 
     Returns:
         The written USD path, or the bundle's ``patient_twin.yaml``.
@@ -115,6 +140,8 @@ def run_pipeline(
          "nvsegment requires --input pointing to a 3D NIfTI image, DICOM CT directory, or volume.yaml"),
         (source == "nvgenerate" and input is not None, "nvgenerate creates its own CT; omit --input"),
         (source == "nvgenerate" and modality != "CT", "nvgenerate currently generates CT only"),
+        (source != "nvgenerate" and (demographics is not None or seed is not None),
+         "demographics and seed apply to nvgenerate only"),
     ):
         if failed:
             raise ValueError(message)
@@ -132,7 +159,8 @@ def run_pipeline(
         anatomy = segmenter.to_anatomy_collection(names=names)
         scan, source_path = (scan, str(input_path)) if modality == "CT" else (None, None)
     else:
-        generator = NVGenerateImporter(source_root=source_root, python_executable=python_executable)
+        generator = NVGenerateImporter(source_root=source_root, python_executable=python_executable,
+                                       demographics=None if demographics is None else dict(demographics), seed=seed)
         anatomy = generator.to_anatomy_collection(names=names)
         scan = generator.ct_scan
     if absent := [n for n in names if n not in anatomy.structures or anatomy.structures[n].is_empty]:
@@ -161,6 +189,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--source-root", type=Path, help="NV-Generate-CTMR checkout")
     result.add_argument("--python", dest="python_executable", help="Python interpreter for model inference")
     result.add_argument("--centerline-spacing-mm", type=float, default=1.5)
+    result.add_argument("--demographics", nargs="+", type=demographic, metavar="KEY=VALUE",
+                        help="nvgenerate: patient characteristics, e.g. age=55 sex=F bmi=31 (bmi or weight)")
+    result.add_argument("--seed", type=int, help="nvgenerate: fixed generation seed (default: random)")
     return result
 
 

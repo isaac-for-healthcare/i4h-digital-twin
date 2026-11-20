@@ -12,8 +12,10 @@ Every importer is constructed with its inputs and returns anatomy from
   frame, and records the source label volume and registration on the collection.
 - ``NVSegmentImporter``: runs the NV-Segment-CTMR MONAI bundle on a CT/MR NIfTI and
   meshes the requested catalog labels from its output.
-- ``NVGenerateImporter``: runs NV-Generate-CTMR to synthesize a paired CT and label
-  volume; meshes the labels and keeps the CT on ``ct_scan`` for ``HumanBody.attach_scan``.
+- ``NVGenerateImporter``: runs NV-Generate-CTMR (tested at ``NV_GENERATE_COMMIT``) to
+  synthesize a paired CT and label volume, optionally conditioned on patient
+  ``demographics`` (age, sex, BMI or weight); meshes the labels and keeps the CT on
+  ``ct_scan`` for ``HumanBody.attach_scan``.
 - ``SimpleImporter``: named STL/OBJ meshes (XYZ meters) with optional rigid placements.
 - ``segmentation_anatomy``: mesh a backend label NIfTI against the catalog (used by the
   NV importers, and by tests that mock inference).
@@ -28,11 +30,13 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+import numbers
 import os
 import re
 import secrets
 import subprocess
 import sys
+import warnings
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -56,6 +60,10 @@ from .scan_volume import ScanVolume
 
 SKIP = re.compile(r"^(background|body|dummy\d*|.*_trunc)$")
 _UNITS = {"unknown": 0.001, "mm": 0.001, "meter": 1.0, "micron": 1e-6}
+#: NV-Generate-CTMR commit that ``NVGenerateImporter`` is tested with (upstream main, 2026-10-20).
+NV_GENERATE_COMMIT = "f6362e4d0bc572e387f35b522369f0f15b27dade"
+#: Patient characteristics NV-Generate-CTMR's mask diffusion model is conditioned on (upstream units).
+DEMOGRAPHICS = ("age", "sex", "weight", "bmi")
 
 
 def _load_nifti(path: str | Path) -> SpatialImage:
@@ -406,12 +414,17 @@ class NVSegmentImporter:
             return segmentation_anatomy(result, supported, names=names)
 
 
-def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Path") -> None:
+def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Path", options: str = "{}") -> None:
     """Run upstream NV-Generate rflow-ct inference from its checkout; self-contained for -c.
 
     Data files resolve exactly as upstream does: ``datasets/...`` entries live under
     ``$MONAI_DATA_DIRECTORY`` (or a fresh directory when it is unset), downloaded by
     upstream's ``download_model_data``. Inference then runs against that same root.
+
+    ``options`` is a JSON object. ``demographics`` (upstream ``[[name, value], ...]`` pairs)
+    conditions the mask diffusion on patient characteristics instead of the reference
+    liver size, and needs only the model weights. ``spacing`` (mm) and ``output_size``
+    (voxels) replace upstream's default output grid.
     """
     import json
     import os
@@ -423,18 +436,25 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
     from scripts import inference, sample
     from scripts.download_model_data import download_model_data
 
+    settings = json.loads(options)
+    demographics = settings.get("demographics")
     folder = Path(mask_output).parent
     data_root = os.environ.get("MONAI_DATA_DIRECTORY") or tempfile.mkdtemp(prefix="data-", dir=folder)
     os.makedirs(data_root, exist_ok=True)
-    download_model_data("rflow-ct", data_root)  # Skips files that already exist.
+    # Skips files that already exist. Demographic conditioning reads no datasets/ files.
+    download_model_data("rflow-ct", data_root, model_only=bool(demographics))
     environment = json.loads(Path("configs/environment_rflow-ct.json").read_text())
     # Upstream's rule; absolute paths survive its own os.path.join(root_dir, value) unchanged.
     environment = {k: os.path.join(data_root, v) if "datasets/" in v else v for k, v in environment.items()}
     config = json.loads(Path("configs/config_infer.json").read_text())
-    # A size condition triggers fresh mask diffusion instead of selecting a cached mask.
-    conditions = json.loads(Path(environment["all_anatomy_size_conditions_json"]).read_text())
-    config.update(num_output_samples=1, image_output_ext=".nii.gz", label_output_ext=".nii.gz",
-                  controllable_anatomy_size=[["liver", conditions[0]["organ_size"][1]]])
+    config.update(num_output_samples=1, image_output_ext=".nii.gz", label_output_ext=".nii.gz")
+    # Either condition triggers fresh mask diffusion instead of selecting a cached mask.
+    if demographics:
+        config.update(controllable_anatomy_size=[], controllable_demographics=demographics)
+    else:
+        conditions = json.loads(Path(environment["all_anatomy_size_conditions_json"]).read_text())
+        config.update(controllable_anatomy_size=[["liver", conditions[0]["organ_size"][1]]])
+    config.update({key: settings[key] for key in ("spacing", "output_size") if key in settings})
     environment["output_dir"] = str(folder / "generated")
     (folder / "environment.json").write_text(json.dumps(environment))
     (folder / "inference.json").write_text(json.dumps(config))
@@ -475,55 +495,144 @@ def _generate(seed: "int | str", mask_output: "str | Path", ct_output: "str | Pa
     shutil.copyfile(images[0], ct_output)
 
 
+def _demographics(values: Mapping[str, Any]) -> list[list[Any]]:
+    """Validate patient characteristics into upstream ``controllable_demographics`` pairs.
+
+    Accepts ``age`` (years), ``sex`` (``"M"``/``"F"``), and ``bmi`` (kg/m²) or ``weight``
+    (kg), not both: upstream recorded BMI and weight for nearly disjoint training cases and
+    never trained height. Upstream itself warns outside its training ranges (age 19-87, BMI 18-63,
+    weight 22-144 kg).
+
+    Example:
+        ``_demographics({"age": 55, "sex": "m", "bmi": 24.5}) == [["age", 55.0], ["sex", "M"], ["bmi", 24.5]]``
+    """
+    values = dict(values)
+    if "height" in values:
+        raise ValueError("NV-Generate-CTMR is not trained on height; pass bmi or weight instead")
+    if unknown := set(values) - set(DEMOGRAPHICS):
+        raise ValueError(f"Unsupported demographics {sorted(unknown)}; choose from {list(DEMOGRAPHICS)}")
+    if not values or {"bmi", "weight"} <= values.keys():
+        raise ValueError("Provide at least one demographic, and bmi or weight but not both")
+    pairs: list[list[Any]] = []
+    for name in DEMOGRAPHICS:
+        if name not in values:
+            continue
+        value = values[name]
+        if name == "sex":
+            if str(value).upper() not in ("M", "F"):
+                raise ValueError(f"sex must be 'M' or 'F', got {value!r}")
+            pairs.append([name, str(value).upper()])
+        elif isinstance(value, bool) or not isinstance(value, numbers.Real) or not 0 < float(value) < np.inf:
+            raise ValueError(f"{name} must be a positive finite number, got {value!r}")
+        else:
+            pairs.append([name, float(value)])
+    return pairs
+
+
+def _checkout_commit(root: Path) -> str | None:
+    """The git HEAD commit of an upstream checkout, or None when it is not a readable git checkout."""
+    if not (root / ".git").exists():
+        return None
+    try:
+        result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, check=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = result.stdout.strip()
+    return commit if re.fullmatch(r"[0-9a-f]{40}", commit) else None
+
+
 class NVGenerateImporter:
     """Generate a synthetic patient (paired CT + labels) with NV-Generate-CTMR, then mesh it.
 
-    Install ``patient-digital-twin[nvgenerate]`` and clone the upstream checkout with weights.
-    After import, ``ct_scan`` holds the generated CT and ``seed`` the random seed used.
+    Install ``patient-digital-twin[nvgenerate]`` and check out upstream at ``NV_GENERATE_COMMIT``
+    with its weights. After import, ``ct_scan`` holds the generated CT, ``label_image`` the
+    paired label NIfTI (upstream ``configs/label_dict.json`` IDs), and ``seed`` the seed used.
 
     Example:
-        ``generator = NVGenerateImporter(source_root="NV-Generate-CTMR")``
+        ``generator = NVGenerateImporter(source_root="NV-Generate-CTMR", demographics={"sex": "F", "bmi": 31})``
         ``body = HumanBody(generator.to_anatomy_collection(names=["aorta"]))``
         ``body.attach_scan(generator.ct_scan)``
     """
 
-    def __init__(self, *, source_root: str | Path | None = None, python_executable: str | Path | None = None) -> None:
-        """``source_root`` defaults to ``$NV_GENERATE_ROOT``; ``python_executable`` runs out of process."""
+    def __init__(
+        self,
+        *,
+        source_root: str | Path | None = None,
+        python_executable: str | Path | None = None,
+        demographics: Mapping[str, Any] | None = None,
+        seed: int | None = None,
+        spacing: Iterable[float] | None = None,
+        output_size: Iterable[int] | None = None,
+    ) -> None:
+        """Configure generation; nothing runs until ``to_anatomy_collection``.
+
+        Args:
+            source_root: Upstream checkout (default ``$NV_GENERATE_ROOT``).
+            python_executable: Run inference in this interpreter instead of in-process.
+            demographics: Patient characteristics that condition upstream's mask diffusion,
+                e.g. ``{"age": 55, "sex": "M", "bmi": 24.5}``; see ``DEMOGRAPHICS``. They
+                replace the default reference liver-size condition.
+            seed: Seed for every generation (default: a fresh random seed per call).
+            spacing / output_size: Output grid in mm and voxels (default: upstream
+                ``configs/config_infer.json``, 256³ voxels at 1.5 x 1.5 x 2.0 mm).
+        """
         self.root = Path(source_root or os.environ.get("NV_GENERATE_ROOT", ".")).resolve()
         self.python_executable = python_executable
+        self.demographics = None if demographics is None else _demographics(demographics)
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**32):
+            raise ValueError("seed must be an integer in [0, 2**32)")
+        self.options: dict[str, Any] = {} if self.demographics is None else {"demographics": self.demographics}
+        for key, value, kind in (("spacing", spacing, float), ("output_size", output_size, int)):
+            if value is not None:
+                grid = [kind(v) for v in value]
+                if len(grid) != 3 or not all(0 < v < np.inf for v in grid):
+                    raise ValueError(f"{key} needs three positive values")
+                self.options[key] = grid
+        self._fixed_seed = seed
         self.seed: int | None = None
         self.ct_scan: ScanVolume | None = None
+        self.label_image: SpatialImage | None = None
 
     def to_anatomy_collection(self, *, names: Iterable[str] | None = None) -> AnatomyCollection:
-        """Generate a new patient with a fresh random seed and mesh ``names`` (default: all)."""
+        """Generate a patient (fresh random seed unless one was given) and mesh ``names`` (default: all)."""
         from .scan_volume import from_nifti
 
-        self.ct_scan = None
+        self.ct_scan = self.label_image = None
         if not (self.root / "scripts/inference.py").is_file():
             raise ImportError("NV-Generate-CTMR source is missing: clone "
                               "https://github.com/NVIDIA-Medtech/NV-Generate-CTMR and pass source_root.")
         labels = json.loads((self.root / "configs/label_dict.json").read_text())
         labelmap = {value: name for name, value in labels.items()}
         _supported(labelmap, names)
-        self.seed = seed = secrets.randbits(32)
+        commit = _checkout_commit(self.root)
+        if commit is not None and commit != NV_GENERATE_COMMIT:
+            warnings.warn(f"NV-Generate-CTMR checkout is at {commit[:12]}; this package is tested with "
+                          f"{NV_GENERATE_COMMIT[:12]} (NV_GENERATE_COMMIT)", stacklevel=2)
+        self.seed = seed = secrets.randbits(32) if self._fixed_seed is None else self._fixed_seed
+        options = json.dumps(self.options)
         with TemporaryDirectory(prefix="patient-nvgenerate-") as temp:
             mask_path, ct_path = Path(temp) / "mask.nii.gz", Path(temp) / "ct.nii.gz"
             if self.python_executable is None:
                 with _backend(self.root):
-                    _generate(seed, mask_path, ct_path)
+                    _generate(seed, mask_path, ct_path, options)
             else:
                 code = inspect.getsource(_generate) + "\nimport sys\n_generate(*sys.argv[1:])\n"
                 subprocess.run([str(self.python_executable), "-c", code, str(seed), str(mask_path),
-                                str(ct_path)], cwd=self.root, check=True)
+                                str(ct_path), options], cwd=self.root, check=True)
             mask_image, ct_image = _load_nifti(mask_path), _load_nifti(ct_path)
             if mask_image.shape != ct_image.shape or not np.allclose(
                 nifti_affine_m(mask_image), nifti_affine_m(ct_image)
             ):
                 raise ValueError("Generated CT and segmentation must share their physical grid")
             scan = from_nifti(ct_path)
-            scan.metadata["source"] = {"kind": "generated", "backend": "NV-Generate-CTMR", "seed": self.seed}
+            scan.metadata["source"] = {
+                "kind": "generated", "backend": "NV-Generate-CTMR", "seed": self.seed, "commit": commit,
+                "demographics": None if self.demographics is None else dict(map(tuple, self.demographics)),
+            }
             body = segmentation_anatomy(mask_image, labelmap, names=names)
-        self.ct_scan = scan
+            label_image = nib.Nifti1Image(np.asanyarray(mask_image.dataobj), mask_image.affine, mask_image.header)
+        self.ct_scan, self.label_image = scan, label_image
         return body
 
 
