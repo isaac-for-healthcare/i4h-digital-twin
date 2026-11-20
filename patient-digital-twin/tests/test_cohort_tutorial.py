@@ -234,3 +234,37 @@ def test_ct_nifti_round_trip(tmp_path):
     image = generate_cohort.ct_nifti(from_nifti(tmp_path / "ct.nii.gz"))
     np.testing.assert_allclose(image.affine, affine)
     np.testing.assert_array_equal(np.asanyarray(image.dataobj), np.asanyarray(source.dataobj))
+
+
+def test_report_cancels_back_to_back_pairs_and_judges_records():
+    pytest.importorskip("matplotlib")
+    import make_report
+    from patient_digital_twin.geometry import mask_to_mesh
+
+    cube = np.zeros((5, 5, 5), np.uint8)
+    cube[1:4, 1:4, 1:4] = 1
+    vertices, faces = mask_to_mesh(cube)
+    existing = {tuple(sorted(face)) for face in faces.tolist()}
+    extra = next(t for t in ((0, i, j) for i in range(1, len(vertices)) for j in range(i + 1, len(vertices)))
+                 if t not in existing)
+    doubled = np.vstack([faces, [extra, extra[::-1]]])  # A back-to-back pair, as marching cubes can emit.
+    assert (qc.edge_counts(doubled, len(vertices)) > 2).any()
+    kept = make_report.cancel_back_to_back(doubled)
+    np.testing.assert_array_equal(kept, faces)
+    assert (qc.edge_counts(kept, len(vertices)) == 2).all()
+
+    def record(**qc_overrides):
+        metrics = {"ct": {"hu": {"liver": {"outlier": False}}},
+                   "labels": {"core_missing": [], "core_touching_boundary": {}, "body_touching_boundary": ["inferior"],
+                              "fragments": {"liver": {"outside_largest": 0.0}, make_report.PORTAL: {"outside_largest": 0.3}}},
+                   "mesh": {"not_closed_manifold": ["rib_left_3"]}, "centerlines": {"aorta": {"components": 1}},
+                   "bundle": {"usd_prims_found": 5, "structures": 5, "vessel_mask_matches_volume": True, "centerline_points": 9}}
+        metrics.update(qc_overrides)
+        return {"status": "ok", "qc": metrics}
+
+    good = make_report.verdicts(record())
+    assert good["twin_ready"] and good["body_in_fov"] and not good["portal_vein_connected"]
+    assert not make_report.verdicts(record(mesh={"not_closed_manifold": ["liver"]}))["twin_ready"]
+    assert not make_report.verdicts(record(centerlines={"aorta": {"components": 2}}))["aorta_centerline"]
+    failed = make_report.verdicts({"status": "failed"})
+    assert not any(failed.values())

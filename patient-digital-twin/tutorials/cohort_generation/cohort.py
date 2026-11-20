@@ -395,6 +395,6 @@ def lognormal_from_prevalence(threshold_1: float, above_1: float, threshold_2: f
 def table(rows: Sequence[Mapping[str, str]]) -> str:
     """A Markdown table from ``CohortSpec.describe()`` rows."""
     keys = list(rows[0]) if rows else []
-    lines = ["| " + " | ".join(keys) + " |", "|" + "---|" * len(keys)]
+    lines = ["| " + " | ".join(keys) + " |", "| " + " | ".join(["---"] * len(keys)) + " |"]
     lines += ["| " + " | ".join(str(row[k]) for k in keys) + " |" for row in rows]
     return "\n".join(lines)

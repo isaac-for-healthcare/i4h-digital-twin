@@ -218,7 +218,8 @@ BMI 29.3 ± 6.3) for an in-distribution cohort.
 
 ## Run a cohort
 
-From `patient-digital-twin/`, first check the sampled cohort without generating it:
+From `patient-digital-twin/`, first check the sampled cohort without generating it.
+`--preset` picks the specification (default `ct_patients`):
 
 ```bash
 python tutorials/cohort_generation/generate_cohort.py --output ~/cohort --count 500 --sample-only
@@ -244,7 +245,8 @@ Rerun the same command to resume after an interruption: patients with a
 | `record.json` | characteristics, timings, and every quality metric |
 | `pipeline.log` | upstream inference output and any traceback |
 
-Optionally, run the counterfactual BMI sweep, then build the figures and tables:
+Optionally, run the controlled BMI sweep (the same seeds at BMI 20 to 40), then build
+the figures and tables:
 
 ```bash
 HF_HUB_OFFLINE=1 python tutorials/cohort_generation/bmi_sweep.py --output ~/sweep --workers 3 \
@@ -263,9 +265,9 @@ regenerating. A patient is **twin-ready** when all of these hold:
 | Check | Passes when |
 | --- | --- |
 | `generated` | NV-Generate produced a CT and labels, and every pipeline step ran |
-| `ct_intensity` | the median HU of liver, spleen, pancreas, kidneys, and lungs lies within NV-Generate's own acceptance range (`configs/image_median_statistics_ct.json`, as in upstream `quality_check.py`) |
+| `ct_intensity` | the median HU of liver, spleen, pancreas, kidneys, lungs, and any brain label lies within NV-Generate's own acceptance range (`configs/image_median_statistics_ct.json`, as in upstream `quality_check.py`) |
 | `core_present` | all 16 core structures are labeled: aorta, heart, five lung lobes, liver, spleen, pancreas, stomach, both kidneys, inferior vena cava, portal and splenic vein, urinary bladder |
-| `core_complete` | no core structure touches the scan boundary |
+| `core_complete` | no core structure's largest piece touches the scan boundary (stray label fragments there are counted separately) |
 | `core_connected` | each core structure except the merged portal/splenic vein label has at least 99% of its voxels in one 26-connected piece |
 | `core_meshes_closed` | every core mesh is a closed 2-manifold, as `extract_topology` and bundle vessel masks require |
 | `aorta_centerline` | the aorta centerline is one connected graph |
