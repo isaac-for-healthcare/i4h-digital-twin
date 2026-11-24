@@ -63,6 +63,14 @@ jobs:
           twine check dist/*
           python -m pip install dist/*.whl
           python -I -c "import numpy as np; from patient_digital_twin.geometry import mask_to_mesh; vertices, faces = mask_to_mesh(np.ones((3, 3, 3))); assert len(vertices) and len(faces)"
+      - name: Install from the repository root and import every module
+        working-directory: .
+        run: |
+          python -m venv /tmp/root-install
+          /tmp/root-install/bin/python -m pip install --upgrade pip
+          /tmp/root-install/bin/python -m pip install .
+          cd /tmp && /tmp/root-install/bin/python -I -c "import patient_digital_twin, patient_digital_twin.scan_volume, hospital_digital_twin, robot_digital_twin, sim_ready_assets"
+          /tmp/root-install/bin/patient-digital-twin --help > /dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: patient-digital-twin-dist

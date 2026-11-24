@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def test_installed_meshing_from_unrelated_directory(tmp_path):
     # -I ignores environment path overrides and excludes the current directory.
@@ -44,3 +46,15 @@ def test_pipeline_help_uses_installed_package(tmp_path):
         check=True,
     )
     assert "--source" in result.stdout and "--labels" in result.stdout
+
+
+def test_root_package_declares_every_patient_dependency():
+    # The root package ships patient_digital_twin too, so `pip install .` needs its dependencies.
+    tomllib = pytest.importorskip("tomllib")
+    module = Path(__file__).resolve().parents[1]
+
+    def dependencies(path):
+        return set(tomllib.loads(path.read_text(encoding="utf-8"))["project"]["dependencies"])
+
+    missing = dependencies(module / "pyproject.toml") - dependencies(module.parent / "pyproject.toml")
+    assert not missing, f"root pyproject.toml lacks patient-digital-twin dependencies: {sorted(missing)}"
