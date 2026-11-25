@@ -155,8 +155,11 @@ replay(recipe, "dicom/", "reproduced_ct")
 
 This writes `volume.npy` in HU plus one `volume.yaml` containing conversion options,
 source file hashes, affines, units, output hash, and implementation versions.
-Replay verifies those inputs and versions. Irregular slices and enhanced multi-frame
-DICOM require an explicit conversion before using this regular-grid reader.
+Replay checks the source file hashes, then rebuilds the volume and fails if its
+geometry, source list or output hash differ. A different implementation version
+only warns; it is named in the error if the output then differs. Irregular slices
+and enhanced multi-frame DICOM require an explicit conversion before using this
+regular-grid reader.
 
 ## Start from CT or generate a patient
 
