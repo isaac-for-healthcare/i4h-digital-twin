@@ -21,7 +21,7 @@ ENV UV_SYSTEM_PYTHON=1
 ENV FORCE_CUDA=1
 
 RUN apt-get update \
-    && apt-get install -y --allow-unauthenticated ca-certificates \
+    && apt-get install -y ca-certificates \
     && apt-get install -y -qq --no-install-recommends \
     build-essential \
     wget git curl \
