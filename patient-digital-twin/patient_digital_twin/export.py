@@ -42,7 +42,13 @@ from .geometry import (
     validate_triangles,
     voxelize_mesh,
 )
-from .quality import DEFAULT_MAX_GAP_M, bridge_label_gaps, components, leaves_body_unchanged, repair
+from .quality import (
+    DEFAULT_MAX_GAP_M,
+    bridge_label_gaps,
+    components,
+    leaves_body_unchanged,
+    repair,
+)
 from .vessels import SOURCES, circulation, vessel_stiffness
 
 if TYPE_CHECKING:
