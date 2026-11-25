@@ -69,7 +69,7 @@ def repair_mesh(
     unique, inverse = np.unique(out_v, axis=0, return_inverse=True)
     if len(unique) < len(out_v):
         fixes["welded_vertices"] = len(out_v) - len(unique)
-        out_v, out_f = unique, inverse.reshape(-1)[out_f]
+        out_v, out_f = unique, inverse.reshape(-1)[out_f].reshape(-1, 3)
     a, b, c = out_v[out_f[:, 0]], out_v[out_f[:, 1]], out_v[out_f[:, 2]]
     finite = out_v[np.isfinite(out_v).all(axis=1)]
     span = float((finite.max(axis=0) - finite.min(axis=0)).max()) if len(finite) else 0.0
@@ -180,7 +180,7 @@ def bridge_label_gaps(
                     local = np.unravel_index(flat, distance.shape)
                     offset = np.array([s.start for s in box])
                     best = (float(distance.flat[flat]), c, np.array(local) + offset,
-                            nearest[(slice(None), *local)] + offset, box)
+                            nearest[(slice(None),) + tuple(local)] + offset, box)
             if best is None:
                 break
             gap, c, a, b, box = best
