@@ -269,7 +269,7 @@ def main() -> int:
         ).format(
             colmap_dataset=colmap_dataset,
             single_camera=args.single_camera,
-            camera_model=args.camera_model,
+            camera_model=shlex.quote(args.camera_model),
             max_image_size=args.max_image_size,
             use_gpu_matching=args.use_gpu_matching,
         )
