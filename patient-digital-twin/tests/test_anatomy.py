@@ -35,7 +35,7 @@ def test_enum_names_roundtrip_and_reject_unknown(enum):
 
 
 def test_catalog_kinds_systems_and_name_normalization():
-    assert len(CATALOG) == 122
+    assert len(CATALOG) == 147  # 122 segmentation classes + 25 vessels from the stiffness table.
     assert CATALOG["pancreas"] == (Kind.ORGAN, {System.DIGESTIVE, System.ENDOCRINE})
     assert CATALOG["rib_right_12"][0] is Kind.BONE and "vertebrae_L6" in CATALOG
     assert is_vessel("aorta") and is_vessel("portal_vein_and_splenic_vein") and not is_vessel("liver")

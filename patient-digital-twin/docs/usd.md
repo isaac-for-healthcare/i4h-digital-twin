@@ -156,8 +156,9 @@ and multiply radii by `metersPerUnit` to obtain meters.
 
 Bundle per-structure graphs are stored only on their USD prims. Composite navigation
 `centerline_points.npy` / `centerline_radii.npy` use the declared scan physical
-frame and units. `centerline_edges.npy` stores index pairs. Navigation arrays
-are generated when attached CT and `vessel_names` request them.
+frame and units. `centerline_edges.npy` stores index pairs, and
+`centerline_regions.npy` the region ID of each edge, named in `vessel_regions.yaml`.
+Navigation arrays are generated when attached CT and `vessel_names` request them.
 
 ## Open in Isaac Sim
 

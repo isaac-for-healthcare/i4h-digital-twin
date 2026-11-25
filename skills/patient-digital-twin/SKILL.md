@@ -66,7 +66,7 @@ the same extras prefixed with `patient-`. `usd-core` does not install Isaac Sim.
 | Vessel centerlines (`pipeline` extra) | `body.extract_topology(names=["aorta"], spacing_m=0.0015)`; read `structure.centerline` points, edges, radii (mesh-local meters) |
 | Standalone USD | `body.export_to_usd("patient.usdc")` |
 | i4h-workflows bundle | `body.export_patient_twin("bundle", vessel_names=["aorta"], ct_exterior=True)` |
-| CT + vessel arrays only | `export.write_artifacts(scan, "out", vessel_mask=mask)` (CT-grid arrays in the scan's units, e.g. mm; not a replacement for `extract_topology`) |
+| CT + vessel arrays only | `export.write_artifacts(scan, "out", vessel_mask=mask)`; a label volume plus `vessel_names=` adds vessel regions (CT-grid arrays in the scan's units, e.g. mm; not a replacement for `extract_topology`) |
 | End-to-end inference CLI | `python -m patient_digital_twin --source nvsegment --input ct.nii.gz --bundle-root ROOT --classes aorta --format bundle --output out` |
 
 All public classes import from `patient_digital_twin`; `scan_volume`, `export`, and
@@ -85,8 +85,11 @@ All public classes import from `patient_digital_twin`; `scan_volume`, `export`, 
 - `attach_scan` keeps the scan's native array order, frame (RAS/LPS), and units; nothing
   resamples. CT must be on the segmentation's physical grid for bundle vessel masks.
 - `extract_topology` needs closed vessel/airway meshes and VTK; it stores graphs only if
-  every extraction succeeds. Bundle navigation arrays (`centerline_*.npy`) are computed
+  every extraction succeeds. Bundle navigation arrays (`centerline_*.npy`, one physics region
+  per vessel in `centerline_regions.npy` + `vessel_regions.yaml`) are computed
   separately on the CT grid from `vessel_names`.
+- Exports repair simple mesh errors in what they write (the body is left unchanged; `body.repair()` repairs it in place) and bridge vessel gaps up to 5 mm within one
+  circulation; the bundle's `quality` section lists the changes. `repair_body=False` exports raw.
 - Output directories (and the CLI's output) must be new. `export_to_usd` replaces a file.
 - In-process NV inference changes the working directory under a lock; pass
   `python_executable=` (CLI `--python`) to run the model in another environment.

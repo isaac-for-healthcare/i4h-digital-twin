@@ -11,8 +11,9 @@ Usually reached through ``HumanBody.export_to_usd`` and ``HumanBody.export_patie
 - ``export_patient_twin``: a new schema-2 bundle directory: ``patient_twin.yaml``
   (manifest), ``patient_anatomy.usdc`` (anatomy in the scan's physical frame), and with
   CT ``volume.npy``/``volume.yaml``; ``vessel_names`` adds ``vessel_mask.npy`` and
-  ``centerline_{points,edges,radii}.npy`` on the CT grid for navigation.
-- ``write_artifacts``: just the native CT and optional vessel mask/centerline arrays.
+  ``centerline_{points,edges,radii}.npy`` on the CT grid for navigation, plus one physics
+  region per vessel: ``centerline_regions.npy`` and ``vessel_regions.yaml``.
+- ``write_artifacts``: just the native CT and optional vessel mask/centerline/region arrays.
 - ``write_usd``: the shared stage writer behind both exporters.
 
 Nothing here resamples, reorients, or recenters the source scan. Directory outputs are
@@ -41,6 +42,14 @@ from .geometry import (
     validate_triangles,
     voxelize_mesh,
 )
+from .quality import (
+    DEFAULT_MAX_GAP_M,
+    bridge_label_gaps,
+    components,
+    leaves_body_unchanged,
+    repair,
+)
+from .vessels import SOURCES, circulation, vessel_stiffness
 
 if TYPE_CHECKING:
     from .body import HumanBody
@@ -63,20 +72,80 @@ def _scan_from_body(body: HumanBody, scan: ScanVolume | None) -> NDArray[np.floa
     return flip @ registration
 
 
-def _write_scan(scan: ScanVolume, folder: Path, vessel_mask: ArrayLike | None = None) -> dict[str, str]:
-    """Native HU volume + YAML, plus an optional scan-grid vessel mask and its centerline arrays."""
+def vessel_regions(names: Sequence[str]) -> dict[str, Any]:
+    """The ``vessel_regions.yaml`` content for vessels whose region IDs are their positions in ``names``.
+
+    It is an i4h-physics-simulation vessel region sidecar (schema 1): ``branches`` maps each
+    region ID, as stored in ``centerline_regions.npy``, to its vessel, and ``young_modulus_kpa``
+    gives each vessel's default wall stiffness from ``vessels.vessel_stiffness``.
+    """
+    return {
+        "schema_version": 1,
+        "default": "unassigned",
+        "branches": dict(enumerate(names)),
+        "young_modulus_kpa": {name: vessel_stiffness(name).young_modulus_kpa for name in names},
+    }
+
+
+def _write_scan(
+    scan: ScanVolume,
+    folder: Path,
+    vessel_mask: ArrayLike | None = None,
+    vessel_names: Sequence[str] = (),
+    max_gap_m: float | None = None,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """Native HU volume + YAML, plus an optional scan-grid vessel mask, its centerline, and vessel regions.
+
+    ``vessel_mask`` is binary, or with ``vessel_names`` a label volume in which value ``i`` is
+    ``vessel_names[i - 1]``. Labels add ``centerline_regions.npy`` (each edge's region ID, from the
+    vessel containing the edge's first point) and ``vessel_regions.yaml``. ``max_gap_m`` bridges
+    segmentation gaps between vessels of one circulation before skeletonizing
+    (``quality.bridge_label_gaps``); ``vessel_mask.npy`` keeps the unbridged labels. Returns the
+    artifact paths and a centerline report (bridges and remaining components).
+    """
     scan.save(folder)
     paths = {"hu_volume": "volume.npy", "volume_metadata": "volume.yaml"}
-    if vessel_mask is not None:
-        mask = np.asarray(vessel_mask)
-        if mask.shape != scan.values.shape or not np.isin(mask, [0, 1]).all():
-            raise ValueError("Vessel mask must be binary and match the scan grid")
-        names = ("centerline_points", "centerline_edges", "centerline_radii")
-        arrays: dict[str, np.ndarray] = {**dict(zip(names, native_centerline(mask, scan))), "vessel_mask": mask.astype(np.uint8)}
-        for name, values in arrays.items():
-            np.save(Path(folder) / f"{name}.npy", values, allow_pickle=False)
-            paths[name] = f"{name}.npy"
-    return paths
+    if vessel_mask is None:
+        return paths, {}
+    labels = np.asarray(vessel_mask)
+    if labels.shape != scan.values.shape or not np.isin(labels, np.arange(max(len(vessel_names), 1) + 1)).all():
+        raise ValueError("Vessel mask must match the scan grid and be binary, or hold labels 0..len(vessel_names)")
+    report: dict[str, Any] = {}
+    skeleton_labels = labels
+    if max_gap_m:
+        spacing = np.linalg.norm(scan.ijk_to_world[:3, :3], axis=0)[["ijk".index(c) for c in scan.array_axes]]
+        groups = {name: i for i, name in enumerate(dict.fromkeys(circulation(n) for n in vessel_names))}
+        group_of = [0] + [groups[circulation(n)] for n in vessel_names] if vessel_names else None
+        skeleton_labels, bridges = bridge_label_gaps(labels, spacing, max_gap_m / scan.meters_per_unit,
+                                                     circulation=group_of)
+        report["centerline_bridges"] = [
+            {**({"from": vessel_names[a - 1], "to": vessel_names[b - 1]} if vessel_names else {}),
+             "gap_mm": round(gap * scan.meters_per_unit * 1000, 2)}
+            for a, b, gap in bridges
+        ]
+    names = ("centerline_points", "centerline_edges", "centerline_radii")
+    arrays: dict[str, np.ndarray] = {**dict(zip(names, native_centerline(skeleton_labels > 0, scan))),
+                                     "vessel_mask": (labels > 0).astype(np.uint8)}
+    if max_gap_m:
+        report["centerline_components"] = components(arrays["centerline_edges"], len(arrays["centerline_points"]))
+    point_labels = None
+    if vessel_names:
+        # Centerline points are skeleton voxel centers, so rounding recovers their voxels exactly.
+        ijk = np.rint(transform_points(arrays["centerline_points"], np.linalg.inv(scan.ijk_to_world))).astype(int)
+        point_labels = skeleton_labels.transpose([scan.array_axes.index(c) for c in "ijk"])[tuple(ijk.T)]
+    if vessel_names and point_labels is not None:
+        arrays["centerline_regions"] = (point_labels[arrays["centerline_edges"][:, 0]] - 1).astype(np.int32)
+        sources = sorted({vessel_stiffness(n).source for n in vessel_names})
+        header = "".join(f"# {key}: {SOURCES[key]}\n" for key in sources)
+        (Path(folder) / "vessel_regions.yaml").write_text(
+            "# Physics regions for centerline_regions.npy; Young's modulus sources:\n"
+            + header + yaml.safe_dump(vessel_regions(vessel_names), sort_keys=False)
+        )
+        paths["vessel_regions"] = "vessel_regions.yaml"
+    for name, values in arrays.items():
+        np.save(Path(folder) / f"{name}.npy", values, allow_pickle=False)
+        paths[name] = f"{name}.npy"
+    return paths, report
 
 
 def _publish(output: str | Path, prefix: str, write: Callable[[Path], Any]) -> Path:
@@ -91,58 +160,77 @@ def _publish(output: str | Path, prefix: str, write: Callable[[Path], Any]) -> P
     return output
 
 
-def write_artifacts(scan: ScanVolume, output: str | Path, *, vessel_mask: ArrayLike | None = None) -> Path:
+def write_artifacts(
+    scan: ScanVolume,
+    output: str | Path,
+    *,
+    vessel_mask: ArrayLike | None = None,
+    vessel_names: Sequence[str] = (),
+    max_gap_m: float | None = DEFAULT_MAX_GAP_M,
+) -> Path:
     """Write native HU ``volume.npy`` + ``volume.yaml`` and an optional vessel mask with its centerline.
 
     Args:
         scan: Source CT, e.g. ``scan_volume.from_nifti("ct.nii.gz")``.
         output: New directory (must not exist); written atomically.
-        vessel_mask: Binary array with ``scan.values``' shape and axis order.
+        vessel_mask: Array with ``scan.values``' shape and axis order: binary, or a label volume
+            (0 background, ``i`` for ``vessel_names[i - 1]``) when ``vessel_names`` is given.
+        vessel_names: Vessel name per label; adds ``centerline_regions.npy`` and ``vessel_regions.yaml``.
+        max_gap_m: Bridge vessel gaps up to this length before skeletonizing
+            (``quality.bridge_label_gaps``); ``None`` skips.
 
     Returns:
         The output directory.
     """
-    return _publish(output, ".ct-artifacts-", lambda folder: _write_scan(scan, folder, vessel_mask))
+    return _publish(output, ".ct-artifacts-",
+                    lambda folder: _write_scan(scan, folder, vessel_mask, vessel_names, max_gap_m))
 
 
-def _vessel_mask(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> NDArray[np.bool_]:
+def _vessel_labels(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> NDArray[np.integer]:
     """Rasterize the requested vessel meshes onto the scan grid, exactly as the bundle USD places them.
 
-    Each mesh goes through ``body.imaging.body_to_imaging @ local_to_body``, so a custom
-    registration passed to ``attach_scan`` (or an edited structure placement) moves the
-    navigation mask and centerline together with the exported vessel.
+    Returns a label volume in scan array order: 0 is background and ``i`` is ``names[i - 1]``.
+    Where vessels overlap, the one listed first keeps the voxel. Each mesh goes through
+    ``body.imaging.body_to_imaging @ local_to_body``, so a custom registration passed to
+    ``attach_scan`` (or an edited structure placement) moves the navigation mask and
+    centerline together with the exported vessel.
     """
     imaging = body.imaging
     if imaging is None:
         raise ValueError("Vessel masks require attached CT")
     scan_from_body = np.linalg.inv(scan.ijk_to_ras_m) @ imaging.body_to_imaging
-    mask = np.zeros(scan.values_kji.shape, bool)
-    for name in names:
+    labels = np.zeros(scan.values_kji.shape, np.min_scalar_type(len(names)))
+    for label, name in enumerate(names, 1):
         structure = body.anatomy.structures[name]
         vertices, faces = structure.mesh.vertices, structure.mesh.faces
         if vertices is None or faces is None:
             raise ValueError(f"Missing vessel mesh: {name}")
         try:
-            mask |= voxelize_mesh(
+            inside = voxelize_mesh(
                 transform_points(vertices, scan_from_body @ structure.local_to_body), faces,
-                shape_zyx=mask.shape, spacing_zyx_m=(1.0, 1.0, 1.0), origin_xyz_m=(0.0, 0.0, 0.0),
+                shape_zyx=labels.shape, spacing_zyx_m=(1.0, 1.0, 1.0), origin_xyz_m=(0.0, 0.0, 0.0),
             )
         except ValueError as exc:
             raise ValueError(f"Cannot rasterize vessel {name!r} onto the scan grid: {exc}") from exc
-    if not mask.any():
+        labels[inside & (labels == 0)] = label
+    if not labels.any():
         raise ValueError("Selected vessels have no foreground in the scan")
-    return mask.transpose(["kji".index(c) for c in scan.array_axes])
+    return labels.transpose(["kji".index(c) for c in scan.array_axes])
 
 
-def export_to_usd(body: HumanBody, path: str | Path) -> Path:
+@leaves_body_unchanged
+def export_to_usd(body: HumanBody, path: str | Path, *, repair_body: bool = True) -> Path:
     """Write a standalone USD of ``body``: current pose, stored centerlines, and attached CT (native HU).
 
     The stage uses the scan's units (meters without CT), Z-up, and default prim ``/HumanBody``.
     An existing file is replaced only after the new layer is complete. Returns the resolved path.
+    ``repair_body`` first repairs the meshes (``quality.repair``) for the export only; ``body`` is left as it was.
 
     Example:
         ``export_to_usd(body, "patient.usdc")`` (same as ``body.export_to_usd("patient.usdc")``)
     """
+    if repair_body:
+        repair(body)
     scan = _scan(body)
     units = scan.meters_per_unit if scan is not None else 1.0
     root = _scan_from_body(body, scan).copy()
@@ -273,6 +361,7 @@ def write_usd(
     return prims
 
 
+@leaves_body_unchanged
 def export_patient_twin(
     body: HumanBody,
     output: str | Path,
@@ -282,6 +371,8 @@ def export_patient_twin(
     world_from_scan_m: ArrayLike | None = None,
     ct_exterior: bool = False,
     skin_opacity: float = 0.15,
+    repair_body: bool = True,
+    max_gap_m: float | None = DEFAULT_MAX_GAP_M,
 ) -> Path:
     """Write a schema-2 patient bundle directory and return its ``patient_twin.yaml`` path.
 
@@ -293,11 +384,17 @@ def export_patient_twin(
         output: New directory (must not exist).
         patient_id: Manifest ID; defaults to the CT source folder name or ``"geometry"``.
         vessel_names: Vessels to rasterize on the CT grid, with navigation centerline arrays.
+            Each vessel becomes one physics region (``centerline_regions.npy``,
+            ``vessel_regions.yaml``); overlapping voxels go to the vessel listed first.
         world_from_scan_m: Optional rigid simulator placement hint stored in the manifest. It maps
             scan-frame meters (scan coordinates times ``meters_per_unit``, in the scan's own
             RAS or LPS frame) to the simulator world, whatever ``spatial_unit`` is.
         ct_exterior: Add a CT-derived skin envelope at ``/HumanBody/Exterior/CT``.
         skin_opacity: Envelope opacity in [0, 1].
+        repair_body: First repair the meshes (``quality.repair``; ``body`` itself is left unchanged) and bridge vessel
+            gaps up to ``max_gap_m`` before skeletonizing the navigation centerline
+            (``quality.bridge_label_gaps``); the manifest's ``quality`` section records both.
+        max_gap_m: Largest vessel gap to bridge, in meters; ``None`` skips bridging.
 
     Example:
         ``export_patient_twin(body, "bundle", vessel_names=["aorta"], ct_exterior=True)``
@@ -307,12 +404,15 @@ def export_patient_twin(
     scan = _scan(body)
     if ct_exterior and scan is None:
         raise ValueError("CT exterior requires attached CT")
+    vessel_names = tuple(dict.fromkeys(vessel_names))
     for name in vessel_names:
         if name not in body.anatomy.structures or body.anatomy.structures[name].is_empty:
             raise ValueError(f"Missing or disabled vessel mesh: {name}")
+    quality = repair(body) if repair_body else None
+    gap = max_gap_m if repair_body else None
     units = scan.meters_per_unit if scan is not None else 1.0
     frame = scan.frame if scan is not None else "RAS" if body.anatomy.body_to_imaging is not None else "body"
-    mask = _vessel_mask(body, scan, vessel_names) if scan is not None and vessel_names else None
+    vessel_labels = _vessel_labels(body, scan, vessel_names) if scan is not None and vessel_names else None
     exterior = None
     if ct_exterior and scan is not None:
         from scipy import ndimage
@@ -330,7 +430,10 @@ def export_patient_twin(
         """Write every bundle file into the staging ``folder``."""
         artifacts = {"anatomy_usd": "patient_anatomy.usdc"}
         if scan is not None:
-            artifacts.update(_write_scan(scan, folder, mask))
+            paths, centerline_report = _write_scan(scan, folder, vessel_labels, vessel_names, gap)
+            artifacts.update(paths)
+            if quality is not None:
+                quality.update(centerline_report)
         else:
             folder.mkdir()
         prims = write_usd(body, folder / "patient_anatomy.usdc", units=units, scan=None,
@@ -356,6 +459,8 @@ def export_patient_twin(
         }
         if world_from_scan_m is not None:
             manifest["transforms"]["world_from_scan_m"] = rigid_transform(world_from_scan_m).tolist()
+        if quality is not None:
+            manifest["quality"] = quality
         (folder / "patient_twin.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
 
     return _publish(output, ".patient-twin-", write) / "patient_twin.yaml"

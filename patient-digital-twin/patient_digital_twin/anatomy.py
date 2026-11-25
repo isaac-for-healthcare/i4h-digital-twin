@@ -10,7 +10,8 @@ Main contents:
 - ``CATALOG``: canonical structure name -> ``(Kind, frozenset[System])``. Application
   metadata, not a clinical reference ontology. ``canonical_name`` maps backend label
   spellings ("Left Kidney", "rib 3 R") onto these names; ``is_vessel`` identifies
-  structures that get navigation centerlines.
+  structures that get navigation centerlines. Every vessel with a stiffness default in
+  ``vessels.VESSEL_STIFFNESS`` is a catalog vessel.
 - ``MeshGeometry``: stored local vertices and faces, retained while a structure is hidden.
 - ``AnatomicalStructure``: one named mesh in local XYZ meters, with a rigid
   ``local_to_body`` (imported placement) and ``local_to_world`` (current pose), an
@@ -38,6 +39,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .geometry import CenterlineGraph, rigid_transform, transform_points
+from .vessels import VESSEL_STIFFNESS
 
 
 class Kind(str, Enum):
@@ -112,6 +114,9 @@ def _catalog() -> dict[str, tuple[Kind, frozenset[System]]]:
             else:
                 expanded = [name]
             result.update({n: (kind, frozenset(systems)) for n in expanded})
+    # Vessels with stiffness defaults (e.g. femoral_artery_left) are importable vessels too.
+    for name in VESSEL_STIFFNESS:
+        result.setdefault(name, (K.VESSEL, frozenset([S.CARDIOVASCULAR])))
     return result
 
 
