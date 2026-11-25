@@ -103,7 +103,7 @@ flowchart TD
     E["export_patient_twin"] --> A["Always: patient_twin.yaml + patient_anatomy.usdc"]
     A --> G["With stored graphs: centerline attributes on anatomy prims"]
     E --> T["With CT: volume.npy + volume.yaml"]
-    T --> V["With vessel_names: vessel_mask.npy + centerline_*.npy"]
+    T --> V["With vessel_names: vessel_mask.npy + centerline_*.npy + vessel_regions.yaml"]
 ```
 
 For **i4h-workflows navigation**, attach CT and request the vessels explicitly:
@@ -130,6 +130,61 @@ Navigation centerlines support orthogonal grids, including oblique rotations;
 sheared grids require explicit downstream resampling before centerline extraction.
 Simulator placement belongs to the consuming workflow. HU → μ conversion belongs
 to sensor-simulation, with `linear` (default) and `interventional` presets.
+
+### Vessel regions and stiffness
+
+Each vessel in `vessel_names` becomes its own physics region, so a simulator can
+give the aorta, the iliac arteries and a femoral artery different wall stiffness.
+The navigation centerline stays one connected graph across vessel junctions; the
+bundle adds which vessel each edge belongs to:
+
+| File | Content |
+| --- | --- |
+| `centerline_regions.npy` | int32 region ID for each row of `centerline_edges.npy` |
+| `vessel_regions.yaml` | Region ID → vessel name, and each vessel's wall Young's modulus |
+
+```yaml
+schema_version: 1
+default: unassigned
+branches: {0: aorta, 1: iliac_artery_right, 2: iliac_artery_left}
+young_modulus_kpa: {aorta: 400.0, iliac_artery_right: 400.0, iliac_artery_left: 400.0}
+```
+
+The exporter rasterizes each vessel separately; where two overlap, the vessel listed
+first in `vessel_names` keeps the voxel. Every centerline point lies on one voxel, and
+an edge belongs to the vessel of its first point. The YAML file header cites the
+sources it used. `write_artifacts(scan, output, vessel_mask=labels, vessel_names=names)`
+writes the same files from a label volume in which value `i` is `names[i - 1]`.
+
+`vessel_regions.yaml` is an i4h-physics-simulation vessel region sidecar: region IDs
+are the centreline branch IDs, and a `rod_pbd_material` with
+`reference_young_modulus_kpa` starts each region's bend and twist multipliers at
+E / reference (see `numerical_sim/docs/vessel-regions.md` there). The moduli are
+literature defaults, not patient measurements:
+
+| E (kPa) | Vessels | Source |
+| --- | --- | --- |
+| 400 | Aorta (and its segments), brachiocephalic trunk, common carotid, subclavian, renal, common iliac (`iliac_artery`) | Wang & Parker 2004, Table 1 |
+| 800 | Internal and external carotid, vertebral, external iliac, femoral, popliteal; any other artery | Wang & Parker 2004, Table 1 |
+| 1600 | Internal iliac | Wang & Parker 2004, Table 1 |
+| 21 / 23 / 40 / 38 / 66 | Superior vena cava / inferior vena cava / brachiocephalic vein / iliac vein / femoral vein | Derived from Müller & Toro 2014, Table 8 |
+| 50 | Portal and splenic vein; any other vein (name contains `vein` or `vena`) | Derived from Müller & Toro 2014 |
+| 260 | Pulmonary artery and pulmonary vein | Derived from Qureshi et al. 2014 |
+
+Arterial values describe young adults at about 100 mmHg. Venous values are derived
+from published wave speeds as E = 2ρc₀²R/h with an assumed wall h = 0.1R, at about
+5 mmHg; veins stiffen sharply at higher pressure. Wall stiffness also rises with age:
+an aortic wave speed 1.5 times higher means about 2.25 times the modulus.
+
+To support another segmentation model's vessel, add a row to
+`patient_digital_twin/vessels.py`. Its names join the anatomy catalog, so importers
+keep the label (for example "Left femoral artery" becomes `femoral_artery_left`):
+
+```python
+from patient_digital_twin.vessels import vessel_stiffness
+
+assert vessel_stiffness("femoral_artery_left").young_modulus_kpa == 800.0
+```
 
 ## DICOM and reproducible volume artifacts
 

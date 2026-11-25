@@ -69,7 +69,8 @@ write_artifacts(ct, "/tmp/s0011-arrays", vessel_mask=aorta.values)
 This writes native `volume.npy` + `volume.yaml`, `vessel_mask.npy`, and
 `centerline_points.npy`, `centerline_edges.npy`, `centerline_radii.npy`.
 The mask must share the CT grid. Points/radii use the scan frame and units.
-Omit `vessel_mask` for CT-only output.
+Omit `vessel_mask` for CT-only output. A label volume with `vessel_names` also writes
+`centerline_regions.npy` and `vessel_regions.yaml` (see the README's vessel regions section).
 For a navigation bundle with USD, use
 `body.export_patient_twin(..., vessel_names=["aorta"])` as shown in the
 [main guide](../README.md#4-export).

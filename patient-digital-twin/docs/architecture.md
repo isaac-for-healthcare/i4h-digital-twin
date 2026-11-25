@@ -10,11 +10,12 @@ walkthrough see the [quickstart](../README.md); for the exported USD layout see 
 
 | Module | Owns | Depends on |
 | --- | --- | --- |
-| [`anatomy.py`](../patient_digital_twin/anatomy.py) | `Kind`, `System`, `CATALOG`, `canonical_name`, `MeshGeometry`, `AnatomicalStructure`, `AnatomyCollection` | `geometry` |
+| [`anatomy.py`](../patient_digital_twin/anatomy.py) | `Kind`, `System`, `CATALOG`, `canonical_name`, `MeshGeometry`, `AnatomicalStructure`, `AnatomyCollection` | `geometry`, `vessels` |
 | [`body.py`](../patient_digital_twin/body.py) | `HumanBody`, `ImagingVolume` | `anatomy`, `geometry`, `scan_volume` (and `export` on demand) |
 | [`importers.py`](../patient_digital_twin/importers.py) | `SegmentationImporter`, `NVSegmentImporter`, `NVGenerateImporter`, `SimpleImporter` | `anatomy`, `geometry`, `scan_volume` |
 | [`geometry.py`](../patient_digital_twin/geometry.py) | `CenterlineGraph`, transforms, `mask_to_mesh`, `voxelize_mesh`, centerline extraction | NumPy, scikit-image, SciPy, VTK (lazy) |
-| [`export.py`](../patient_digital_twin/export.py) | `export_to_usd`, `export_patient_twin`, `write_artifacts` | `geometry`, OpenUSD (lazy) |
+| [`export.py`](../patient_digital_twin/export.py) | `export_to_usd`, `export_patient_twin`, `write_artifacts`, `vessel_regions` | `geometry`, `vessels`, OpenUSD (lazy) |
+| [`vessels.py`](../patient_digital_twin/vessels.py) | `VESSEL_STIFFNESS`, `vessel_stiffness`, `SOURCES` | none |
 | [`scan_volume.py`](../patient_digital_twin/scan_volume.py) | `ScanVolume`, `Conversion`, NIfTI/DICOM readers, `export_ct`, `replay` | NumPy, PyYAML, nibabel/SimpleITK (lazy) |
 | [`__main__.py`](../patient_digital_twin/__main__.py) | `run_pipeline`, the `python -m patient_digital_twin` CLI | `importers`, `body`, `scan_volume` |
 
@@ -119,7 +120,7 @@ flowchart LR
     HB -- "extract_topology: voxelize_mesh + skeletonize" --> CL["CenterlineGraph per vessel"]
     CL --> HB
     HB -- "export_to_usd" --> USD["Standalone .usd/.usda/.usdc"]
-    HB -- "export_patient_twin" --> B["Bundle: patient_twin.yaml, patient_anatomy.usdc, volume.npy/.yaml, vessel_mask.npy, centerline_*.npy"]
+    HB -- "export_patient_twin" --> B["Bundle: patient_twin.yaml, patient_anatomy.usdc, volume.npy/.yaml, vessel_mask.npy, centerline_*.npy, vessel_regions.yaml"]
 ```
 
 1. **Import.** `SegmentationImporter` meshes each present label with marching cubes in
@@ -135,7 +136,9 @@ flowchart LR
 4. **Export.** `export_to_usd` writes the current pose plus embedded HU. `export_patient_twin`
    writes anatomy in the scan's physical frame and, for `vessel_names`, rasterizes those
    vessel meshes, as placed in the USD, onto the CT grid and
-   writes navigation centerline arrays in scan units.
+   writes navigation centerline arrays in scan units. Each vessel is one physics region:
+   `centerline_regions.npy` labels every edge, and `vessel_regions.yaml` maps region IDs to
+   vessels with their default Young's modulus from `vessels.py`.
 
 The CLI (`__main__.run_pipeline`) chains these steps for NV-Segment and NV-Generate:
 import only the requested classes, attach the CT, extract missing vessel centerlines,
