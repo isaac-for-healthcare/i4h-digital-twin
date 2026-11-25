@@ -15,6 +15,18 @@ from patient_digital_twin.geometry import (
 )
 
 
+def _edge_use(faces):
+    """How many triangles border each undirected edge (a closed manifold has exactly two)."""
+    edges = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    return np.unique(np.sort(edges, axis=1), axis=0, return_counts=True)[1]
+
+
+def _signed_volume(vertices, faces):
+    """Volume enclosed by a closed triangle mesh; positive when it is wound outward."""
+    triangles = np.asarray(vertices, dtype=float)[faces]
+    return np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2])).sum() / 6
+
+
 def test_rigid_inverse_roundtrip_and_copy():
     source = np.array(
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
@@ -71,12 +83,33 @@ def test_boundary_mesh_is_closed_outward_in_voxel_xyz():
     assert vertices.dtype == np.float32 and faces.dtype == np.int32
     np.testing.assert_allclose(vertices.min(0), [-0.5, -0.5, -0.5])
     np.testing.assert_allclose(vertices.max(0), [3.5, 2.5, 1.5])
-    edges = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
-    _, counts = np.unique(np.sort(edges, axis=1), axis=0, return_counts=True)
-    assert (counts == 2).all()
-    triangles = vertices[faces] - vertices.mean(0)
-    assert np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2])).sum() > 0
+    assert (_edge_use(faces) == 2).all()
+    assert _signed_volume(vertices, faces) > 0
     assert mask.all()  # Extraction must not mutate its input.
+
+
+def test_back_to_back_triangle_pairs_are_dropped():
+    from skimage.measure import marching_cubes
+
+    # Liver voxels z 176:180, y 110:113, x 133:135 of patient P0005 in a 500-patient
+    # NV-Generate cohort: a staircase of edge-connected voxels. Each of its three
+    # checkerboard cell faces is triangulated by both cells sharing it.
+    mask = np.zeros((4, 3, 2), dtype=bool)
+    mask[[0, 1, 1, 2, 2, 3], [0, 0, 1, 1, 2, 2], [0, 1, 0, 1, 0, 1]] = True
+    raw_vertices, raw_faces, _, _ = marching_cubes(
+        np.pad(mask.astype(np.uint8), 1), level=0.5, allow_degenerate=False
+    )
+    assert (_edge_use(raw_faces) == 4).sum() == 9  # The defect: six back-to-back pairs.
+    vertices, faces = mask_to_mesh(mask)
+    assert vertices.dtype == np.float32 and faces.dtype == np.int32
+    assert len(faces) == len(raw_faces) - 12 and (_edge_use(faces) == 2).all()
+    np.testing.assert_array_equal(np.unique(faces), np.arange(len(vertices)))
+    volume = _signed_volume(vertices, faces)
+    assert volume > 0
+    np.testing.assert_allclose(volume, _signed_volume(raw_vertices[:, ::-1] - 1, raw_faces))
+    pytest.importorskip("vtk")
+    grid = {"shape_zyx": mask.shape, "spacing_zyx_m": np.ones(3), "origin_xyz_m": np.zeros(3)}
+    np.testing.assert_array_equal(voxelize_mesh(vertices, faces, **grid), mask)
 
 
 @pytest.mark.parametrize(

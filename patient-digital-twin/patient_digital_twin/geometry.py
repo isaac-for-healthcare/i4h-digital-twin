@@ -106,6 +106,20 @@ def mask_to_mesh(mask_zyx: ArrayLike) -> tuple[NDArray[np.float32], NDArray[np.i
     if mask.ndim != 3 or not np.isin(mask, [0, 1]).all() or not mask.any():
         raise ValueError(f"Expected a nonempty binary 3D mask, got shape {mask.shape}")
     vertices, faces, _, _ = marching_cubes(np.pad(mask.astype(np.uint8), 1), level=0.5, allow_degenerate=False)
+    # Where two cells share a checkerboard face and each has three set corners, pairwise
+    # diagonal, both cells triangulate that face: a back-to-back pair (same vertices,
+    # opposite winding). It encloses no volume, but its three edges each border four
+    # triangles, which voxelize_mesh rejects as non-manifold. Drop both copies.
+    key = np.sort(faces, axis=1)
+    order = np.lexsort(key.T)  # Puts equal vertex triples next to each other.
+    repeat = np.flatnonzero((key[order[1:]] == key[order[:-1]]).all(axis=1))
+    if len(repeat):
+        keep = np.ones(len(faces), dtype=bool)
+        keep[order[repeat]] = keep[order[repeat + 1]] = False
+        faces = faces[keep]
+        used = np.zeros(len(vertices), dtype=bool)
+        used[faces] = True  # Drop vertices no face references any more, and reindex.
+        vertices, faces = vertices[used], (np.cumsum(used) - 1)[faces]
     return (vertices - 1)[:, ::-1].astype(np.float32), faces.astype(np.int32)
 
 
