@@ -6,7 +6,9 @@ age, sex, and BMI, built into a patient digital twin, and quality-checked. Every
 comes from [`results/summary.json`](results/summary.json),
 [`results/patients.csv`](results/patients.csv) (one row per patient), and
 [`results/bmi_sweep.csv`](results/bmi_sweep.csv), written by [`make_report.py`](make_report.py).
-The patient data (CTs, labels, and bundles, 50 GB) is not in the repository.
+The one exception is the re-check of the mesh fix, which
+[#33](https://github.com/isaac-for-healthcare/i4h-digital-twin/pull/33) reports. The patient
+data (CTs, labels, and bundles, 50 GB) is not in the repository.
 
 ## Summary
 
@@ -17,9 +19,11 @@ The patient data (CTs, labels, and bundles, 50 GB) is not in the repository.
 - **217 of 500 twins (43%) pass every check.** Mesh topology is the largest blocker: 191
   patients have a core organ mesh that is not a closed surface. All 2,744 non-closed meshes
   in the cohort come from one defect: scikit-image's marching cubes emits back-to-back
-  triangle pairs. Removing both triangles of each pair closes every one of them. With that
-  fix an estimated 350 of 500 patients (70%) would pass, leaving fragmented labels, split
-  aorta centerlines, and a few cut-off lung apices.
+  triangle pairs. Removing both triangles of each pair closes every one of them.
+  [#33](https://github.com/isaac-for-healthcare/i4h-digital-twin/pull/33) makes that fix in
+  `mask_to_mesh`. Its re-check of this cohort finds 342 of 500 patients (68%) passing,
+  against 350 estimated here. Fragmented labels, split aorta centerlines, and a few cut-off
+  lung apices remain.
 - **BMI shapes the body, but more loosely than in real patients.** The requested BMI
   correlates with body volume (Spearman ρ = 0.56) and with adipose tissue area at L3
   (ρ = 0.52). In real CT, BMI correlates with L3 fat area at 0.82 to 0.85. Median L3 adipose
@@ -39,7 +43,8 @@ The patient data (CTs, labels, and bundles, 50 GB) is not in the repository.
     of women.
   - A median of 58% of a patient's structures come out in more than one piece.
 - **Three fixes would help most**; see [Findings and recommendations](#findings-and-recommendations):
-  - remove back-to-back triangle pairs in `mask_to_mesh`;
+  - remove back-to-back triangle pairs in `mask_to_mesh`, as
+    [#33](https://github.com/isaac-for-healthcare/i4h-digital-twin/pull/33) does;
   - let `extract_topology` keep the centerlines that succeed;
   - fix upstream NV-Generate-CTMR's crash on its own v2 checkpoint, which
     `NVGenerateImporter` still works around.
@@ -55,7 +60,7 @@ The patient data (CTs, labels, and bundles, 50 GB) is not in the repository.
 | Grid | 256³ voxels at 1.9 × 1.9 × 2.5 mm (486 × 486 × 640 mm) |
 | Seeds | cohort seed 20261119; one generation seed per patient (`results/patients.csv`) |
 | Twin pipeline | `NVGenerateImporter` meshes every labeled catalog structure; `HumanBody.attach_scan`; `extract_topology` per vessel at 1.5 mm; `export_patient_twin(vessel_names=["aorta"], ct_exterior=True)` |
-| Code | this branch at commit `87490e2` (a frozen copy ran the cohort); `make_report.py` from the commit that adds this report |
+| Code | this branch at commit `87490e2` (a frozen copy ran the cohort); `make_report.py` from the same commit as this report |
 | Software | generation: PyTorch 2.13.0 (CUDA 13.0), MONAI 1.6.0; twins: NumPy 2.5.3, SciPy 1.18.1, scikit-image 0.26.0, VTK 9.7.1, OpenUSD 26.08 |
 | Hardware | 1 × NVIDIA RTX PRO 6000 Blackwell (96 GB), AMD Ryzen Threadripper PRO 7965WX (24 cores), 62 GB RAM |
 
@@ -163,8 +168,16 @@ stray fragments are counted separately (last column). Only lung apices (18 lobes
 surfaces. Only 6 of the 500 patients have every mesh closed. None of these meshes has a
 hole. Every defect is a non-manifold edge, an edge shared by four triangles, and each one
 comes from a back-to-back pair: two triangles with the same three vertices and opposite
-winding. Removing both triangles of every pair closes all 2,744 meshes (`mesh_pair_analysis`
-in `make_report.py`, which re-meshes the flagged structures from the saved labels).
+winding. Removing both triangles of every pair closes all 2,744 meshes. `mesh_pair_analysis`
+in `make_report.py` shows this: it re-meshes the flagged structures from the saved labels
+with scikit-image's marching cubes, as `mask_to_mesh` did when the cohort ran.
+
+[#33](https://github.com/isaac-for-healthcare/i4h-digital-twin/pull/33) makes this fix in
+`mask_to_mesh`. Its re-check of all 500 patients finds no non-closed meshes, and the 314
+centerlines and 18 aorta bundles that had failed on them now succeed. That makes 342
+patients twin-ready rather than the 350 estimated here: 10 of the 18 re-extracted aorta
+centerlines come out in 2 to 4 pieces. Those aorta labels are fragments that touch only
+along voxel edges or at corners, which is also where the triangle pairs come from.
 
 The defect matters beyond appearance:
 
@@ -328,7 +341,9 @@ the same physical size in pilot runs.
 1. **Remove back-to-back triangle pairs in `geometry.mask_to_mesh`.** Dropping faces whose
    vertex set occurs twice closes all 2,744 non-closed meshes. That would remove 85% of the
    centerline failures and all 18 bundle failures, raising twin-ready from 43% to an
-   estimated 70%.
+   estimated 70%. [#33](https://github.com/isaac-for-healthcare/i4h-digital-twin/pull/33)
+   makes this change and measures 68% (342 patients): some re-extracted aortas still split
+   where their labels are fragmented.
 2. **Make `HumanBody.extract_topology` keep the centerlines that succeed.** Today one
    vessel too thin to skeletonize (54 cases here) discards every centerline. The CLI
    therefore fails whenever `--classes` names such a vessel.

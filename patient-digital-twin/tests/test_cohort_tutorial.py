@@ -268,3 +268,18 @@ def test_report_cancels_back_to_back_pairs_and_judges_records():
     assert not make_report.verdicts(record(centerlines={"aorta": {"components": 2}}))["aorta_centerline"]
     failed = make_report.verdicts({"status": "failed"})
     assert not any(failed.values())
+
+
+def test_report_pair_analysis_keeps_marching_cubes_pairs():
+    """The analysis meshes without ``mask_to_mesh``, so it still finds the pairs once that drops them."""
+    pytest.importorskip("matplotlib")
+    import make_report
+
+    # Liver voxels of one cohort patient: a staircase of edge-connected voxels whose three
+    # checkerboard cell faces marching cubes triangulates from both cells sharing each face.
+    mask = np.zeros((4, 3, 2), bool)
+    mask[[0, 1, 1, 2, 2, 3], [0, 0, 1, 1, 2, 2], [0, 1, 0, 1, 0, 1]] = True
+    vertices, faces = make_report.raw_marching_cubes(mask)
+    assert (qc.edge_counts(faces, len(vertices)) == 4).sum() == 9  # Six back-to-back pairs.
+    kept = make_report.cancel_back_to_back(faces)
+    assert len(kept) == len(faces) - 12 and (qc.edge_counts(kept, len(vertices)) == 2).all()

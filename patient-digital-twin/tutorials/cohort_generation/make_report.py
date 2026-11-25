@@ -124,7 +124,9 @@ def ready_with_mesh_fix(record: Record) -> bool:
     """Estimated ``twin_ready`` if marching cubes' back-to-back triangle pairs were removed.
 
     ``mesh_pair_analysis`` shows the removal closes every non-closed mesh, so ``core_meshes_closed``
-    passes, as do aorta centerline and bundle failures caused by a non-closed aorta mesh.
+    passes, as do aorta centerline and bundle failures caused by a non-closed aorta mesh. The estimate
+    is optimistic: it assumes every re-extracted aorta centerline comes out in one piece, which fails
+    where the aorta label is fragmented.
     """
     result = verdicts(record)
     if not result["generated"]:
@@ -746,9 +748,21 @@ def cancel_back_to_back(faces: np.ndarray) -> np.ndarray:
     return faces[counts[inverse.reshape(-1)] == 1]
 
 
+def raw_marching_cubes(mask_zyx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Mesh a binary ZYX mask the way ``mask_to_mesh`` did when the cohort ran: scikit-image marching
+    cubes on the padded mask, with any back-to-back pairs left in (vertices in padded ZYX voxels)."""
+    from skimage.measure import marching_cubes
+
+    vertices, faces, _, _ = marching_cubes(np.pad(mask_zyx.astype(np.uint8), 1), level=0.5, allow_degenerate=False)
+    return vertices, faces
+
+
 def mesh_pair_analysis(folder: Path, records: Sequence[Record], ids: Mapping[str, list[int]]) -> dict[str, Any]:
-    """Re-mesh every structure flagged as not closed and test whether cancelling back-to-back pairs closes it."""
-    from patient_digital_twin.geometry import mask_to_mesh
+    """Re-mesh every structure flagged as not closed and test whether cancelling back-to-back pairs closes it.
+
+    It meshes with ``raw_marching_cubes``, not ``mask_to_mesh``, so the result does not depend on whether
+    the installed ``mask_to_mesh`` already removes the pairs.
+    """
     from qc import edge_counts
     from scipy import ndimage
 
@@ -765,7 +779,7 @@ def mesh_pair_analysis(folder: Path, records: Sequence[Record], ids: Mapping[str
             box = ndimage.find_objects(mask.astype(np.uint8))
             if not box or box[0] is None:
                 continue
-            vertices, faces = mask_to_mesh(mask[box[0]])
+            vertices, faces = raw_marching_cubes(mask[box[0]])
             kept = cancel_back_to_back(faces)
             counts = edge_counts(kept, len(vertices))
             flagged += 1
