@@ -167,10 +167,25 @@ node graph, not a material texture input. A complete download can therefore
 pass `--verify` while USD dependency validation still reports this missing icon.
 
 An opt-in repair clears only that known icon default in a new sibling layer.
-Install `usd-core` (validated with `25.11`) or use Isaac Sim's USD runtime:
+Install OpenUSD or use Isaac Sim's USD runtime. On x86_64, macOS and Windows,
+install `usd-core` (validated with `25.11`):
 
 ```bash
 uv pip install usd-core==25.11
+```
+
+`usd-core` 25.11 has no Linux aarch64 wheel. On Linux aarch64 (DGX Station,
+DGX Spark), install `usd-exchange` instead, as this repository's `usd` extras
+do on that platform (locked at `3.0.1` in `uv.lock`):
+
+```bash
+uv pip install usd-exchange==3.0.1
+```
+
+Install only one of the two in an environment: both provide `pxr`. Then run
+the repair:
+
+```bash
 scene="$HOME/.cache/i4h-assets/724f82e/Props/shared_OR_without_Mark"
 python -m sim_ready_assets.repair_or_scene "$scene/main.usd" "$scene/main.repaired.usd"
 ```
@@ -192,7 +207,7 @@ publication. The asset binaries are hosted outside this repository; this utility
 does not upload assets or silently alter downloads. The node uses its fallback
 UI icon. Validate the staged release in Isaac Sim before production publication.
 
-Run the USD regression tests with `usd-core` installed:
+Run the USD regression tests with OpenUSD installed as above:
 
 ```bash
 python -m pytest sim_ready_assets/tests/test_repair_or_scene.py
