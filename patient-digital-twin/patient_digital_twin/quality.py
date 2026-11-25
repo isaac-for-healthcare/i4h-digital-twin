@@ -64,7 +64,9 @@ def repair_mesh(
     if (v.ndim != 2 or v.shape[1:] != (3,) or f.ndim != 2 or f.shape[1:] != (3,) or not len(f)
             or f.dtype.kind not in "iu" or f.min() < 0 or f.max() >= len(v)):
         return v, f, {}  # Malformed meshes are left for export's validation to reject.
-    out_v, out_f, fixes = v.astype(float), f.astype(np.int64).reshape(-1, 3), {}
+    out_v: NDArray[np.float64] = v.astype(float)
+    out_f: NDArray[np.int64] = f.astype(np.int64).reshape(-1, 3)
+    fixes: dict[str, int] = {}
 
     def drop(mask: NDArray[np.bool_], key: str) -> None:
         nonlocal out_f
@@ -72,7 +74,8 @@ def repair_mesh(
             fixes[key] = int(mask.sum())
             out_f = out_f[~mask]
 
-    drop((~np.isfinite(out_v).all(axis=1))[out_f].any(axis=1), "non_finite_faces")
+    finite_vertex = np.asarray(np.isfinite(out_v).all(axis=1), dtype=bool)
+    drop(np.asarray(~finite_vertex[out_f].all(axis=1), dtype=bool), "non_finite_faces")
     unique, inverse = np.unique(out_v, axis=0, return_inverse=True)
     if len(unique) < len(out_v):
         fixes["welded_vertices"] = len(out_v) - len(unique)
