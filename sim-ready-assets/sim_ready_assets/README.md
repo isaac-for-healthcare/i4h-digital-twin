@@ -175,11 +175,11 @@ uv pip install usd-core==25.11
 ```
 
 `usd-core` 25.11 has no Linux aarch64 wheel. On Linux aarch64 (DGX Station,
-DGX Spark), install `usd-exchange` instead, the OpenUSD build Isaac Lab uses on
-that platform:
+DGX Spark), install `usd-exchange` instead, as this repository's `usd` extras
+do on that platform (locked at `3.0.1` in `uv.lock`):
 
 ```bash
-uv pip install usd-exchange==2.3.0
+uv pip install usd-exchange==3.0.1
 ```
 
 Install only one of the two in an environment: both provide `pxr`. Then run
