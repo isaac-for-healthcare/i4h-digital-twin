@@ -129,7 +129,8 @@ bundle's `patient_twin.yaml` records them under `quality`:
 
 - **Meshes** (`body.repair()`): faces on non-finite vertices, coincident vertices (common
   in STL files), degenerate faces, repeated faces and back-to-back pairs are removed, as
-  are disconnected islands under 1% of a structure's faces (stray segmentation voxels).
+  are disconnected islands under 1% of a structure's faces (stray segmentation voxels; structure groups such as the costal cartilages keep all their parts).
+  The export repairs what it writes; your `body` is left as it was (`body.repair()` repairs it in place).
 - **Vessel gaps**: before skeletonizing the navigation centerline, a vessel piece within
   `max_gap_m` (default 5 mm) of a larger piece of the same circulation is joined to it by a
   tube as wide as the narrower vessel. In the s0011 example the left subclavian artery is

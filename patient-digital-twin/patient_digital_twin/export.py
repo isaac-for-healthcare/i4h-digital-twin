@@ -42,7 +42,7 @@ from .geometry import (
     validate_triangles,
     voxelize_mesh,
 )
-from .quality import DEFAULT_MAX_GAP_M, bridge_label_gaps, components, repair
+from .quality import DEFAULT_MAX_GAP_M, bridge_label_gaps, components, leaves_body_unchanged, repair
 from .vessels import SOURCES, circulation, vessel_stiffness
 
 if TYPE_CHECKING:
@@ -212,12 +212,13 @@ def _vessel_labels(body: HumanBody, scan: ScanVolume, names: Sequence[str]) -> N
     return labels.transpose(["kji".index(c) for c in scan.array_axes])
 
 
+@leaves_body_unchanged
 def export_to_usd(body: HumanBody, path: str | Path, *, repair_body: bool = True) -> Path:
     """Write a standalone USD of ``body``: current pose, stored centerlines, and attached CT (native HU).
 
     The stage uses the scan's units (meters without CT), Z-up, and default prim ``/HumanBody``.
     An existing file is replaced only after the new layer is complete. Returns the resolved path.
-    ``repair_body`` first repairs the meshes in place (``quality.repair``).
+    ``repair_body`` first repairs the meshes (``quality.repair``) for the export only; ``body`` is left as it was.
 
     Example:
         ``export_to_usd(body, "patient.usdc")`` (same as ``body.export_to_usd("patient.usdc")``)
@@ -354,6 +355,7 @@ def write_usd(
     return prims
 
 
+@leaves_body_unchanged
 def export_patient_twin(
     body: HumanBody,
     output: str | Path,
@@ -383,7 +385,7 @@ def export_patient_twin(
             RAS or LPS frame) to the simulator world, whatever ``spatial_unit`` is.
         ct_exterior: Add a CT-derived skin envelope at ``/HumanBody/Exterior/CT``.
         skin_opacity: Envelope opacity in [0, 1].
-        repair_body: First repair the meshes in place (``quality.repair``) and bridge vessel
+        repair_body: First repair the meshes (``quality.repair``; ``body`` itself is left unchanged) and bridge vessel
             gaps up to ``max_gap_m`` before skeletonizing the navigation centerline
             (``quality.bridge_label_gaps``); the manifest's ``quality`` section records both.
         max_gap_m: Largest vessel gap to bridge, in meters; ``None`` skips bridging.

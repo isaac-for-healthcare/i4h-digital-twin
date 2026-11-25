@@ -133,7 +133,7 @@ class HumanBody:
         """Write anatomy (current pose), stored centerlines, and attached CT to one USD file.
 
         ``path`` must end in .usd, .usda, or .usdc; an existing file is replaced. Requires
-        ``usd-core``. ``repair_body`` first runs ``repair``. Returns the resolved path. See
+        ``usd-core``. ``repair_body`` repairs the meshes for the export only; the body is unchanged. Returns the resolved path. See
         ``export.export_to_usd``.
         """
         from .export import export_to_usd

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import yaml
 from patient_digital_twin import HumanBody, SegmentationImporter
+from patient_digital_twin.anatomy import Kind
 from patient_digital_twin.geometry import mask_to_mesh
 from patient_digital_twin.quality import bridge_label_gaps, components, repair_mesh
 from patient_digital_twin.vessels import circulation
@@ -127,3 +128,17 @@ def test_body_repair_fixes_meshes_in_place():
     report = body.repair()
     assert report["mesh_repairs"]["aorta"]["island_faces"] > 0
     assert body.repair() == {"mesh_repairs": {}}  # Idempotent.
+
+
+def test_groups_keep_their_parts_and_exports_leave_the_body_unchanged(tmp_path):
+    pytest.importorskip("pxr")
+    mask = np.zeros((20, 20, 20), np.uint8)
+    mask[2:14, 2:14, 2:14] = 1
+    mask[18, 18, 18] = 1
+    body = HumanBody(SegmentationImporter(mask, {1: "aorta"}).to_anatomy_collection())
+    structure = body.anatomy.structures["aorta"]
+    vertices, faces = structure.mesh.vertices, structure.mesh.faces
+    body.export_to_usd(tmp_path / "a.usdc")
+    assert structure.mesh.vertices is vertices and structure.mesh.faces is faces
+    structure.kind = Kind.GROUP
+    assert body.repair() == {"mesh_repairs": {}}  # Groups keep every part.

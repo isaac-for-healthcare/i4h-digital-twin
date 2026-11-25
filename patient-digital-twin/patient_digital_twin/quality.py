@@ -9,7 +9,7 @@ unless called with ``repair_body=False``.
 - ``repair_mesh`` drops faces on non-finite vertices, welds exactly coincident vertices
   (common in STL files), drops degenerate faces, repeated faces and back-to-back pairs
   (as ``mask_to_mesh`` does), drops disconnected islands under ``MIN_ISLAND_FRACTION`` of a
-  structure's faces (stray segmentation voxels), and removes unreferenced vertices. A mesh
+  structure's faces (stray segmentation voxels; not for ``Kind.GROUP`` structures, whose parts are separate by design), and removes unreferenced vertices. A mesh
   without errors is left untouched.
 - ``bridge_label_gaps`` joins vessel pieces that a segmentation gap separates, such as a
   subclavian artery labelled a voxel short of the aorta, before the navigation centerline is
@@ -19,13 +19,20 @@ unless called with ``repair_body=False``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import functools
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from .anatomy import Kind
+
 if TYPE_CHECKING:
     from .body import HumanBody
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 MIN_ISLAND_FRACTION = 0.01
 DEFAULT_MAX_GAP_M = 0.005
@@ -204,6 +211,27 @@ def components(edges: ArrayLike, count: int) -> int:
     return len(np.unique(_components(e, count)[used]))
 
 
+def leaves_body_unchanged(export: Callable[P, R]) -> Callable[P, R]:
+    """Decorate an exporter whose first argument is a body so its mesh repairs do not outlive the export.
+
+    The exporter repairs the meshes before writing; this restores the caller's meshes afterwards
+    (``repair`` assigns new arrays, so holding the originals is enough).
+    """
+
+    @functools.wraps(export)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        body = cast("HumanBody", args[0])
+        saved = {name: (s.mesh.vertices, s.mesh.faces) for name, s in body.anatomy.structures.items()}
+        try:
+            return export(*args, **kwargs)
+        finally:
+            for name, (vertices, faces) in saved.items():
+                mesh = body.anatomy.structures[name].mesh
+                mesh.vertices, mesh.faces = vertices, faces
+
+    return wrapper
+
+
 def repair(body: HumanBody) -> dict[str, Any]:
     """Repair every structure mesh in place with ``repair_mesh``, hidden ones included.
 
@@ -217,7 +245,10 @@ def repair(body: HumanBody) -> dict[str, Any]:
     for name, structure in body.anatomy.structures.items():
         mesh = structure.mesh
         if mesh.vertices is not None and mesh.faces is not None:
-            vertices, faces, fixes = repair_mesh(mesh.vertices, mesh.faces)
+            # Multi-part groups (costal cartilages, vertebrae) are separate pieces by design.
+            keep_parts = structure.kind is Kind.GROUP
+            vertices, faces, fixes = repair_mesh(
+                mesh.vertices, mesh.faces, min_island_fraction=0.0 if keep_parts else MIN_ISLAND_FRACTION)
             if fixes:  # Assign on the MeshGeometry so a stored centerline is kept.
                 mesh.vertices, mesh.faces = vertices, faces
                 report["mesh_repairs"][name] = fixes
