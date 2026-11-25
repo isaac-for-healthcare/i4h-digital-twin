@@ -25,12 +25,14 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 from .anatomy import AnatomicalStructure, AnatomyCollection, Kind, is_vessel
 from .geometry import CenterlineGraph, extract_centerlines, rigid_transform
+from .quality import DEFAULT_MAX_GAP_M
 from .scan_volume import ScanVolume, from_array
 
 
@@ -118,15 +120,25 @@ class HumanBody:
         scan = from_array(array, affine, array_axes="kji", world_unit="m")
         return self.attach_scan(scan, body_to_imaging=body_to_imaging, source_path=source_path)
 
-    def export_to_usd(self, path: str | Path) -> Path:
+    def repair(self) -> dict[str, Any]:
+        """Fix simple mesh errors in place (the pre-export quality check); exports call it first.
+
+        See ``quality.repair_mesh`` for the repairs. Example: ``body.repair()["mesh_repairs"]``.
+        """
+        from .quality import repair
+
+        return repair(self)
+
+    def export_to_usd(self, path: str | Path, *, repair_body: bool = True) -> Path:
         """Write anatomy (current pose), stored centerlines, and attached CT to one USD file.
 
         ``path`` must end in .usd, .usda, or .usdc; an existing file is replaced. Requires
-        ``usd-core``. Returns the resolved path. See ``export.export_to_usd``.
+        ``usd-core``. ``repair_body`` first runs ``repair``. Returns the resolved path. See
+        ``export.export_to_usd``.
         """
         from .export import export_to_usd
 
-        return export_to_usd(self, path)
+        return export_to_usd(self, path, repair_body=repair_body)
 
     def export_patient_twin(
         self,
@@ -137,6 +149,8 @@ class HumanBody:
         world_from_scan_m: ArrayLike | None = None,
         ct_exterior: bool = False,
         skin_opacity: float = 0.15,
+        repair_body: bool = True,
+        max_gap_m: float | None = DEFAULT_MAX_GAP_M,
     ) -> Path:
         """Write a new schema-2 bundle directory for i4h-workflows; returns its ``patient_twin.yaml``.
 
@@ -147,6 +161,8 @@ class HumanBody:
             ct_exterior: Add a CT-derived skin envelope (requires attached CT).
             patient_id / world_from_scan_m / skin_opacity: Optional manifest metadata,
                 simulator placement hint, and envelope opacity.
+            repair_body / max_gap_m: Run ``repair`` first and bridge vessel gaps up to
+                ``max_gap_m`` meters before skeletonizing (recorded under the manifest's ``quality``).
 
         Example:
             ``body.export_patient_twin("bundle", vessel_names=["aorta"], ct_exterior=True)``
@@ -156,6 +172,7 @@ class HumanBody:
         return export_patient_twin(
             self, output, patient_id=patient_id, vessel_names=tuple(vessel_names),
             world_from_scan_m=world_from_scan_m, ct_exterior=ct_exterior, skin_opacity=skin_opacity,
+            repair_body=repair_body, max_gap_m=max_gap_m,
         )
 
     def extract_topology(

@@ -26,7 +26,7 @@ flowchart TD
 
 ## Main entry points
 
-The package is nine modules (see the [architecture guide](../docs/architecture.md)):
+The package is ten modules (see the [architecture guide](../docs/architecture.md)):
 
 - [anatomy.py](anatomy.py): the structures inside the body: the curated catalog
   (`Kind`, `System`, `CATALOG`, `canonical_name`), `AnatomicalStructure`, and
@@ -44,6 +44,8 @@ The package is nine modules (see the [architecture guide](../docs/architecture.m
   skeleton centerlines for meshes and native scan masks.
 - [export.py](export.py): standalone USD, schema-2 patient bundles, and
   `write_artifacts()` for native volume/mask/graph arrays.
+- [quality.py](quality.py): the pre-export quality check: simple mesh repairs and
+  bridging of small gaps between vessels of one circulation.
 - [vessels.py](vessels.py): literature wall stiffness (Young's modulus) per vessel,
   written to each bundle region; its vessel names are catalog vessels.
 - [__main__.py](__main__.py): the NV-Segment / NV-Generate CLI.

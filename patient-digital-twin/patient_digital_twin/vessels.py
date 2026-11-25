@@ -70,6 +70,24 @@ VESSEL_STIFFNESS: dict[str, VesselStiffness] = {
 }
 
 
+def is_vein(name: str) -> bool:
+    """True for venous names (containing ``vein`` or ``vena``); every other vessel counts as an artery."""
+    return bool(re.search(r"vein|vena", name))
+
+
+def circulation(name: str) -> str:
+    """The circulation a vessel belongs to; gap bridging joins only vessels of one circulation.
+
+    ``pulmonary_artery``, ``pulmonary_vein``, ``portal`` (portal, splenic and mesenteric
+    veins), ``systemic_vein`` or ``systemic_artery``.
+    """
+    if "pulmonary" in name:
+        return "pulmonary_vein" if is_vein(name) else "pulmonary_artery"
+    if re.search(r"portal|splenic_vein|mesenteric_vein", name):
+        return "portal"
+    return "systemic_vein" if is_vein(name) else "systemic_artery"
+
+
 def vessel_stiffness(name: str) -> VesselStiffness:
     """Stiffness for a canonical vessel name; unlisted veins and arteries get the class default.
 
@@ -78,4 +96,4 @@ def vessel_stiffness(name: str) -> VesselStiffness:
     """
     if name in VESSEL_STIFFNESS:
         return VESSEL_STIFFNESS[name]
-    return VEIN_DEFAULT if re.search(r"vein|vena", name) else ARTERY_DEFAULT
+    return VEIN_DEFAULT if is_vein(name) else ARTERY_DEFAULT

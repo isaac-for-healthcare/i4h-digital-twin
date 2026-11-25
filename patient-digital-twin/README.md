@@ -119,8 +119,35 @@ exactly as in the exported USD (including any registration passed to `attach_sca
 and calculates navigation centerlines from that mask. Skeletonization uses a temporary LPS-ordered
 view for consistent results; points are mapped back to the native scan frame.
 For label imports this reproduces the
-source labels voxel for voxel. It does not close the mask or discard components. This works
-without step 2; `ct_exterior=True` adds a CT-derived patient envelope.
+source labels voxel for voxel, apart from the stray islands the quality check removes. It does
+not close the mask. This works without step 2; `ct_exterior=True` adds a CT-derived patient envelope.
+
+### Quality check before export
+
+`export_patient_twin` and `export_to_usd` first fix simple errors, in place, and the
+bundle's `patient_twin.yaml` records them under `quality`:
+
+- **Meshes** (`body.repair()`): faces on non-finite vertices, coincident vertices (common
+  in STL files), degenerate faces, repeated faces and back-to-back pairs are removed, as
+  are disconnected islands under 1% of a structure's faces (stray segmentation voxels).
+- **Vessel gaps**: before skeletonizing the navigation centerline, a vessel piece within
+  `max_gap_m` (default 5 mm) of a larger piece of the same circulation is joined to it by a
+  tube as wide as the narrower vessel. In the s0011 example the left subclavian artery is
+  labelled 3 mm short of the aorta, so without the bridge it would be a separate tree.
+  Arteries never join veins, and the portal and pulmonary vessels never join the systemic
+  ones. The bridge's centerline edges belong to the joining vessel; `vessel_mask.npy` keeps
+  the unbridged labels.
+
+```yaml
+quality:
+  mesh_repairs: {femur_right: {island_faces: 180, unreferenced_vertices: 92}}
+  centerline_bridges:
+  - {from: subclavian_artery_left, to: aorta, gap_mm: 3.0}
+  centerline_components: 1
+```
+
+Pass `repair_body=False` to export the anatomy exactly as imported, or `max_gap_m=None`
+to keep the repairs but skip bridging.
 
 Schema-2 bundles preserve **scan array order** for CT and masks. Meshes and
 navigation points/radii use the **scan physical frame and units**, declared in

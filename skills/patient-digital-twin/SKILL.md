@@ -88,6 +88,8 @@ All public classes import from `patient_digital_twin`; `scan_volume`, `export`, 
   every extraction succeeds. Bundle navigation arrays (`centerline_*.npy`, one physics region
   per vessel in `centerline_regions.npy` + `vessel_regions.yaml`) are computed
   separately on the CT grid from `vessel_names`.
+- Exports first repair simple mesh errors in place and bridge vessel gaps up to 5 mm within one
+  circulation; the bundle's `quality` section lists the changes. `repair_body=False` exports raw.
 - Output directories (and the CLI's output) must be new. `export_to_usd` replaces a file.
 - In-process NV inference changes the working directory under a lock; pass
   `python_executable=` (CLI `--python`) to run the model in another environment.
