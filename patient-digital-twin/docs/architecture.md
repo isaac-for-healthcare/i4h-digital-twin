@@ -125,7 +125,10 @@ flowchart LR
    voxel coordinates, applies the image's full voxel-to-world affine (orientation, shear,
    reflection, and units), centers each mesh in a local frame, and records a rigid
    `body_to_imaging`. The NV importers run their model, then hand the label NIfTI to
-   `segmentation_anatomy`, which uses the same path. `SimpleImporter` loads meshes as-is.
+   `segmentation_anatomy`, which uses the same path. `NVGenerateImporter` passes optional
+   patient `demographics` (age, sex, BMI or weight), a fixed `seed`, and the output grid
+   to upstream inference, and keeps the paired `ct_scan` and `label_image`; it is tested
+   against upstream `NV_GENERATE_COMMIT`. `SimpleImporter` loads meshes as-is.
 2. **Attach CT (optional).** `attach_scan` keeps the scan's native array order, frame
    (RAS or LPS), and units; no resampling happens anywhere in the package.
 3. **Topology (optional).** `extract_topology` voxelizes each vessel/airway mesh on a

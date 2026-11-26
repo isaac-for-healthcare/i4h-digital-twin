@@ -1,0 +1,972 @@
+{
+ "patients": 500,
+ "generated": 500,
+ "criteria": {
+  "generated": {
+   "description": "NV-Generate produced a CT and labels, and every pipeline step ran",
+   "passed": 500
+  },
+  "ct_intensity": {
+   "description": "Median HU of liver, spleen, pancreas, kidneys, lungs, and any brain label within NV-Generate's own acceptance ranges",
+   "passed": 483
+  },
+  "core_present": {
+   "description": "All 16 core structures labeled",
+   "passed": 493
+  },
+  "core_complete": {
+   "description": "No core structure's largest piece touches the scan boundary (none cut off)",
+   "passed": 485
+  },
+  "core_connected": {
+   "description": "Each core structure except the merged portal/splenic vein label has at least 99% of its voxels in one 26-connected piece",
+   "passed": 392
+  },
+  "core_meshes_closed": {
+   "description": "Every core mesh is a closed 2-manifold (no boundary or non-manifold edges)",
+   "passed": 309
+  },
+  "aorta_centerline": {
+   "description": "Aorta centerline extracted as one connected graph",
+   "passed": 450
+  },
+  "bundle": {
+   "description": "Bundle exported and re-read: all USD anatomy prims, CT-grid vessel mask, navigation centerline",
+   "passed": 482
+  },
+  "twin_ready": {
+   "description": "All criteria",
+   "passed": 217
+  }
+ },
+ "findings": {
+  "body_in_fov": {
+   "description": "Body not cut by the left, right, anterior, or posterior scan boundary",
+   "passed": 375
+  },
+  "portal_vein_connected": {
+   "description": "Portal/splenic vein label has at least 99% of its voxels in one 26-connected piece",
+   "passed": 45
+  }
+ },
+ "twin_ready_with_mesh_fix": 350,
+ "aorta_centerline_components": {
+  "1": 450,
+  "2": 24,
+  "3": 6,
+  "4": 2
+ },
+ "core_failures": {
+  "aorta": {
+   "open_mesh": 18,
+   "fragmented": 2
+  },
+  "heart": {
+   "open_mesh": 37,
+   "stray_fragment_at_boundary": 37,
+   "fragmented": 17
+  },
+  "inferior_vena_cava": {
+   "open_mesh": 2,
+   "fragmented": 4
+  },
+  "kidney_right": {
+   "open_mesh": 1,
+   "missing": 5
+  },
+  "liver": {
+   "open_mesh": 16
+  },
+  "lung_lower_lobe_left": {
+   "open_mesh": 22
+  },
+  "lung_lower_lobe_right": {
+   "open_mesh": 32
+  },
+  "lung_middle_lobe_right": {
+   "open_mesh": 18,
+   "fragmented": 7
+  },
+  "lung_upper_lobe_left": {
+   "cut": 13,
+   "open_mesh": 15
+  },
+  "lung_upper_lobe_right": {
+   "open_mesh": 54,
+   "cut": 5
+  },
+  "pancreas": {
+   "open_mesh": 3,
+   "fragmented": 1
+  },
+  "portal_vein_and_splenic_vein": {
+   "fragmented": 455,
+   "open_mesh": 3,
+   "stray_fragment_at_boundary": 1
+  },
+  "spleen": {
+   "missing": 1
+  },
+  "stomach": {
+   "open_mesh": 2
+  },
+  "urinary_bladder": {
+   "fragmented": 87,
+   "open_mesh": 18,
+   "stray_fragment_at_boundary": 28,
+   "missing": 1,
+   "cut": 1
+  }
+ },
+ "centerline_failures": {
+  "subclavian_artery_left": 74,
+  "iliac_vena_right": 59,
+  "brachiocephalic_trunk": 37,
+  "brachiocephalic_vein_left": 33,
+  "common_carotid_artery_right": 33,
+  "pulmonary_vein": 30,
+  "common_carotid_artery_left": 18,
+  "aorta": 18,
+  "iliac_vena_left": 15,
+  "subclavian_artery_right": 15,
+  "brachiocephalic_vein_right": 14,
+  "superior_vena_cava": 12,
+  "portal_vein_and_splenic_vein": 4,
+  "inferior_vena_cava": 3,
+  "iliac_artery_left": 3
+ },
+ "all_meshes_closed": 6,
+ "mesh_open_structures": {
+  "humerus_right": 136,
+  "small_bowel": 135,
+  "sacrum": 124,
+  "costal_cartilages": 123,
+  "clavicula_right": 110,
+  "clavicula_left": 93,
+  "hip_left": 75,
+  "iliopsoas_right": 74,
+  "subclavian_artery_left": 73,
+  "scapula_left": 72,
+  "colon": 69,
+  "scapula_right": 66
+ },
+ "mesh_volume_error": {
+  "median": 0.0019,
+  "max": 1.0
+ },
+ "hu_outliers": {
+  "liver": 0,
+  "spleen": 1,
+  "pancreas": 6,
+  "kidney": 1,
+  "lung": 3
+ },
+ "fidelity": {
+  "bmi_vs_body_volume_l": {
+   "rho": 0.564,
+   "ci_low": 0.499,
+   "ci_high": 0.621,
+   "p": 2.2558392142510532e-43,
+   "n": 500
+  },
+  "bmi_vs_l3_body_area_cm2": {
+   "rho": 0.498,
+   "ci_low": 0.426,
+   "ci_high": 0.559,
+   "p": 1.1755511800222229e-32,
+   "n": 500
+  },
+  "bmi_vs_l3_adipose_area_cm2": {
+   "rho": 0.519,
+   "ci_low": 0.454,
+   "ci_high": 0.579,
+   "p": 6.861880848091227e-36,
+   "n": 500
+  },
+  "bmi_vs_adipose_fraction": {
+   "rho": 0.527,
+   "ci_low": 0.463,
+   "ci_high": 0.588,
+   "p": 5.0587515620872125e-37,
+   "n": 500
+  },
+  "bmi_vs_l3_width_mm": {
+   "rho": 0.258,
+   "ci_low": 0.176,
+   "ci_high": 0.336,
+   "p": 5.139688733716615e-09,
+   "n": 500
+  },
+  "bmi_vs_l3_adipose_area_cm2_M": {
+   "rho": 0.613,
+   "ci_low": 0.521,
+   "ci_high": 0.684,
+   "p": 8.044873040613884e-27,
+   "n": 246
+  },
+  "bmi_vs_l3_adipose_area_cm2_F": {
+   "rho": 0.468,
+   "ci_low": 0.351,
+   "ci_high": 0.569,
+   "p": 3.2485941792209098e-15,
+   "n": 254
+  },
+  "age_vs_aorta_diameter_mm": {
+   "rho": 0.202,
+   "ci_low": 0.108,
+   "ci_high": 0.286,
+   "p": 7.996738127772304e-06,
+   "n": 482
+  },
+  "age_vs_aorta_diameter_mm_M": {
+   "rho": -0.063,
+   "ci_low": -0.2,
+   "ci_high": 0.063,
+   "p": 0.3306043799202921,
+   "n": 242
+  },
+  "age_vs_aorta_diameter_mm_F": {
+   "rho": 0.508,
+   "ci_low": 0.406,
+   "ci_high": 0.598,
+   "p": 3.9511836579808e-17,
+   "n": 240
+  },
+  "bmi_vs_liver_volume_ml": {
+   "rho": 0.351,
+   "ci_low": 0.266,
+   "ci_high": 0.428,
+   "p": 6.476442267607836e-16,
+   "n": 500
+  }
+ },
+ "by_sex": {
+  "liver_volume_ml": {
+   "M": "1923.8 \u00b1 511.2",
+   "F": "1818.6 \u00b1 517.9",
+   "ratio_M_F": 1.058,
+   "p": 0.009054868947306262
+  },
+  "spleen_volume_ml": {
+   "M": "341.9 \u00b1 160.8",
+   "F": "302.1 \u00b1 145.4",
+   "ratio_M_F": 1.132,
+   "p": 0.031716068708965796
+  },
+  "kidney_volume_ml": {
+   "M": "405.3 \u00b1 121.1",
+   "F": "275.0 \u00b1 110.5",
+   "ratio_M_F": 1.474,
+   "p": 6.5485422379618855e-28
+  },
+  "heart_volume_ml": {
+   "M": "686.7 \u00b1 178.7",
+   "F": "530.7 \u00b1 150.2",
+   "ratio_M_F": 1.294,
+   "p": 3.3615554753258424e-24
+  },
+  "lung_volume_ml": {
+   "M": "3038.6 \u00b1 1026.7",
+   "F": "2457.9 \u00b1 614.0",
+   "ratio_M_F": 1.236,
+   "p": 6.305673437938283e-09
+  },
+  "pancreas_volume_ml": {
+   "M": "97.8 \u00b1 30.2",
+   "F": "76.2 \u00b1 22.2",
+   "ratio_M_F": 1.284,
+   "p": 3.3289409967329198e-15
+  },
+  "aorta_diameter_mm": {
+   "M": "21.4 \u00b1 2.7",
+   "F": "18.4 \u00b1 3.2",
+   "ratio_M_F": 1.163,
+   "p": 3.9405736856277377e-26
+  },
+  "l3_adipose_area_cm2": {
+   "M": "498.3 \u00b1 157.4",
+   "F": "507.2 \u00b1 210.2",
+   "ratio_M_F": 0.982,
+   "p": 0.6816746180721553
+  },
+  "body_volume_l": {
+   "M": "52.0 \u00b1 7.5",
+   "F": "52.9 \u00b1 12.2",
+   "ratio_M_F": 0.983,
+   "p": 0.6184157321445671
+  }
+ },
+ "prostate": {
+  "M": {
+   "patients": 246,
+   "organ": 207,
+   "median_ml": 25.4,
+   "fragments_only": 26,
+   "largest_fragment_ml": 4.58
+  },
+  "F": {
+   "patients": 254,
+   "organ": 1,
+   "median_ml": 11.8,
+   "fragments_only": 113,
+   "largest_fragment_ml": 4.91
+  }
+ },
+ "bmi_classes": [
+  {
+   "class": "0\u201318.5",
+   "n": 4,
+   "body_volume_l": 41.4,
+   "l3_adipose_area_cm2": 331.0,
+   "body_in_fov": "4/4",
+   "twin_ready": "0/4"
+  },
+  {
+   "class": "18.5\u201325",
+   "n": 110,
+   "body_volume_l": 44.5,
+   "l3_adipose_area_cm2": 330.0,
+   "body_in_fov": "101/110",
+   "twin_ready": "50/110"
+  },
+  {
+   "class": "25\u201330",
+   "n": 172,
+   "body_volume_l": 53.1,
+   "l3_adipose_area_cm2": 512.0,
+   "body_in_fov": "133/172",
+   "twin_ready": "69/172"
+  },
+  {
+   "class": "30\u201335",
+   "n": 111,
+   "body_volume_l": 50.9,
+   "l3_adipose_area_cm2": 518.0,
+   "body_in_fov": "91/111",
+   "twin_ready": "40/111"
+  },
+  {
+   "class": "35\u201340",
+   "n": 61,
+   "body_volume_l": 56.1,
+   "l3_adipose_area_cm2": 553.0,
+   "body_in_fov": "38/61",
+   "twin_ready": "36/61"
+  },
+  {
+   "class": "\u2265 40",
+   "n": 42,
+   "body_volume_l": 66.7,
+   "l3_adipose_area_cm2": 751.0,
+   "body_in_fov": "8/42",
+   "twin_ready": "22/42"
+  }
+ ],
+ "timing_s": {
+  "generate_and_mesh": 51.8,
+  "centerlines": 0.7,
+  "bundle": 3.1,
+  "qc": 5.9,
+  "total": 62.2,
+  "sum_hours": 8.71,
+  "wall_hours": 2.91
+ },
+ "sizes": {
+  "bundle_mb_median": 92.4,
+  "structures_median": 112,
+  "mesh_faces_median": 1338349
+ },
+ "presence_by_sex": {
+  "patients": {
+   "M": 246,
+   "F": 254
+  },
+  "structures": {
+   "adrenal_gland_left": {
+    "M": 246,
+    "F": 254
+   },
+   "adrenal_gland_right": {
+    "M": 246,
+    "F": 253
+   },
+   "airway": {
+    "M": 246,
+    "F": 254
+   },
+   "aorta": {
+    "M": 246,
+    "F": 254
+   },
+   "atrial_appendage_left": {
+    "M": 240,
+    "F": 252
+   },
+   "autochthon_left": {
+    "M": 246,
+    "F": 254
+   },
+   "autochthon_right": {
+    "M": 246,
+    "F": 254
+   },
+   "brachiocephalic_trunk": {
+    "M": 244,
+    "F": 239
+   },
+   "brachiocephalic_vein_left": {
+    "M": 246,
+    "F": 254
+   },
+   "brachiocephalic_vein_right": {
+    "M": 246,
+    "F": 253
+   },
+   "brain": {
+    "M": 77,
+    "F": 99
+   },
+   "clavicula_left": {
+    "M": 246,
+    "F": 254
+   },
+   "clavicula_right": {
+    "M": 246,
+    "F": 254
+   },
+   "colon": {
+    "M": 246,
+    "F": 254
+   },
+   "common_carotid_artery_left": {
+    "M": 246,
+    "F": 254
+   },
+   "common_carotid_artery_right": {
+    "M": 246,
+    "F": 252
+   },
+   "costal_cartilages": {
+    "M": 246,
+    "F": 254
+   },
+   "duodenum": {
+    "M": 246,
+    "F": 254
+   },
+   "esophagus": {
+    "M": 246,
+    "F": 254
+   },
+   "femur_left": {
+    "M": 246,
+    "F": 254
+   },
+   "femur_right": {
+    "M": 246,
+    "F": 254
+   },
+   "gallbladder": {
+    "M": 246,
+    "F": 191
+   },
+   "gluteus_maximus_left": {
+    "M": 246,
+    "F": 254
+   },
+   "gluteus_maximus_right": {
+    "M": 246,
+    "F": 254
+   },
+   "gluteus_medius_left": {
+    "M": 246,
+    "F": 254
+   },
+   "gluteus_medius_right": {
+    "M": 246,
+    "F": 254
+   },
+   "gluteus_minimus_left": {
+    "M": 246,
+    "F": 254
+   },
+   "gluteus_minimus_right": {
+    "M": 246,
+    "F": 254
+   },
+   "heart": {
+    "M": 246,
+    "F": 254
+   },
+   "hip_left": {
+    "M": 246,
+    "F": 254
+   },
+   "hip_right": {
+    "M": 246,
+    "F": 254
+   },
+   "humerus_left": {
+    "M": 243,
+    "F": 254
+   },
+   "humerus_right": {
+    "M": 246,
+    "F": 254
+   },
+   "iliac_artery_left": {
+    "M": 246,
+    "F": 254
+   },
+   "iliac_artery_right": {
+    "M": 246,
+    "F": 254
+   },
+   "iliac_vena_left": {
+    "M": 246,
+    "F": 254
+   },
+   "iliac_vena_right": {
+    "M": 246,
+    "F": 254
+   },
+   "iliopsoas_left": {
+    "M": 246,
+    "F": 254
+   },
+   "iliopsoas_right": {
+    "M": 246,
+    "F": 254
+   },
+   "inferior_vena_cava": {
+    "M": 246,
+    "F": 254
+   },
+   "kidney_left": {
+    "M": 246,
+    "F": 254
+   },
+   "kidney_right": {
+    "M": 246,
+    "F": 249
+   },
+   "liver": {
+    "M": 246,
+    "F": 254
+   },
+   "lung_lower_lobe_left": {
+    "M": 246,
+    "F": 254
+   },
+   "lung_lower_lobe_right": {
+    "M": 246,
+    "F": 254
+   },
+   "lung_middle_lobe_right": {
+    "M": 246,
+    "F": 254
+   },
+   "lung_upper_lobe_left": {
+    "M": 246,
+    "F": 254
+   },
+   "lung_upper_lobe_right": {
+    "M": 246,
+    "F": 254
+   },
+   "pancreas": {
+    "M": 246,
+    "F": 254
+   },
+   "portal_vein_and_splenic_vein": {
+    "M": 246,
+    "F": 254
+   },
+   "prostate": {
+    "M": 233,
+    "F": 114
+   },
+   "pulmonary_vein": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_1": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_10": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_11": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_12": {
+    "M": 246,
+    "F": 252
+   },
+   "rib_left_2": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_3": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_4": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_5": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_6": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_7": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_8": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_left_9": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_1": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_10": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_11": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_12": {
+    "M": 244,
+    "F": 250
+   },
+   "rib_right_2": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_3": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_4": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_5": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_6": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_7": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_8": {
+    "M": 246,
+    "F": 254
+   },
+   "rib_right_9": {
+    "M": 246,
+    "F": 254
+   },
+   "sacrum": {
+    "M": 246,
+    "F": 254
+   },
+   "scapula_left": {
+    "M": 246,
+    "F": 254
+   },
+   "scapula_right": {
+    "M": 246,
+    "F": 254
+   },
+   "skull": {
+    "M": 157,
+    "F": 159
+   },
+   "small_bowel": {
+    "M": 246,
+    "F": 254
+   },
+   "spinal_cord": {
+    "M": 246,
+    "F": 254
+   },
+   "spleen": {
+    "M": 246,
+    "F": 253
+   },
+   "sternum": {
+    "M": 246,
+    "F": 254
+   },
+   "stomach": {
+    "M": 246,
+    "F": 254
+   },
+   "subclavian_artery_left": {
+    "M": 246,
+    "F": 254
+   },
+   "subclavian_artery_right": {
+    "M": 246,
+    "F": 253
+   },
+   "superior_vena_cava": {
+    "M": 246,
+    "F": 254
+   },
+   "thyroid_gland": {
+    "M": 246,
+    "F": 254
+   },
+   "trachea": {
+    "M": 246,
+    "F": 254
+   },
+   "urinary_bladder": {
+    "M": 245,
+    "F": 254
+   },
+   "vertebrae_C1": {
+    "M": 108,
+    "F": 144
+   },
+   "vertebrae_C2": {
+    "M": 143,
+    "F": 141
+   },
+   "vertebrae_C3": {
+    "M": 48,
+    "F": 68
+   },
+   "vertebrae_C4": {
+    "M": 88,
+    "F": 102
+   },
+   "vertebrae_C5": {
+    "M": 147,
+    "F": 212
+   },
+   "vertebrae_C6": {
+    "M": 235,
+    "F": 252
+   },
+   "vertebrae_C7": {
+    "M": 242,
+    "F": 253
+   },
+   "vertebrae_L1": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_L2": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_L3": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_L4": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_L5": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_S1": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T1": {
+    "M": 246,
+    "F": 253
+   },
+   "vertebrae_T10": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T11": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T12": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T2": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T3": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T4": {
+    "M": 246,
+    "F": 253
+   },
+   "vertebrae_T5": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T6": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T7": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T8": {
+    "M": 246,
+    "F": 254
+   },
+   "vertebrae_T9": {
+    "M": 246,
+    "F": 254
+   }
+  }
+ },
+ "hu_median": {
+  "liver": 71.0,
+  "spleen": 74.0,
+  "pancreas": 76.0,
+  "kidney": 97.0,
+  "lung": -780.5
+ },
+ "label_noise": {
+  "brain_label": 176,
+  "skull_label": 316,
+  "reaches_skull_base": 18,
+  "share_of_meshes_in_pieces_median": 0.578,
+  "in_pieces": {
+   "heart": 387,
+   "liver": 151,
+   "aorta": 54,
+   "urinary_bladder": 332,
+   "rib_left_5": 492,
+   "small_bowel": 500
+  }
+ },
+ "body_cut_sides": {
+  "right": 101,
+  "left": 50,
+  "anterior": 6
+ },
+ "settings": {
+  "preset": "ct_patients",
+  "count": 500,
+  "seed": 20261119,
+  "conditioning": [
+   "age",
+   "sex",
+   "bmi"
+  ],
+  "spacing_mm": [
+   1.9,
+   1.9,
+   2.5
+  ],
+  "output_size": [
+   256,
+   256,
+   256
+  ],
+  "bundle_vessels": [
+   "aorta"
+  ],
+  "centerline_spacing_mm": 1.5,
+  "source_root": "/home/mallan/dev/NV-Generate-CTMR-f6362e4",
+  "nv_generate_commit": "f6362e4d0bc572e387f35b522369f0f15b27dade"
+ },
+ "reference_ratios": {
+  "liver_volume_ml_M": 1.13,
+  "liver_volume_ml_F": 1.29,
+  "spleen_volume_ml_M": 1.43,
+  "spleen_volume_ml_F": 1.68,
+  "kidney_volume_ml_M": 1.25,
+  "kidney_volume_ml_F": 1.02,
+  "lung_volume_ml_M": 0.5,
+  "lung_volume_ml_F": 0.52,
+  "aorta_diameter_mm_M": 1.11,
+  "aorta_diameter_mm_F": 1.1
+ },
+ "mesh_pairs": {
+  "flagged_meshes": 2744,
+  "with_back_to_back_pairs": 2744,
+  "closed_after_cancelling": 2744,
+  "patients_whose_core_meshes_close": 191
+ },
+ "samples": [
+  "P0451",
+  "P0308",
+  "P0040",
+  "P0218",
+  "P0017",
+  "P0467"
+ ],
+ "sweep": {
+  "settings": {
+   "bmi": [
+    20.0,
+    25.0,
+    30.0,
+    35.0,
+    40.0
+   ],
+   "sex": [
+    "M",
+    "F"
+   ],
+   "age": 55.0,
+   "seeds": 3,
+   "spacing_mm": [
+    1.9,
+    1.9,
+    2.5
+   ],
+   "nv_generate_commit": "f6362e4d0bc572e387f35b522369f0f15b27dade"
+  },
+  "patients": 30,
+  "generated": 30,
+  "monotonic_adipose": 1,
+  "monotonic_body_volume": 2,
+  "series": 6,
+  "rho_bmi_adipose": {
+   "rho": 0.583,
+   "ci_low": 0.259,
+   "ci_high": 0.781,
+   "p": 0.0007268348673700125,
+   "n": 30
+  },
+  "rho_bmi_body_volume": {
+   "rho": 0.575,
+   "ci_low": 0.206,
+   "ci_high": 0.797,
+   "p": 0.0008975244497683964,
+   "n": 30
+  },
+  "rendered_seed": 1
+ }
+}

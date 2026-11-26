@@ -60,20 +60,21 @@ def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_pr
     monkeypatch.setattr(module.secrets, "randbits", lambda bits: next(seeds))
 
     def run(command, **kwargs):
+        assert json.loads(command[-1]) == {}  # No demographics or grid: upstream defaults.
         nib.save(
-            nib.Nifti1Image(np.ones((3, 3, 3), np.uint8) * 62, np.eye(4)), command[-2]
+            nib.Nifti1Image(np.ones((3, 3, 3), np.uint8) * 62, np.eye(4)), command[-3]
         )
 
         nib.save(
             nib.Nifti1Image(np.full((3, 3, 3), 100, dtype=np.float32), np.eye(4)),
-            command[-1],
+            command[-2],
         )
 
     monkeypatch.setattr(module.subprocess, "run", run)
 
-    def generate(seed, output, ct_output):
+    def generate(seed, output, ct_output, options):
         assert Path.cwd() == tmp_path
-        run([seed, output, ct_output])
+        run([seed, output, ct_output, options])
 
     monkeypatch.setattr(module, "_generate", generate)
     importer = NVGenerateImporter(source_root=tmp_path, python_executable=None if in_process else sys.executable)
@@ -83,6 +84,76 @@ def test_generation_seed_ct_scan_and_catalog_import(monkeypatch, tmp_path, in_pr
     assert importer.seed == 13
     np.testing.assert_array_equal(importer.ct_scan.values_kji, np.full((3, 3, 3), 100))
     assert importer.ct_scan.metadata["source"]["seed"] == 13
+    assert importer.ct_scan.metadata["source"]["demographics"] is None
+    assert importer.ct_scan.metadata["source"]["commit"] is None  # Not a git checkout.
+    np.testing.assert_array_equal(np.asanyarray(importer.label_image.dataobj), np.full((3, 3, 3), 62))
+
+
+@pytest.mark.parametrize("in_process", [True, False])
+def test_generation_with_demographics_seed_and_grid(monkeypatch, tmp_path, in_process):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "scripts/inference.py").write_text("")
+    (tmp_path / "configs/label_dict.json").write_text(json.dumps({"colon": 62, "liver": 1}))
+    monkeypatch.setattr(module.secrets, "randbits", lambda bits: pytest.fail("a fixed seed must be used"))
+    monkeypatch.setattr(module, "_checkout_commit", lambda root: "0" * 40)
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command[-4], json.loads(command[-1])))
+        nib.save(nib.Nifti1Image(np.ones((3, 3, 3), np.uint8), np.eye(4)), command[-3])
+        nib.save(nib.Nifti1Image(np.full((3, 3, 3), 50, np.float32), np.eye(4)), command[-2])
+
+    monkeypatch.setattr(module.subprocess, "run", run)
+    monkeypatch.setattr(module, "_generate", lambda *args: run([*map(str, args)]))
+    importer = NVGenerateImporter(
+        source_root=tmp_path, python_executable=None if in_process else sys.executable,
+        demographics={"bmi": np.float32(31), "sex": "f", "age": np.int64(64)}, seed=7, spacing=(1.9, 1.9, 2.5), output_size=(256, 256, 256),
+    )
+    with pytest.warns(UserWarning, match="tested with f6362e4d0bc5"):
+        importer.to_anatomy_collection(names=["liver"])
+        importer.to_anatomy_collection(names=["liver"])
+    options = {"demographics": [["age", 64.0], ["sex", "F"], ["bmi", 31.0]],
+               "spacing": [1.9, 1.9, 2.5], "output_size": [256, 256, 256]}
+    assert calls == [("7", options)] * 2
+    assert importer.seed == 7
+    assert importer.ct_scan.metadata["source"]["demographics"] == {"age": 64.0, "sex": "F", "bmi": 31.0}
+    assert importer.ct_scan.metadata["source"]["commit"] == "0" * 40
+
+
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        ({"demographics": {"height": 170}}, "not trained on height"),
+        ({"demographics": {"bmi": 24, "weight": 70}}, "not both"),
+        ({"demographics": {}}, "at least one"),
+        ({"demographics": {"waist": 90}}, "Unsupported demographics"),
+        ({"demographics": {"sex": "X"}}, "'M' or 'F'"),
+        ({"demographics": {"age": -1}}, "positive finite"),
+        ({"demographics": {"bmi": "24"}}, "positive finite"),
+        ({"seed": 2**32}, "seed"),
+        ({"seed": True}, "seed"),
+        ({"spacing": (1.5, 1.5)}, "three positive"),
+        ({"output_size": (256, 256, 0)}, "three positive"),
+    ],
+)
+def test_generation_options_fail_before_inference(options, message):
+    with pytest.raises(ValueError, match=message):
+        NVGenerateImporter(**options)
+
+
+def test_checkout_commit_reads_git_head(tmp_path):
+    assert module._checkout_commit(tmp_path) is None
+    git = pytest.importorskip("shutil").which("git")
+    if git is None:
+        pytest.skip("git is not installed")
+    import subprocess
+
+    subprocess.run([git, "init", "-q", str(tmp_path)], check=True)
+    subprocess.run([git, "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q",
+                    "--allow-empty", "-m", "c"], check=True)
+    head = subprocess.run([git, "-C", str(tmp_path), "rev-parse", "HEAD"], capture_output=True, text=True).stdout
+    assert module._checkout_commit(tmp_path) == head.strip()
 
 
 @pytest.mark.parametrize("in_process", [True, False])
@@ -164,9 +235,10 @@ def test_simple_rejects_unsupported_formats(tmp_path):
         SimpleImporter({"colon": tmp_path / "mesh.usda"}).to_anatomy_collection()
 
 
+@pytest.mark.parametrize("demographics", [False, True])
 @pytest.mark.parametrize("fail", [False, True])
 @pytest.mark.parametrize("data_dir_set", [True, False])
-def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail, data_dir_set):
+def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_path, fail, data_dir_set, demographics):
     root = tmp_path / "upstream"
     (root / "configs").mkdir(parents=True)
     # As upstream: dataset paths are relative to MONAI_DATA_DIRECTORY, not the checkout.
@@ -185,11 +257,11 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         monkeypatch.delenv("MONAI_DATA_DIRECTORY", raising=False)
     downloads = []
 
-    def download_model_data(version, root_dir):
+    def download_model_data(version, root_dir, model_only=False):
         """Stub upstream download: provides the conditions file only under the data root."""
-        downloads.append((version, root_dir))
+        downloads.append((version, root_dir, model_only))
         target = Path(root_dir) / "datasets/all_anatomy_size_conditions.json"
-        if not target.exists():
+        if not model_only and not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps([{"organ_size": [0.5] * 10}]))
 
@@ -213,13 +285,20 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
         environment = json.loads(Path(sys.argv[sys.argv.index("-e") + 1]).read_text())
         config = json.loads(Path(sys.argv[sys.argv.index("-i") + 1]).read_text())
         data_root = os.environ["MONAI_DATA_DIRECTORY"]  # Inference resolves the same root.
-        assert downloads == [("rflow-ct", data_root)]
+        # Demographic conditioning needs only weights: no 11.6 GB mask database download.
+        assert downloads == [("rflow-ct", data_root, demographics)]
         assert environment["all_anatomy_size_conditions_json"] == os.path.join(
             data_root, "datasets/all_anatomy_size_conditions.json"
         )
         assert data_root == str(data_dir) if data_dir_set else data_root.startswith(str(tmp_path))
         assert config["num_output_samples"] == 1
-        assert config["controllable_anatomy_size"] == [["liver", 0.5]]
+        if demographics:
+            assert config["controllable_anatomy_size"] == []
+            assert config["controllable_demographics"] == [["age", 55.0], ["sex", "M"], ["bmi", 24.5]]
+            assert config["spacing"] == [1.9, 1.9, 2.5] and config["anatomy_list"] == ["lung tumor"]
+        else:
+            assert config["controllable_anatomy_size"] == [["liver", 0.5]]
+            assert "controllable_demographics" not in config and "spacing" not in config
         # nvbugs 6892486: upstream calls checkpoint["scale_factor"].to(device), so a float must arrive as a tensor.
         torch = scripts.inference.torch
         assert torch.load("v2.pt", map_location="cpu")["scale_factor"] == ("tensor", 0.75)
@@ -244,7 +323,8 @@ def test_paired_worker_keeps_complete_mask_and_matching_image(monkeypatch, tmp_p
     scripts.inference.main = infer
     monkeypatch.setitem(sys.modules, "scripts", scripts)
     mask, ct = tmp_path / "mask.nii.gz", tmp_path / "ct.nii.gz"
-    monkeypatch.setattr(sys, "argv", ["worker", "12", str(mask), str(ct)])
+    options = {"demographics": [["age", 55.0], ["sex", "M"], ["bmi", 24.5]], "spacing": [1.9, 1.9, 2.5]}
+    monkeypatch.setattr(sys, "argv", ["worker", "12", str(mask), str(ct)] + ([json.dumps(options)] if demographics else []))
     monkeypatch.chdir(root)
     original_argv = sys.argv
     # The separate-process path runs this exact source with `python -c`.

@@ -28,6 +28,9 @@ def test_named_selection_uses_native_ids_and_limits_meshes():
         ({"classes": []}, "at least one"),
         ({"source": "nvgenerate", "input": "ct.nii.gz"}, "omit --input"),
         ({"source": "nvgenerate", "modality": "MR"}, "CT only"),
+        ({"input": "ct.nii.gz", "demographics": {"bmi": 30}}, "nvgenerate only"),
+        ({"input": "ct.nii.gz", "seed": 3}, "nvgenerate only"),
+        ({"source": "nvgenerate", "demographics": {"height": 180}}, "height"),
     ],
 )
 def test_invalid_arguments_fail_before_model(options, message, tmp_path):
@@ -39,6 +42,32 @@ def test_invalid_arguments_fail_before_model(options, message, tmp_path):
     args.update(options)
     with pytest.raises(ValueError, match=message):
         main.run_pipeline(**args)
+
+
+def test_cli_parses_demographics_and_seed(tmp_path):
+    args = vars(main.parser().parse_args([
+        "--source", "nvgenerate", "--classes", "aorta", "--output", str(tmp_path / "p.usdc"),
+        "--demographics", "age=55", "sex=F", "BMI=31.5", "--seed", "7",
+    ]))
+    assert args["demographics"] == [("age", 55.0), ("sex", "F"), ("bmi", 31.5)] and args["seed"] == 7
+    assert main.demographic("weight = 72") == ("weight", 72.0)
+    for bad in ("bmi", "bmi=", "=3", "age=old"):
+        with pytest.raises(main.argparse.ArgumentTypeError):
+            main.demographic(bad)
+
+
+def test_nvgenerate_passes_demographics_and_seed(monkeypatch, tmp_path):
+    seen = {}
+
+    def generate(self, *, names):
+        seen.update(demographics=self.demographics, seed=self._fixed_seed, names=names)
+        raise RuntimeError("stop after configuration")
+
+    monkeypatch.setattr(main.NVGenerateImporter, "to_anatomy_collection", generate)
+    with pytest.raises(RuntimeError, match="stop after configuration"):
+        main.run_pipeline(source="nvgenerate", classes=["aorta"], output=tmp_path / "p.usdc",
+                          demographics=[("sex", "F"), ("bmi", 31.5)], seed=7)
+    assert seen == {"demographics": [["sex", "F"], ["bmi", 31.5]], "seed": 7, "names": ("aorta",)}
 
 
 @pytest.mark.parametrize("modality", ["CT", "MR"])
